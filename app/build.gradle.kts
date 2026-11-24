@@ -23,3 +23,9 @@ dependencies {
  implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
+
+val sherpaEnabled = providers.gradleProperty("enableSherpa").orNull == "true"
+if (sherpaEnabled) {
+ android.sourceSets.getByName("main").java.srcDir("src/sherpa/java")
+ dependencies { implementation("com.github.k2-fsa:sherpa-onnx:v1.12.38") }
+}
