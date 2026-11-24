@@ -21,3 +21,30 @@ def dispatch(model, registry, question, confirm=None):
         raise ValueError("Invalid tool decision")
     result = registry.execute(decision["tool"], decision["args"], confirm)
     return {"kind": "tool_result", "tool": decision["tool"], "result": result}
+
+def run_task(model, registry, question, confirm=None, max_steps=4):
+    if type(max_steps) is not int or not 1 <= max_steps <= 8:
+        raise ValueError("Invalid action budget")
+    events = []
+    seen = set()
+    for _ in range(max_steps):
+        context = json.dumps({"goal": question, "observations": events}, ensure_ascii=False)
+        def guarded(name, args):
+            signature = json.dumps([name, args], sort_keys=True)
+            if signature in seen:
+                raise ValueError("Repeated action")
+            seen.add(signature)
+            return registry.execute(name, args, confirm)
+        class GuardedRegistry:
+            def describe(self):
+                return registry.describe()
+            def execute(self, name, args, ignored=None):
+                return guarded(name, args)
+        try:
+            decision = dispatch(model, GuardedRegistry(), context)
+        except (ValueError, TypeError, PermissionError, RuntimeError, OSError) as error:
+            return {"status": "blocked", "observations": events, "error": str(error)}
+        if decision["kind"] == "model_answer":
+            return {"status": "model_answer_unverified", "observations": events, "answer": decision["answer"]}
+        events.append(decision)
+    return {"status": "budget_exhausted", "observations": events}
