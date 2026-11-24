@@ -40,9 +40,12 @@ class MainActivity : Activity() {
     else {
      busy=true
      nativeModel?.resetCancellation()
+     val prefix=transcript.text.toString()+"JARVIS: "
+     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { transcript.text=prefix+partial; scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
      worker.execute {
       val answer=try { nativeModel?.generate(q) ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
-      runOnUiThread { if(!isDestroyed) { busy=false; append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else "") } }
+      nativeModel?.onProgress=null
+      runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=prefix.removeSuffix("JARVIS: "); append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else "") } }
      }
     }
    }
