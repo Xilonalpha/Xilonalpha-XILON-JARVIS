@@ -7,6 +7,7 @@ class OmegaRecorder {
   val key=command.trim().lowercase(java.util.Locale.ROOT)
   if(list.size<4 && key !in list && ToolCatalog.permits(key) && ObservationVerifier.valid(key,result))list.add(key)
  }
- fun finish():List<String>{val result=steps?.toList() ?: error("Înregistrare inactivă");require(result.isNotEmpty()){"Niciun pas valid"};steps=null;return result}
+ fun snapshot():List<String>{val result=steps?.toList() ?: error("Înregistrare inactivă");require(result.isNotEmpty()){"Niciun pas valid"};return result}
+ fun finish():List<String> = snapshot().also{cancel()}
  fun cancel(){steps=null}
 }
