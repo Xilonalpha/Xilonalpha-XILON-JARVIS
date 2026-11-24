@@ -9,6 +9,20 @@ import android.view.ViewGroup
 import java.text.DateFormat
 import java.util.Date
 class MainActivity : androidx.activity.ComponentActivity() {
+ @Volatile private var neural:NeuralSpeech?=null
+ private var neuralCancelled=false
+ private fun stopNeural(){neuralCancelled=true;neural?.stop()}
+ private fun startNeural(){
+  if(busy || wake!=null)return
+  if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
+  val engine=try{NeuralSpeechFactory.create(this)}catch(e:Exception){append("Sherpa indisponibil: "+e.message);return}catch(e:LinkageError){append("Sherpa nativ indisponibil: "+e.message);return}
+  if(engine==null){append("APK fără profil Sherpa.");return}
+  listening.close();voice.stop();busy=true;neuralCancelled=false;neural=engine
+  worker.execute{
+   val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{runCatching{engine.close()};neural=null}
+   runOnUiThread{if(!isDestroyed){busy=false;if(!neuralCancelled)result.fold({if(it.isBlank())append("Nicio comandă detectată.") else voiceInput.setText(it)},{append("Eroare Sherpa: "+it.message)})}}
+  }
+ }
  private var wake:WakeController?=null
  private fun stopWake(){wake?.stop();wake=null}
  private fun startWake(){
@@ -133,7 +147,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close(); stopWake(); stopAirTouch() } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
+  root.addView(Button(this).apply{text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   root.addView(Button(this).apply{text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   root.addView(Button(this).apply{text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
   root.addView(Button(this).apply{text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
@@ -168,6 +183,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==48){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startNeural() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
@@ -283,7 +299,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
- override fun onStop(){stopWake();stopAirTouch();super.onStop()}
+ override fun onStop(){stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
   stopWake()
   stopAirTouch()
