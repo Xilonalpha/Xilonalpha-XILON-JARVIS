@@ -10,6 +10,7 @@ class TaskRuntime {
  }
  fun run(commands:List<String>,execute:(String)->String?):String{
   require(commands.size in 1..5)
+  require(commands.all{ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))}){"Planul conține instrumente neautorizate"}
   move(AgentStatus.ACTING)
   val results=mutableListOf<String>()
   for(command in commands){
