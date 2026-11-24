@@ -16,6 +16,7 @@ class LocalScreen:AccessibilityService(){
   val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
   queue.add(root)
   val lines=mutableListOf<String>()
+  val packageName=root.packageName?.toString() ?: "necunoscut"
   var count=0
   try{
    while(queue.isNotEmpty() && count<200){
@@ -24,12 +25,15 @@ class LocalScreen:AccessibilityService(){
      if(n.isPassword)continue
      if(n.isVisibleToUser && !n.isEditable){
       val value=(n.text ?: n.contentDescription)?.toString()?.take(240)
-      if(!value.isNullOrBlank())lines.add(value)
+      if(!value.isNullOrBlank()){
+       val bounds=android.graphics.Rect();n.getBoundsInScreen(bounds)
+       lines.add(value + if(n.isClickable && n.isEnabled) " [interactiv; ${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}]" else "")
+      }
      }
      for(i in 0 until minOf(n.childCount,30)){if(queue.size>=200)break;n.getChild(i)?.let{queue.add(it)}}
     }finally{n.recycle()}
    }
   }finally{while(queue.isNotEmpty())queue.removeFirst().recycle()}
-  return lines.distinct().joinToString("\n").take(8000)
+  return ("Aplicație: "+packageName+"\n"+lines.distinct().joinToString("\n").ifBlank{"Niciun text vizibil."}).take(8000)
  }
 }
