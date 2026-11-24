@@ -224,7 +224,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   return try{TaskJournal(this).record(steps,runtime.status.name);outcome+"\nStare: "+runtime.status.name}catch(e:Exception){outcome+"\nJurnal nesalvat: "+e.message}
  }
  private fun respond(q: String): String? = try {
-  if(q.equals("graf abilități",true)) LocalGraph(this).use{it.summary()}
+  if(q.startsWith("recomandă după ",true)) LocalGraph(this).use{it.recommend(q.substring("recomandă după ".length))}
+  else if(q.equals("graf abilități",true)) LocalGraph(this).use{it.summary()}
   else if(q.equals("șterge graful",true)){LocalGraph(this).use{it.clear()};"Graf local șters."}
   else if(q.equals("jurnal sarcini",true)) TaskJournal(this).summary()
   else if(q.startsWith("învață ultima sarcină ",true)){
