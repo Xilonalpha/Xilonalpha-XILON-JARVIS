@@ -26,5 +26,14 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
   while(c.moveToNext())rows.add(c.getString(0)+" → "+c.getString(1)+" : "+c.getLong(2))
   rows.joinToString("\n").ifBlank{"Nicio relație observată."}
  }
+ fun recommend(source:String):String{
+  val key=source.trim().lowercase(java.util.Locale.ROOT)
+  require(ToolCatalog.permits(key)){"Instrument necunoscut"}
+  return readableDatabase.rawQuery("SELECT target,count FROM edges WHERE source=? AND count>=2 ORDER BY count DESC,target LIMIT 3",arrayOf(key)).use{c->
+   val rows=mutableListOf<String>()
+   while(c.moveToNext()){val target=c.getString(0);if(ToolCatalog.permits(target))rows.add(target+" — "+c.getLong(1)+" tranziții observate")}
+   rows.joinToString("\n").ifBlank{"Date insuficiente pentru recomandare."}
+  }
+ }
  fun clear(){writableDatabase.delete("edges",null,null)}
 }
