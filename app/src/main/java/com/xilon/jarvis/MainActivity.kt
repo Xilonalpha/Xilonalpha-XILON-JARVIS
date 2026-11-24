@@ -42,6 +42,7 @@ class MainActivity : Activity() {
   root.addView(Button(this).apply { text = "Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
+  root.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
   transcript = TextView(this).apply { textSize = 16f; setTextIsSelectable(true) }
   scroll = ScrollView(this).apply { addView(transcript) }
   root.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
@@ -53,6 +54,14 @@ class MainActivity : Activity() {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
+    if(q.startsWith("documente ",true)){
+     busy=true
+     worker.execute{
+      val result=try{LocalKnowledge(this).search(q.substringAfter(" "))}catch(e:Exception){"Eroare documente: "+e.message}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }
+     return@setOnClickListener
+    }
     val local = respond(q)
     if(local != null) { append("JARVIS: "+local); speakReply(local) }
     else {
@@ -132,6 +141,11 @@ class MainActivity : Activity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==43){
+   if(resultCode==RESULT_OK && !busy){val uri=data?.data ?: return;busy=true
+    worker.execute{val result=try{LocalKnowledge(this).add(uri)}catch(e:Exception){"Eroare import: "+e.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}
+   };return
+  }
   if(requestCode!=41 || resultCode!=RESULT_OK || busy) return
   val uri=data?.data ?: return
   try {
