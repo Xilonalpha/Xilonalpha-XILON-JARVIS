@@ -220,11 +220,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val runtime=TaskRuntime()
   lastSuccessfulPlan=null
   val outcome=runtime.run(steps){respond(it)}
-  if(runtime.status==com.jarvis.mobile.core.agent.AgentStatus.COMPLETED)lastSuccessfulPlan=steps.toList()
+  if(runtime.status==com.jarvis.mobile.core.agent.AgentStatus.COMPLETED){lastSuccessfulPlan=steps.toList();try{LocalGraph(this).use{it.record(steps)}}catch(e:Exception){append("Graf nesalvat: "+e.message)}}
   return try{TaskJournal(this).record(steps,runtime.status.name);outcome+"\nStare: "+runtime.status.name}catch(e:Exception){outcome+"\nJurnal nesalvat: "+e.message}
  }
  private fun respond(q: String): String? = try {
-  if(q.equals("jurnal sarcini",true)) TaskJournal(this).summary()
+  if(q.equals("graf abilități",true)) LocalGraph(this).use{it.summary()}
+  else if(q.equals("șterge graful",true)){LocalGraph(this).use{it.clear()};"Graf local șters."}
+  else if(q.equals("jurnal sarcini",true)) TaskJournal(this).summary()
   else if(q.startsWith("învață ultima sarcină ",true)){
    val steps=lastSuccessfulPlan ?: error("Nicio sarcină finalizată în sesiune")
    SkillStore(this).save(q.substring("învață ultima sarcină ".length),steps.map{it.lowercase(java.util.Locale.ROOT)})
