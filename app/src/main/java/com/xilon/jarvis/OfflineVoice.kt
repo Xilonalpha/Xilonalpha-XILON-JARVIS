@@ -12,7 +12,12 @@ class OfflineVoice(context: Context) : AutoCloseable {
   val voice=tts.voices?.filter { !it.isNetworkConnectionRequired && it.locale.language=="ro" && !it.features.orEmpty().contains("notInstalled") }?.maxByOrNull { it.quality }
    ?: return "Instalează o voce română offline în configurarea Android."
   if(tts.setVoice(voice)!=TextToSpeech.SUCCESS) return "Vocea nu poate fi activată."
-  return if(tts.speak(text.take(TextToSpeech.getMaxSpeechInputLength()),TextToSpeech.QUEUE_FLUSH,null,"xilon-reply")==TextToSpeech.SUCCESS) null else "Sinteza vocală a eșuat."
+  val chunks=com.jarvis.assistant.voice.SpeechChunks.split(text)
+  if(chunks.isEmpty())return null
+  for((i,chunk) in chunks.withIndex()){
+   if(tts.speak(chunk,if(i==0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,null,"xilon-reply-$i")!=TextToSpeech.SUCCESS){tts.stop();return "Sinteza vocală a eșuat."}
+  }
+  return null
  }
  fun stop(){ if(!closed) tts.stop() }
  override fun close(){ if(!closed){ closed=true; ready=false; tts.stop(); tts.shutdown() } }
