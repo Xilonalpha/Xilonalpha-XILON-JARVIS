@@ -151,7 +151,18 @@ class MainActivity : Activity() {
  }
  private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
  private fun respond(q: String): String? = try {
-  if(q.startsWith("sarcină ",true)) TaskRuntime().run(q.substringAfter(" ").split(";").map{it.trim()}){respond(it)} else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
+  if(q.equals("abilități",true)) SkillStore(this).names().joinToString("\n").ifBlank{"Nicio abilitate salvată."}
+  else if(q.startsWith("salvează abilitate ",true)){
+   val parts=q.substring("salvează abilitate ".length).split("=",limit=2)
+   require(parts.size==2){"Format: salvează abilitate nume=ora;ram"}
+   SkillStore(this).save(parts[0],parts[1].split(";").map{it.trim().lowercase(java.util.Locale.ROOT)})
+   "Abilitate salvată local (nevalidată prin execuție)."
+  } else if(q.startsWith("execută abilitate ",true)){
+   val steps=SkillStore(this).load(q.substring("execută abilitate ".length))
+   if(steps==null)"Abilitate negăsită." else TaskRuntime().run(steps){respond(it)}
+  } else if(q.startsWith("șterge abilitate ",true)){
+   if(SkillStore(this).delete(q.substring("șterge abilitate ".length)))"Abilitate ștearsă." else "Abilitate negăsită."
+  } else if(q.startsWith("sarcină ",true)) TaskRuntime().run(q.substringAfter(" ").split(";").map{it.trim()}){respond(it)} else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
    q.equals("baterie",true) -> getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).let { if(it in 0..100) "$it%" else "Nivel indisponibil" }
    q.equals("ram",true) -> android.app.ActivityManager.MemoryInfo().let { info -> getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info); "${info.availMem / 1048576} MiB disponibili din ${info.totalMem / 1048576} MiB; memorie redusă: ${info.lowMemory}" }
