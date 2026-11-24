@@ -5,6 +5,8 @@ class NativeModel : AutoCloseable {
  fun stop() { cancelled = true }
  fun isCancelled(): Boolean = cancelled
  fun resetCancellation() { cancelled = false }
+ @Volatile var onProgress: ((String) -> Unit)? = null
+ fun publishProgress(bytes: ByteArray) { onProgress?.invoke(bytes.toString(Charsets.UTF_8)) }
  private var handle = 0L
  @Synchronized fun load(path: String) { close(); handle = openModel(path); check(handle != 0L) { "Model loading failed" } }
  @Synchronized fun generate(prompt: String): String { check(handle != 0L); return infer(handle,prompt) }
