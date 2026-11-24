@@ -13,7 +13,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
  return reinterpret_cast<jlong>(m);
 }
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){llama_model_free(reinterpret_cast<llama_model*>(h));}
-extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject,jlong h,jstring prompt){
+extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jstring prompt){
  auto* m=reinterpret_cast<llama_model*>(h); auto* v=llama_model_get_vocab(m);
  const char* p=e->GetStringUTFChars(prompt,nullptr); if(!p)return nullptr;
  std::string input(p); e->ReleaseStringUTFChars(prompt,p);
@@ -24,7 +24,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  auto* ctx=llama_init_from_model(m,cp);if(!ctx){fail(e,"Context allocation failed");return nullptr;}
  auto* sampler=llama_sampler_init_greedy();
  std::string out;auto batch=llama_batch_get_one(tokens.data(),n);bool ok=true;
+ auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");
+ if(!cancel){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  for(int i=0;i<128;i++){
+  if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   if(llama_decode(ctx,batch)!=0){ok=false;break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
   char piece[1024];int len=llama_token_to_piece(v,t,piece,sizeof(piece),0,false);
