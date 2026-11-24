@@ -26,14 +26,23 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  std::string out;auto batch=llama_batch_get_one(tokens.data(),n);bool ok=true;
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");
  if(!cancel){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ auto progress=e->GetMethodID(e->GetObjectClass(self),"publishProgress","([B)V");
+ if(!progress){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  for(int i=0;i<128;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   if(llama_decode(ctx,batch)!=0){ok=false;break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
   char piece[1024];int len=llama_token_to_piece(v,t,piece,sizeof(piece),0,false);
-  if(len<0){ok=false;break;}out.append(piece,len);tokens[0]=t;batch=llama_batch_get_one(tokens.data(),1);
+  if(len<0){ok=false;break;}out.append(piece,len);
+  auto partial=e->NewByteArray(out.size());
+  if(!partial){ok=false;break;}
+  e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
+  e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);
+  if(e->ExceptionCheck()){ok=false;break;}
+  tokens[0]=t;batch=llama_batch_get_one(tokens.data(),1);
  }
  llama_sampler_free(sampler);llama_free(ctx);
+ if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
  e->SetByteArrayRegion(bytes,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
