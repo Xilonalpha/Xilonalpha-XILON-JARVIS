@@ -20,6 +20,14 @@ class MainActivity : Activity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   memory = LocalMemory(this)
+  try {
+   val saved=org.json.JSONArray(getSharedPreferences("conversation",MODE_PRIVATE).getString("turns","[]"))
+   for(i in maxOf(0,saved.length()-6) until saved.length()){
+    val item=saved.getJSONObject(i)
+    val role=item.getString("role")
+    if(role=="user" || role=="assistant") history.add(role to item.getString("text"))
+   }
+  } catch(e:org.json.JSONException){ history.clear() }
   val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,48,24,24) }
   root.addView(TextView(this).apply { text = "XILON JARVIS"; textSize = 24f })
   modelStatus = TextView(this).apply { text = "Selectează un model GGUF pentru inferență locală." }
@@ -55,6 +63,7 @@ class MainActivity : Activity() {
        if(!model.isCancelled() && answer.isNotBlank()){
         history.add("user" to q); history.add("assistant" to answer)
         while(history.size>6) history.removeAt(0)
+        persistHistory()
        }
        answer
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
@@ -81,6 +90,11 @@ class MainActivity : Activity() {
    }
   }
   append("Comenzi locale: ora, baterie, ram, stocare, memorează cheie=valoare, amintește cheie.")
+ }
+ private fun persistHistory(){
+  val array=org.json.JSONArray()
+  history.forEach { (role,text) -> array.put(org.json.JSONObject().put("role",role).put("text",text)) }
+  getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("turns",array.toString()).apply()
  }
  private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
  private fun respond(q: String): String? = try {
@@ -119,6 +133,7 @@ class MainActivity : Activity() {
      next.load(target.absolutePath)
      nativeModel=next
      history.clear()
+     persistHistory()
      candidate=null
      getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",target.name).apply()
      filesDir.listFiles()?.filter { it.name.startsWith("model-") && it.extension=="gguf" && it!=target }?.forEach { it.delete() }
