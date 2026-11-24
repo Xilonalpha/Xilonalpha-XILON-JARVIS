@@ -1,6 +1,10 @@
 package com.xilon.jarvis
 class NativeModel : AutoCloseable {
  companion object { init { System.loadLibrary("xilon_llama") } }
+ @Volatile private var cancelled = false
+ fun stop() { cancelled = true }
+ fun isCancelled(): Boolean = cancelled
+ fun resetCancellation() { cancelled = false }
  private var handle = 0L
  @Synchronized fun load(path: String) { close(); handle = openModel(path); check(handle != 0L) { "Model loading failed" } }
  @Synchronized fun generate(prompt: String): String { check(handle != 0L); return infer(handle,prompt) }
