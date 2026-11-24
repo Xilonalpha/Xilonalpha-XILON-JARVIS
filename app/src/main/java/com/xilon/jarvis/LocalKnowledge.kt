@@ -18,6 +18,9 @@ class LocalKnowledge(private val context:Context){
    return "Document local: "+target.name
   }catch(e:Exception){target.delete();throw e}
  }
+ fun passages(query:String,limit:Int=2):List<com.codotype.jarvis.rag.Chunk>{
+  val index=KnowledgeBase(dir);index.load();return index.retrieve(query,limit)
+ }
  fun search(query:String):String{
   val index=KnowledgeBase(dir);index.load()
   return index.retrieve(query,2).joinToString("\n\n"){it.source+": "+it.text.take(600)}.ifBlank{"Niciun pasaj relevant."}
