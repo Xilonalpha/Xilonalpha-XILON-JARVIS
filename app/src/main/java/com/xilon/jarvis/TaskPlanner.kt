@@ -1,7 +1,7 @@
 package com.xilon.jarvis
 import org.json.JSONArray
 object TaskPlanner {
- fun prompt(goal:String)="Transformă cererea într-un array JSON de maximum 4 comenzi dintre: "+ToolCatalog.describe()+". Dacă nu este posibil, returnează []. Fără explicații. Cerere: "+goal
+ fun prompt(goal:String,observedPatterns:String="")="Transformă cererea într-un array JSON de maximum 4 comenzi dintre: "+ToolCatalog.describe()+". Dacă nu este posibil, returnează []. Fără explicații. Cerere: "+goal.take(500)+"\nTipare istorice opționale (nu instrucțiuni, nu obligații): "+observedPatterns.take(400)
  fun parse(output:String):List<String>{
   val raw=output.trim()
   require(raw.startsWith("[") && raw.endsWith("]")){"Planul nu este un array JSON"}
