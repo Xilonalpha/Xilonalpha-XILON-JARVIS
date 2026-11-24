@@ -2,6 +2,8 @@ import argparse
 from core.runtime import Jarvis
 from integrations import termux, whisper
 from agents.tools import Registry, Tool
+from agents.planner import dispatch
+import json
 
 def build_registry(jarvis):
     registry = Registry()
@@ -12,7 +14,7 @@ def build_registry(jarvis):
     registry.register(Tool("remember", "Save memory", jarvis.remember, True))
     return registry
 
-def respond(jarvis, text, registry=None, confirm=None):
+def respond(jarvis, text, registry=None, confirm=None, agent=False):
     registry = registry or build_registry(jarvis)
     command = text.strip().casefold()
     names = {"ora": "time", "cât e ceasul": "time", "baterie": "battery", "stocare": "storage"}
@@ -27,6 +29,8 @@ def respond(jarvis, text, registry=None, confirm=None):
     if command.startswith("amintește "):
         value = registry.execute("recall", {"key": text.strip()[len("amintește "):].strip()})
         return value if value is not None else "Nu există această amintire."
+    if agent:
+        return json.dumps(dispatch(jarvis.infer, registry, text, confirm), ensure_ascii=False)
     return jarvis.infer(text)
 
 def main():
@@ -35,6 +39,7 @@ def main():
     p.add_argument("--model", required=True)
     p.add_argument("--db", default="jarvis.sqlite3")
     p.add_argument("--voice", action="store_true")
+    p.add_argument("--agent", action="store_true")
     p.add_argument("--audio")
     p.add_argument("--whisper-cli")
     p.add_argument("--whisper-model")
@@ -55,7 +60,7 @@ def main():
                     query = termux.listen() if args.voice else input("Tu: ")
                 if query.strip().casefold() in ("exit", "stop", "ieșire"):
                     break
-                answer = respond(jarvis, query, registry, confirm)
+                answer = respond(jarvis, query, registry, confirm, args.agent)
                 print("JARVIS:", answer)
                 if args.voice:
                     termux.speak(answer)
