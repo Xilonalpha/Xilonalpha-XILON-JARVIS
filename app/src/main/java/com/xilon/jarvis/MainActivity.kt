@@ -170,7 +170,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
   root.addView(Button(this).apply{text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   root.addView(Button(this).apply{text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   root.addView(Button(this).apply{text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
@@ -229,7 +229,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun respond(q: String): String? = try {
   if(q.equals("începe demonstrația",true)){recorder.start();"Înregistrare instrumente de citire pornită."}
   else if(q.equals("anulează demonstrația",true)){recorder.cancel();"Înregistrare anulată."}
-  else if(q.startsWith("salvează demonstrația ",true)){val steps=recorder.finish();SkillStore(this).save(q.substring("salvează demonstrația ".length),steps);"Demonstrație salvată."}
+  else if(q.startsWith("salvează demonstrația ",true)){val steps=recorder.snapshot();SkillStore(this).save(q.substring("salvează demonstrația ".length),steps);recorder.cancel();"Demonstrație salvată."}
   else if(q.startsWith("recomandă după ",true)) LocalGraph(this).use{it.recommend(q.substring("recomandă după ".length))}
   else if(q.equals("graf abilități",true)) LocalGraph(this).use{it.summary()}
   else if(q.equals("șterge graful",true)){LocalGraph(this).use{it.clear()};"Graf local șters."}
