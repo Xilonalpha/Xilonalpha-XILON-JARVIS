@@ -8,7 +8,17 @@ import android.widget.*
 import android.view.ViewGroup
 import java.text.DateFormat
 import java.util.Date
-class MainActivity : Activity() {
+class MainActivity : androidx.activity.ComponentActivity() {
+ private var airTouch:AirTouchController?=null
+ private lateinit var cursor:com.jarvis.ai.gesture.GestureCursorView
+ private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
+ private fun startAirTouch(){
+  if(busy || airTouch!=null)return
+  if(!java.io.File(filesDir,"hand_landmarker.task").isFile){append("Importă modelul MediaPipe.");return}
+  if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return}
+  cursor.visibility=android.view.View.VISIBLE
+  airTouch=AirTouchController(this,this,cursor){append(it)}.also{it.start()}
+ }
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
  @Volatile private var nativeModel: NativeModel? = null
  private val history=mutableListOf<Pair<String,String>>()
@@ -113,8 +123,12 @@ class MainActivity : Activity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close() } })
-  setContentView(root)
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close(); stopAirTouch() } })
+  root.addView(Button(this).apply{text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
+  root.addView(Button(this).apply{text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
+  cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy)startMicrophone()}
+  cursor.visibility=android.view.View.GONE
+  setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
   if(saved!=null && saved.matches(Regex("model-[a-f0-9-]+\\.gguf"))) {
    val file=java.io.File(filesDir,saved)
@@ -141,6 +155,7 @@ class MainActivity : Activity() {
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==44 && grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch()
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
  private fun speakReply(text:String){ if(speakReplies && text.isNotBlank()) voice.speak(text)?.let { append(it) } }
@@ -187,6 +202,25 @@ class MainActivity : Activity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==45){
+   if(resultCode==RESULT_OK && !busy){
+    val uri=data?.data ?: return
+    busy=true
+    worker.execute{
+     val temp=java.io.File(filesDir,"hand_landmarker.tmp")
+     val result=try{
+      contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->
+       val buf=ByteArray(8192);var total=0L
+       while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=64L*1024*1024){"Model prea mare"};dst.write(buf,0,n)}
+       require(total>1024){"Model prea mic"}
+      }} ?: error("Fișier inaccesibil")
+      check(temp.renameTo(java.io.File(filesDir,"hand_landmarker.task"))){"Salvare eșuată"}
+      "Model copiat; validarea are loc la pornirea Air Touch."
+     }catch(e:Exception){"Import eșuat: "+e.message}finally{temp.delete()}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }
+   };return
+  }
   if(requestCode==43){
    if(resultCode==RESULT_OK && !busy){val uri=data?.data ?: return;busy=true
     worker.execute{val result=try{LocalKnowledge(this).add(uri)}catch(e:Exception){"Eroare import: "+e.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}
@@ -225,7 +259,9 @@ class MainActivity : Activity() {
    }
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
+ override fun onStop(){stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  stopAirTouch()
   listening.close()
   voice.close()
   nativeModel?.stop()
