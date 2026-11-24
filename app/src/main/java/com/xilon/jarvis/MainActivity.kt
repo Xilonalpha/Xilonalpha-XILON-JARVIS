@@ -43,7 +43,14 @@ class MainActivity : Activity() {
      val prefix=transcript.text.toString()+"JARVIS: "
      nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { transcript.text=prefix+partial; scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
      worker.execute {
-      val answer=try { nativeModel?.generate(q) ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
+      val answer=try { nativeModel?.let { model ->
+       val info=android.app.ActivityManager.MemoryInfo()
+       getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+       val mib=info.availMem/1048576
+       val context=when { info.lowMemory || mib<768 -> 512; mib<2048 -> 1024; else -> 2048 }
+       val threads=if(info.lowMemory) 1 else (Runtime.getRuntime().availableProcessors()/2).coerceIn(1,4)
+       model.generate(q,threads,context,if(context==512) 96 else 256)
+      } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
       runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=prefix.removeSuffix("JARVIS: "); append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else "") } }
      }
