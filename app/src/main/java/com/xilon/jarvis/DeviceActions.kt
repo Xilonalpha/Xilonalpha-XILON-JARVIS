@@ -7,7 +7,19 @@ import android.net.Uri
 import java.util.Locale
 
 class DeviceActions(private val activity:Activity) {
+ private fun apps()=activity.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),0).filter { it.activityInfo.exported && it.activityInfo.packageName!=activity.packageName }.distinctBy { it.activityInfo.packageName }
+ private fun launch(name:String):String {
+  if(name.isBlank())return "Specifică numele aplicației."
+  val matches=apps().filter { it.loadLabel(activity.packageManager).toString().equals(name,true) || it.activityInfo.packageName.equals(name,true) }
+  if(matches.isEmpty())return "Aplicație negăsită: "+name
+  if(matches.size>1)return "Nume ambiguu: "+matches.joinToString { it.activityInfo.packageName }
+  val info=matches.single().activityInfo
+  return try { activity.startActivity(Intent.makeMainActivity(android.content.ComponentName(info.packageName,info.name))); "Cerere de lansare transmisă: "+name } catch(e:Exception){ "Lansare eșuată: "+e.message }
+ }
  fun execute(command:String):String? {
+  val raw=command.trim()
+  if(raw.equals("lista aplicații",true))return apps().map { it.loadLabel(activity.packageManager).toString()+" ("+it.activityInfo.packageName+")" }.sorted().joinToString("\n").ifEmpty { "Nicio aplicație vizibilă." }
+  if(raw.startsWith("lansează ",true))return launch(raw.substringAfter(" ").trim())
   val q=command.trim().lowercase(Locale.ROOT)
   val intent=when(q){
    "deschide setări" -> Intent(Settings.ACTION_SETTINGS)
