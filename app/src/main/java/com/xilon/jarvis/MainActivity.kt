@@ -12,6 +12,8 @@ class MainActivity : Activity() {
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
  @Volatile private var nativeModel: NativeModel? = null
  private val history=mutableListOf<Pair<String,String>>()
+ private lateinit var voice: OfflineVoice
+ private var speakReplies=false
  private var busy = false
  private lateinit var memory: LocalMemory
  private lateinit var transcript: TextView
@@ -20,6 +22,7 @@ class MainActivity : Activity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   memory = LocalMemory(this)
+  voice=OfflineVoice(this)
   try {
    val saved=org.json.JSONArray(getSharedPreferences("conversation",MODE_PRIVATE).getString("turns","[]"))
    for(i in maxOf(0,saved.length()-6) until saved.length()){
@@ -32,6 +35,7 @@ class MainActivity : Activity() {
   root.addView(TextView(this).apply { text = "XILON JARVIS"; textSize = 24f })
   modelStatus = TextView(this).apply { text = "Selectează un model GGUF pentru inferență locală." }
   root.addView(modelStatus)
+  root.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
   root.addView(Button(this).apply { text = "Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
@@ -45,7 +49,7 @@ class MainActivity : Activity() {
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
     val local = respond(q)
-    if(local != null) append("JARVIS: "+local)
+    if(local != null) { append("JARVIS: "+local); speakReply(local) }
     else {
      busy=true
      nativeModel?.resetCancellation()
@@ -68,12 +72,12 @@ class MainActivity : Activity() {
        answer
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
-      runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=prefix.removeSuffix("JARVIS: "); append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else "") } }
+      runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=prefix.removeSuffix("JARVIS: "); append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""); if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
      }
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop() } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop() } })
   setContentView(root)
   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
   if(saved!=null && saved.matches(Regex("model-[a-f0-9-]+\\.gguf"))) {
@@ -91,6 +95,7 @@ class MainActivity : Activity() {
   }
   append("Comenzi locale: ora, baterie, ram, stocare, memorează cheie=valoare, amintește cheie.")
  }
+ private fun speakReply(text:String){ if(speakReplies && text.isNotBlank()) voice.speak(text)?.let { append(it) } }
  private fun persistHistory(){
   val array=org.json.JSONArray()
   history.forEach { (role,text) -> array.put(org.json.JSONObject().put("role",role).put("text",text)) }
@@ -144,6 +149,7 @@ class MainActivity : Activity() {
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
  override fun onDestroy() {
+  voice.close()
   nativeModel?.stop()
   worker.execute { nativeModel?.close(); nativeModel=null }
   worker.shutdown()
