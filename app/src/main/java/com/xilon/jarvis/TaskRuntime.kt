@@ -19,7 +19,7 @@ class TaskRuntime {
     return (results+"Blocat: $command (instrument neautorizat)").joinToString("\n")
    }
    val answer=try{execute(command)}catch(e:Exception){null}
-   if(answer==null || answer.startsWith("Eroare") || answer.contains("indisponibil",true)){
+   if(answer==null || !ObservationVerifier.valid(command,answer)){
     move(AgentStatus.FAILED)
     return (results+"Necunoscut sau eșuat: $command").joinToString("\n")
    }
