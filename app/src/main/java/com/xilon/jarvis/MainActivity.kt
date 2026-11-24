@@ -222,6 +222,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   } else if(q.startsWith("șterge abilitate ",true)){
    if(SkillStore(this).delete(q.substring("șterge abilitate ".length)))"Abilitate ștearsă." else "Abilitate negăsită."
   } else if(q.startsWith("sarcină ",true)) runTracked(q.substringAfter(" ").split(";").map{it.trim()}) else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
+   q.equals("activează observarea",true) -> {startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));"Activează manual serviciul XILON - observare ecran."}
+   q.equals("citește ecranul",true) -> LocalScreen.snapshot()?.ifBlank{"Niciun text vizibil."} ?: "Ecran indisponibil sau serviciu neactivat."
    q.equals("profil dispozitiv",true) -> com.jarvis.mobile.core.model.DeviceProfiler(this).profile().toString()
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
    q.equals("baterie",true) -> getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).let { if(it in 0..100) "$it%" else "Nivel indisponibil" }
