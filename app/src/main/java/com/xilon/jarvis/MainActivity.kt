@@ -17,7 +17,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!java.io.File(filesDir,"hand_landmarker.task").isFile){append("Importă modelul MediaPipe.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return}
   cursor.visibility=android.view.View.VISIBLE
-  airTouch=AirTouchController(this,this,cursor){append(it)}.also{it.start()}
+  airTouch=AirTouchController(this,this,cursor,{append(it)},{stopAirTouch()}).also{it.start()}
  }
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
  @Volatile private var nativeModel: NativeModel? = null
@@ -155,7 +155,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
-  if(requestCode==44 && grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch()
+  if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
  private fun speakReply(text:String){ if(speakReplies && text.isNotBlank()) voice.speak(text)?.let { append(it) } }
