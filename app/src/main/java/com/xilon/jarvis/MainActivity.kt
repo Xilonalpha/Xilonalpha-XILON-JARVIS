@@ -52,13 +52,28 @@ class MainActivity : Activity() {
   } })
   root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop() } })
   setContentView(root)
-  append("Comenzi locale: ora, baterie, stocare, memorează cheie=valoare, amintește cheie.")
+  val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+  if(saved!=null && saved.matches(Regex("model-[a-f0-9-]+\\.gguf"))) {
+   val file=java.io.File(filesDir,saved)
+   if(file.isFile) {
+    busy=true
+    modelStatus.text="Se restaurează ultimul model..."
+    worker.execute {
+     val status=try { val next=NativeModel(); next.load(file.absolutePath); nativeModel=next; "Model restaurat." }
+      catch(e:Exception) { "Restaurare eșuată: "+e.message }
+      catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
+     runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
+    }
+   }
+  }
+  append("Comenzi locale: ora, baterie, ram, stocare, memorează cheie=valoare, amintește cheie.")
  }
  private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
  private fun respond(q: String): String? = try {
   when {
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
    q.equals("baterie",true) -> getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).let { if(it in 0..100) "$it%" else "Nivel indisponibil" }
+   q.equals("ram",true) -> android.app.ActivityManager.MemoryInfo().let { info -> getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info); "${info.availMem / 1048576} MiB disponibili din ${info.totalMem / 1048576} MiB; memorie redusă: ${info.lowMemory}" }
    q.equals("stocare",true) -> "${StatFs(filesDir.path).availableBytes / 1048576} MiB disponibili"
    q.startsWith("memorează ",true) -> { val parts=q.substringAfter(" ").split("=",limit=2); if(parts.size!=2 || parts.any { it.isBlank() }) "Format: memorează cheie=valoare" else if(memory.remember(parts[0],parts[1])) "Salvat local." else "Salvarea a eșuat." }
    q.startsWith("amintește ",true) -> memory.recall(q.substringAfter(" ")) ?: "Cheie negăsită."
@@ -74,20 +89,23 @@ class MainActivity : Activity() {
    val valid=contentResolver.openInputStream(uri)?.use { java.io.DataInputStream(it).readFully(magic); magic.contentEquals(byteArrayOf(71,71,85,70)) } ?: false
    if(!valid) { modelStatus.text="Fișierul nu are antet GGUF."; return }
    contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)
-   getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("uri",uri.toString()).apply()
    busy=true
    modelStatus.text="Se copiază și se încarcă modelul local..."
    worker.execute {
     val target=java.io.File(filesDir,"model-"+java.util.UUID.randomUUID()+".gguf")
     var candidate: NativeModel?=null
     val status=try {
+     val size=contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.SIZE),null,null,null)?.use { c -> if(c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L } ?: -1L
+     if(size>0 && size>StatFs(filesDir.path).availableBytes) error("Spațiu insuficient pentru copiere")
      contentResolver.openInputStream(uri)?.use { src -> target.outputStream().use { dst -> src.copyTo(dst) } } ?: error("Fișier inaccesibil")
+     nativeModel?.close()
+     nativeModel=null
      val next=NativeModel()
      candidate=next
      next.load(target.absolutePath)
-     nativeModel?.close()
      nativeModel=next
      candidate=null
+     getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",target.name).apply()
      filesDir.listFiles()?.filter { it.name.startsWith("model-") && it.extension=="gguf" && it!=target }?.forEach { it.delete() }
      "Model GGUF încărcat. Poți trimite un mesaj."
     } catch(e:Exception) { candidate?.close(); target.delete(); "Încărcare eșuată: "+e.message } catch(e:LinkageError) { target.delete(); "Biblioteca nativă indisponibilă: "+e.message }
