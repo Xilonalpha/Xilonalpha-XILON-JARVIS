@@ -72,7 +72,7 @@ class MainActivity : Activity() {
        if(!isDestroyed){
         busy=false
         if(model.isCancelled())append("Planificare oprită.")
-        else plan.fold({steps->append("Plan: "+steps.joinToString("; "));append(TaskRuntime().run(steps){respond(it)})},{e->append("Plan neexecutat: "+e.message)})
+        else plan.fold({steps->append("Plan: "+steps.joinToString("; "));append(runTracked(steps))},{e->append("Plan neexecutat: "+e.message)})
        }
       }
      }
@@ -150,8 +150,21 @@ class MainActivity : Activity() {
   getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("turns",array.toString()).apply()
  }
  private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
+ private var lastSuccessfulPlan:List<String>?=null
+ private fun runTracked(steps:List<String>):String{
+  val runtime=TaskRuntime()
+  lastSuccessfulPlan=null
+  val outcome=runtime.run(steps){respond(it)}
+  if(runtime.status==com.jarvis.mobile.core.agent.AgentStatus.COMPLETED)lastSuccessfulPlan=steps.toList()
+  return try{TaskJournal(this).record(steps,runtime.status.name);outcome+"\nStare: "+runtime.status.name}catch(e:Exception){outcome+"\nJurnal nesalvat: "+e.message}
+ }
  private fun respond(q: String): String? = try {
-  if(q.equals("abilități",true)) SkillStore(this).names().joinToString("\n").ifBlank{"Nicio abilitate salvată."}
+  if(q.equals("jurnal sarcini",true)) TaskJournal(this).summary()
+  else if(q.startsWith("învață ultima sarcină ",true)){
+   val steps=lastSuccessfulPlan ?: error("Nicio sarcină finalizată în sesiune")
+   SkillStore(this).save(q.substring("învață ultima sarcină ".length),steps.map{it.lowercase(java.util.Locale.ROOT)})
+   "Abilitate salvată din execuția finalizată."
+  } else if(q.equals("abilități",true)) SkillStore(this).names().joinToString("\n").ifBlank{"Nicio abilitate salvată."}
   else if(q.startsWith("salvează abilitate ",true)){
    val parts=q.substring("salvează abilitate ".length).split("=",limit=2)
    require(parts.size==2){"Format: salvează abilitate nume=ora;ram"}
@@ -162,7 +175,7 @@ class MainActivity : Activity() {
    if(steps==null)"Abilitate negăsită." else TaskRuntime().run(steps){respond(it)}
   } else if(q.startsWith("șterge abilitate ",true)){
    if(SkillStore(this).delete(q.substring("șterge abilitate ".length)))"Abilitate ștearsă." else "Abilitate negăsită."
-  } else if(q.startsWith("sarcină ",true)) TaskRuntime().run(q.substringAfter(" ").split(";").map{it.trim()}){respond(it)} else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
+  } else if(q.startsWith("sarcină ",true)) runTracked(q.substringAfter(" ").split(";").map{it.trim()}) else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
    q.equals("baterie",true) -> getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).let { if(it in 0..100) "$it%" else "Nivel indisponibil" }
    q.equals("ram",true) -> android.app.ActivityManager.MemoryInfo().let { info -> getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info); "${info.availMem / 1048576} MiB disponibili din ${info.totalMem / 1048576} MiB; memorie redusă: ${info.lowMemory}" }
