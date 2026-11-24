@@ -9,6 +9,16 @@ import android.view.ViewGroup
 import java.text.DateFormat
 import java.util.Date
 class MainActivity : androidx.activity.ComponentActivity() {
+ private var wake:WakeController?=null
+ private fun stopWake(){wake?.stop();wake=null}
+ private fun startWake(){
+  if(busy || wake!=null)return
+  if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
+  listening.close();voice.stop()
+  lateinit var controller:WakeController
+  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone()}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){append(message);if(message=="Ascultare oprită.")wake=null}}})
+  wake=controller;controller.start()
+ }
  private var airTouch:AirTouchController?=null
  private lateinit var cursor:com.jarvis.ai.gesture.GestureCursorView
  private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
@@ -123,7 +133,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close(); stopAirTouch() } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close(); stopWake(); stopAirTouch() } })
+  root.addView(Button(this).apply{text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   root.addView(Button(this).apply{text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
   root.addView(Button(this).apply{text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   root.addView(Button(this).apply{text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
@@ -148,7 +159,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   append("Comenzi locale: ora, baterie, ram, stocare, memorează cheie=valoare, amintește cheie.")
  }
  private fun startMicrophone(){
-  if(busy)return
+  if(busy || wake!=null)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
@@ -157,6 +168,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
@@ -271,8 +283,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
- override fun onStop(){stopAirTouch();super.onStop()}
+ override fun onStop(){stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  stopWake()
   stopAirTouch()
   listening.close()
   voice.close()
