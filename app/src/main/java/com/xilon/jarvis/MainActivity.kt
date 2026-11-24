@@ -10,7 +10,7 @@ import java.text.DateFormat
 import java.util.Date
 class MainActivity : Activity() {
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
- private var nativeModel: NativeModel? = null
+ @Volatile private var nativeModel: NativeModel? = null
  private var busy = false
  private lateinit var memory: LocalMemory
  private lateinit var transcript: TextView
@@ -39,13 +39,15 @@ class MainActivity : Activity() {
     if(local != null) append("JARVIS: "+local)
     else {
      busy=true
+     nativeModel?.resetCancellation()
      worker.execute {
       val answer=try { nativeModel?.generate(q) ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
-      runOnUiThread { if(!isDestroyed) { busy=false; append("JARVIS: "+answer) } }
+      runOnUiThread { if(!isDestroyed) { busy=false; append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else "") } }
      }
     }
    }
   } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop() } })
   setContentView(root)
   append("Comenzi locale: ora, baterie, stocare, memorează cheie=valoare, amintește cheie.")
  }
@@ -91,6 +93,7 @@ class MainActivity : Activity() {
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
  override fun onDestroy() {
+  nativeModel?.stop()
   worker.execute { nativeModel?.close(); nativeModel=null }
   worker.shutdown()
   super.onDestroy()
