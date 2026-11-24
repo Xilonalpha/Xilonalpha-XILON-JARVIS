@@ -16,3 +16,5 @@ dependencies {
  implementation("androidx.camera:camera-lifecycle:1.4.2")
  implementation("com.google.mediapipe:tasks-vision:0.10.35")
 }
+
+dependencies { implementation("androidx.activity:activity:1.9.3") }
