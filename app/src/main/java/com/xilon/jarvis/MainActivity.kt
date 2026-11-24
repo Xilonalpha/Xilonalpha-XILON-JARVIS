@@ -14,6 +14,8 @@ class MainActivity : Activity() {
  private val history=mutableListOf<Pair<String,String>>()
  private lateinit var voice: OfflineVoice
  private var speakReplies=false
+ private lateinit var listening: OfflineListening
+ private lateinit var voiceInput: EditText
  private var busy = false
  private lateinit var memory: LocalMemory
  private lateinit var transcript: TextView
@@ -23,6 +25,7 @@ class MainActivity : Activity() {
   super.onCreate(savedInstanceState)
   memory = LocalMemory(this)
   voice=OfflineVoice(this)
+  listening=OfflineListening(this)
   try {
    val saved=org.json.JSONArray(getSharedPreferences("conversation",MODE_PRIVATE).getString("turns","[]"))
    for(i in maxOf(0,saved.length()-6) until saved.length()){
@@ -43,7 +46,9 @@ class MainActivity : Activity() {
   scroll = ScrollView(this).apply { addView(transcript) }
   root.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   val input = EditText(this).apply { hint = "Scrie o comandă"; maxLines = 4 }
+  voiceInput=input
   root.addView(input)
+  root.addView(Button(this).apply { text="Microfon offline"; setOnClickListener { startMicrophone() } })
   root.addView(Button(this).apply { text = "Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
@@ -77,7 +82,7 @@ class MainActivity : Activity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop() } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close() } })
   setContentView(root)
   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
   if(saved!=null && saved.matches(Regex("model-[a-f0-9-]+\\.gguf"))) {
@@ -94,6 +99,18 @@ class MainActivity : Activity() {
    }
   }
   append("Comenzi locale: ora, baterie, ram, stocare, memorează cheie=valoare, amintește cheie.")
+ }
+ private fun startMicrophone(){
+  if(busy)return
+  if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+   requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
+  }
+  voice.stop()
+  listening.listen({ text -> if(!isDestroyed) voiceInput.setText(text) },{ error -> if(!isDestroyed) append(error) })
+ }
+ override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
+  super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
  private fun speakReply(text:String){ if(speakReplies && text.isNotBlank()) voice.speak(text)?.let { append(it) } }
  private fun persistHistory(){
@@ -149,6 +166,7 @@ class MainActivity : Activity() {
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
  override fun onDestroy() {
+  listening.close()
   voice.close()
   nativeModel?.stop()
   worker.execute { nativeModel?.close(); nativeModel=null }
