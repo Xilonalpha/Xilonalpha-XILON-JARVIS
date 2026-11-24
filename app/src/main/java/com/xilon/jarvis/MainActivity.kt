@@ -120,7 +120,7 @@ class MainActivity : Activity() {
  }
  private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
  private fun respond(q: String): String? = try {
-  when {
+  DeviceActions(this).execute(q) ?: when {
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
    q.equals("baterie",true) -> getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).let { if(it in 0..100) "$it%" else "Nivel indisponibil" }
    q.equals("ram",true) -> android.app.ActivityManager.MemoryInfo().let { info -> getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info); "${info.availMem / 1048576} MiB disponibili din ${info.totalMem / 1048576} MiB; memorie redusă: ${info.lowMemory}" }
