@@ -125,7 +125,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
        getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
        val mib=info.availMem/1048576
        val context=when { info.lowMemory || mib<768 -> 512; mib<2048 -> 1024; else -> 2048 }
-       val threads=if(info.lowMemory) 1 else (Runtime.getRuntime().availableProcessors()/2).coerceIn(1,4)
+       val thermal=com.jarvis.mobile.core.model.DeviceProfiler(this).profile().thermalStatus
+       val threads=if(info.lowMemory || thermal in listOf("severe","critical")) 1 else if(thermal=="moderate") 2 else (Runtime.getRuntime().availableProcessors()/2).coerceIn(1,4)
        val grounded=q.startsWith("întreabă documentele ",true)
        val question=if(grounded)q.substringAfter(" ").substringAfter(" ").trim() else q
        val passages=if(grounded)LocalKnowledge(this).passages(question,if(context==512)1 else 2) else emptyList()
@@ -217,10 +218,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
    "Abilitate salvată local (nevalidată prin execuție)."
   } else if(q.startsWith("execută abilitate ",true)){
    val steps=SkillStore(this).load(q.substring("execută abilitate ".length))
-   if(steps==null)"Abilitate negăsită." else TaskRuntime().run(steps){respond(it)}
+   if(steps==null)"Abilitate negăsită." else runTracked(steps)
   } else if(q.startsWith("șterge abilitate ",true)){
    if(SkillStore(this).delete(q.substring("șterge abilitate ".length)))"Abilitate ștearsă." else "Abilitate negăsită."
   } else if(q.startsWith("sarcină ",true)) runTracked(q.substringAfter(" ").split(";").map{it.trim()}) else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
+   q.equals("profil dispozitiv",true) -> com.jarvis.mobile.core.model.DeviceProfiler(this).profile().toString()
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
    q.equals("baterie",true) -> getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).let { if(it in 0..100) "$it%" else "Nivel indisponibil" }
    q.equals("ram",true) -> android.app.ActivityManager.MemoryInfo().let { info -> getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info); "${info.availMem / 1048576} MiB disponibili din ${info.totalMem / 1048576} MiB; memorie redusă: ${info.lowMemory}" }
