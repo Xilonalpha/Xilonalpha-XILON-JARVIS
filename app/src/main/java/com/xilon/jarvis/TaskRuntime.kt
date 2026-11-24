@@ -9,16 +9,12 @@ class TaskRuntime {
   status=next
  }
  fun run(commands:List<String>,execute:(String)->String?):String{
-  require(commands.size in 1..5)
-  require(commands.all{ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))}){"Planul conține instrumente neautorizate"}
   move(AgentStatus.ACTING)
+  if(commands.size !in 1..5 || commands.any{!ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))}){
+   move(AgentStatus.FAILED);return "Plan respins înainte de execuție."
+  }
   val results=mutableListOf<String>()
   for(command in commands){
-   // Only read-only device observations are supported by this first runner.
-   if(!ToolCatalog.permits(command.lowercase(java.util.Locale.ROOT))){
-    move(AgentStatus.FAILED)
-    return (results+"Blocat: $command (instrument neautorizat)").joinToString("\n")
-   }
    val answer=try{execute(command)}catch(e:Exception){null}
    if(answer==null || !ObservationVerifier.valid(command,answer)){
     move(AgentStatus.FAILED)
