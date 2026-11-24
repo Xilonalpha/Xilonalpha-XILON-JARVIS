@@ -9,7 +9,7 @@ class OmegaEngine(private val context:Context){
   val warnings=mutableListOf<String>()
   if(status=="COMPLETED")runCatching{LocalGraph(context).use{it.record(steps)}}.onFailure{warnings.add("Graf: "+it.message)}
   runCatching{TaskJournal(context).record(steps,status)}.onFailure{warnings.add("Jurnal: "+it.message)}
-  return Outcome(text,status,warnings.joinToString("; ").ifBlank{null})
+  return Outcome(text,status,warnings.takeIf{it.isNotEmpty()}?.joinToString("; "))
  }
  fun replay(name:String,execute:(String)->String?):Outcome?=SkillStore(context).load(name)?.let{run(it,execute)}
 }
