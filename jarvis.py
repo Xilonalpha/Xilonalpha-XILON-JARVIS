@@ -2,7 +2,7 @@ import argparse
 from core.runtime import Jarvis
 from integrations import termux, whisper
 from agents.tools import Registry, Tool
-from agents.planner import dispatch
+from agents.planner import run_task
 import json
 
 def build_registry(jarvis):
@@ -30,7 +30,7 @@ def respond(jarvis, text, registry=None, confirm=None, agent=False):
         value = registry.execute("recall", {"key": text.strip()[len("amintește "):].strip()})
         return value if value is not None else "Nu există această amintire."
     if agent:
-        return json.dumps(dispatch(jarvis.infer, registry, text, confirm), ensure_ascii=False)
+        return json.dumps(run_task(jarvis.infer, registry, text, confirm), ensure_ascii=False)
     return jarvis.infer(text)
 
 def main():
