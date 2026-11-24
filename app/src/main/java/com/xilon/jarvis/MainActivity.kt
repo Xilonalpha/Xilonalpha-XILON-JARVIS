@@ -49,6 +49,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var voice: OfflineVoice
  private var speakReplies=false
  private var kokoroVoice:NeuralVoice?=null
+ private var englishNeuralVoice=false
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
  private var busy = false
@@ -78,6 +79,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(modelStatus)
   root.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
   root.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
+  root.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;kokoroVoice?.stop();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
   root.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;runCatching{v.speak("Hello. This is Xilon Jarvis.")}.onFailure{append("Kokoro: "+it.message)}}} })
   root.addView(Button(this).apply { text = "Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
@@ -212,7 +214,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
- private fun speakReply(text:String){ if(speakReplies && text.isNotBlank()) voice.speak(text)?.let { append(it) } }
+ private fun speakReply(text:String){
+  if(!speakReplies || text.isBlank())return
+  val neural=kokoroVoice
+  if(englishNeuralVoice && neural!=null && neural.installed()){
+   voice.stop();val result=runCatching{neural.speak(text)}
+   if(result.isSuccess)return
+   append("Kokoro indisponibil: "+result.exceptionOrNull()?.message)
+  }
+  voice.speak(text)?.let{append(it)}
+ }
  private fun persistHistory(){
   val array=org.json.JSONArray()
   history.forEach { (role,text) -> array.put(org.json.JSONObject().put("role",role).put("text",text)) }
