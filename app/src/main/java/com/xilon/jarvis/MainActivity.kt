@@ -124,6 +124,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   } })
   root.addView(Button(this).apply { text="STOP"; setOnClickListener { nativeModel?.stop(); voice.stop(); listening.close(); stopAirTouch() } })
+  root.addView(Button(this).apply{text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
+  root.addView(Button(this).apply{text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   root.addView(Button(this).apply{text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   root.addView(Button(this).apply{text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy)startMicrophone()}
@@ -202,6 +204,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==46){
+   if(resultCode==RESULT_OK && !busy){
+    val uri=data?.data ?: return
+    busy=true
+    worker.execute{
+     val result=try{kotlinx.coroutines.runBlocking{com.jarvis.ai.memory.ModelStore.import(this@MainActivity,uri)}.let{"Model importat: "+it.name}}catch(e:Exception){"Import vocal eșuat: "+e.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }
+   };return
+  }
   if(requestCode==45){
    if(resultCode==RESULT_OK && !busy){
     val uri=data?.data ?: return
