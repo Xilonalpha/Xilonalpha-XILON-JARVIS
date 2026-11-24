@@ -13,12 +13,35 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
  return reinterpret_cast<jlong>(m);
 }
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){llama_model_free(reinterpret_cast<llama_model*>(h));}
-extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jstring prompt,jint threads,jint context,jint maxTokens){
+extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens){
  auto* m=reinterpret_cast<llama_model*>(h); auto* v=llama_model_get_vocab(m);
- const char* p=e->GetStringUTFChars(prompt,nullptr); if(!p)return nullptr;
- std::string input(p); e->ReleaseStringUTFChars(prompt,p);
+ const int count=e->GetArrayLength(messages);
+ if(count<1 || count!=e->GetArrayLength(roles)){fail(e,"Invalid conversation");return nullptr;}
+ std::vector<std::string> role(count),body(count);
+ std::vector<llama_chat_message> chat(count);
+ for(int i=0;i<count;i++){
+  auto r=static_cast<jstring>(e->GetObjectArrayElement(roles,i));
+  auto a=static_cast<jbyteArray>(e->GetObjectArrayElement(messages,i));
+  const char* rp=e->GetStringUTFChars(r,nullptr); if(!rp)return nullptr;
+  role[i]=rp;e->ReleaseStringUTFChars(r,rp);
+  body[i].resize(e->GetArrayLength(a));
+  e->GetByteArrayRegion(a,0,body[i].size(),reinterpret_cast<jbyte*>(body[i].data()));
+  e->DeleteLocalRef(r);e->DeleteLocalRef(a);
+  chat[i]={role[i].c_str(),body[i].c_str()};
+ }
+ const char* tmpl=llama_model_chat_template(m,nullptr);
+ std::string input;
+ if(tmpl){
+  int size=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,nullptr,0);
+  if(size<0){fail(e,"Unsupported GGUF chat template");return nullptr;}
+  std::vector<char> formatted(size+1);
+  int written=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,formatted.data(),formatted.size());
+  if(written<0 || written>size){fail(e,"Chat formatting failed");return nullptr;}
+  input.assign(formatted.data(),written);
+ }else{input=body.back();}
+
  std::vector<llama_token> tokens(input.size()+16);
- int n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,false);
+ int n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,tmpl!=nullptr);
  if(n<=0 || n>context-maxTokens){fail(e,"Prompt exceeds supported token budget");return nullptr;}
  auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_threads=threads;cp.n_threads_batch=threads;
  auto* ctx=llama_init_from_model(m,cp);if(!ctx){fail(e,"Context allocation failed");return nullptr;}
