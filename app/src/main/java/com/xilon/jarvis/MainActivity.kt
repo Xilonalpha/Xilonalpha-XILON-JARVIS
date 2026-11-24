@@ -261,7 +261,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(steps==null)"Abilitate negăsită." else runTracked(steps)
   } else if(q.startsWith("șterge abilitate ",true)){
    if(SkillStore(this).delete(q.substring("șterge abilitate ".length)))"Abilitate ștearsă." else "Abilitate negăsită."
-  } else if(q.startsWith("sarcină ",true)) runTracked(q.substringAfter(" ").split(";").map{it.trim()}) else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
+  } else if(q.startsWith("sarcină ",true)) runTracked(q.substringAfter(" ").split(";").map{it.trim()}) else PlatformControl.execute(this,q) ?: MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
    q.equals("activează observarea",true) -> {startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));"Activează manual serviciul XILON - observare ecran."}
    q.equals("șterge observația",true) -> {screenHandler.removeCallbacksAndMessages(null);observedScreen=null;"Observație eliminată din sesiune."}
    q.equals("citește ecranul",true) -> LocalScreen.snapshot()?.ifBlank{"Niciun text vizibil."} ?: "Ecran indisponibil sau serviciu neactivat."
