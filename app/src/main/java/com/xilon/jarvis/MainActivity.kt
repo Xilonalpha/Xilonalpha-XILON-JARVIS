@@ -62,6 +62,22 @@ class MainActivity : Activity() {
      }
      return@setOnClickListener
     }
+    if(q.startsWith("planifică ",true)){
+     val model=nativeModel
+     if(model==null){append("Încarcă un model GGUF.");return@setOnClickListener}
+     busy=true;model.resetCancellation()
+     worker.execute{
+      val plan=runCatching{TaskPlanner.parse(model.generate(TaskPlanner.prompt(q.substringAfter(" ")),2,512,96,emptyList()))}
+      runOnUiThread{
+       if(!isDestroyed){
+        busy=false
+        if(model.isCancelled())append("Planificare oprită.")
+        else plan.fold({steps->append("Plan: "+steps.joinToString("; "));append(TaskRuntime().run(steps){respond(it)})},{e->append("Plan neexecutat: "+e.message)})
+       }
+      }
+     }
+     return@setOnClickListener
+    }
     val local = respond(q)
     if(local != null) { append("JARVIS: "+local); speakReply(local) }
     else {
