@@ -7,7 +7,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.jarvis.ai.gesture.GestureEngine
 import com.jarvis.ai.gesture.GestureCursorView
-class AirTouchController(private val context:Context,private val owner:LifecycleOwner,private val cursor:GestureCursorView,private val status:(String)->Unit){
+class AirTouchController(private val context:Context,private val owner:LifecycleOwner,private val cursor:GestureCursorView,private val status:(String)->Unit,private val onFailure:()->Unit){
  private val worker=java.util.concurrent.Executors.newSingleThreadExecutor()
  private var provider:ProcessCameraProvider?=null
  private var analysis:ImageAnalysis?=null
@@ -26,9 +26,9 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
        analysis=a;a.setAnalyzer(worker,engine::process)
        p.bindToLifecycle(owner,CameraSelector.DEFAULT_FRONT_CAMERA,a)
        status("Air Touch activ.")
-      }catch(e:Exception){status("Camera indisponibilă: "+e.message);close()}
+      }catch(e:Exception){status("Camera indisponibilă: "+e.message);close();onFailure()}
      },ContextCompat.getMainExecutor(context))
-    },{status("Model gesturi indisponibil: "+it.message);close()})
+    },{status("Model gesturi indisponibil: "+it.message);close();onFailure()})
    }
   }
  }
