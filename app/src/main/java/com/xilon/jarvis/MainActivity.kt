@@ -77,6 +77,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   modelStatus = TextView(this).apply { text = "Selectează un model GGUF pentru inferență locală." }
   root.addView(modelStatus)
   root.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
+  root.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
   root.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;runCatching{v.speak("Hello. This is Xilon Jarvis.")}.onFailure{append("Kokoro: "+it.message)}}} })
   root.addView(Button(this).apply { text = "Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
@@ -265,6 +266,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==49){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;busy=true;worker.execute{val result=runCatching{KokoroImport.install(this,uri)}.fold({"Fișiere Kokoro instalate; inferența trebuie testată."},{"Import Kokoro eșuat: "+it.message});runOnUiThread{if(!isDestroyed){busy=false;append(result)}}};return}
   if(requestCode==46){
    if(resultCode==RESULT_OK && !busy){
     val uri=data?.data ?: return
