@@ -14,7 +14,7 @@ class TaskRuntime {
   val results=mutableListOf<String>()
   for(command in commands){
    // Only read-only device observations are supported by this first runner.
-   if(command.lowercase(java.util.Locale.ROOT) !in setOf("ora","baterie","ram","stocare")){
+   if(!ToolCatalog.permits(command.lowercase(java.util.Locale.ROOT))){
     move(AgentStatus.FAILED)
     return (results+"Blocat: $command (instrument neautorizat)").joinToString("\n")
    }
