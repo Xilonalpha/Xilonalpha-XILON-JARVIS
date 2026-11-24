@@ -133,7 +133,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val local = respond(q)
-    if(local != null) { append("JARVIS: "+local); speakReply(local) }
+    if(local != null) { recorder.observe(q,local); append("JARVIS: "+local); speakReply(local) }
     else {
      busy=true
      nativeModel?.resetCancellation()
@@ -216,16 +216,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
   getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("turns",array.toString()).apply()
  }
  private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
+ private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
  private fun runTracked(steps:List<String>):String{
-  val runtime=TaskRuntime()
   lastSuccessfulPlan=null
-  val outcome=runtime.run(steps){respond(it)}
-  if(runtime.status==com.jarvis.mobile.core.agent.AgentStatus.COMPLETED){lastSuccessfulPlan=steps.toList();try{LocalGraph(this).use{it.record(steps)}}catch(e:Exception){append("Graf nesalvat: "+e.message)}}
-  return try{TaskJournal(this).record(steps,runtime.status.name);outcome+"\nStare: "+runtime.status.name}catch(e:Exception){outcome+"\nJurnal nesalvat: "+e.message}
+  val outcome=OmegaEngine(this).run(steps){respond(it)}
+  if(outcome.status=="COMPLETED")lastSuccessfulPlan=steps.toList()
+  return outcome.text+"\nStare: "+outcome.status+(outcome.warning?.let{"\n"+it} ?: "")
  }
  private fun respond(q: String): String? = try {
-  if(q.startsWith("recomandă după ",true)) LocalGraph(this).use{it.recommend(q.substring("recomandă după ".length))}
+  if(q.equals("începe demonstrația",true)){recorder.start();"Înregistrare instrumente de citire pornită."}
+  else if(q.equals("anulează demonstrația",true)){recorder.cancel();"Înregistrare anulată."}
+  else if(q.startsWith("salvează demonstrația ",true)){val steps=recorder.finish();SkillStore(this).save(q.substring("salvează demonstrația ".length),steps);"Demonstrație salvată."}
+  else if(q.startsWith("recomandă după ",true)) LocalGraph(this).use{it.recommend(q.substring("recomandă după ".length))}
   else if(q.equals("graf abilități",true)) LocalGraph(this).use{it.summary()}
   else if(q.equals("șterge graful",true)){LocalGraph(this).use{it.clear()};"Graf local șters."}
   else if(q.equals("jurnal sarcini",true)) TaskJournal(this).summary()
