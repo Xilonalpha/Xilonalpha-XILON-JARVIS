@@ -88,7 +88,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(input)
   root.addView(Button(this).apply { text="Microfon offline"; setOnClickListener { startMicrophone() } })
   root.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
-   if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(observed ?: "Ecran indisponibil.");}},5000)}
+   if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
   root.addView(Button(this).apply { text = "Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
@@ -242,6 +242,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(SkillStore(this).delete(q.substring("șterge abilitate ".length)))"Abilitate ștearsă." else "Abilitate negăsită."
   } else if(q.startsWith("sarcină ",true)) runTracked(q.substringAfter(" ").split(";").map{it.trim()}) else MediaActions(this).execute(q) ?: DeviceActions(this).execute(q) ?: when {
    q.equals("activează observarea",true) -> {startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));"Activează manual serviciul XILON - observare ecran."}
+   q.equals("șterge observația",true) -> {screenHandler.removeCallbacksAndMessages(null);observedScreen=null;"Observație eliminată din sesiune."}
    q.equals("citește ecranul",true) -> LocalScreen.snapshot()?.ifBlank{"Niciun text vizibil."} ?: "Ecran indisponibil sau serviciu neactivat."
    q.equals("profil dispozitiv",true) -> com.jarvis.mobile.core.model.DeviceProfiler(this).profile().toString()
    q.equals("ora",true) -> DateFormat.getTimeInstance().format(Date())
@@ -324,6 +325,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onStop(){stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  screenHandler.removeCallbacksAndMessages(null);observedScreen=null
   stopWake()
   stopAirTouch()
   listening.close()
