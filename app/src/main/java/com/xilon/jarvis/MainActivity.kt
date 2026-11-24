@@ -11,6 +11,7 @@ import java.util.Date
 class MainActivity : Activity() {
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
  @Volatile private var nativeModel: NativeModel? = null
+ private val history=mutableListOf<Pair<String,String>>()
  private var busy = false
  private lateinit var memory: LocalMemory
  private lateinit var transcript: TextView
@@ -49,7 +50,13 @@ class MainActivity : Activity() {
        val mib=info.availMem/1048576
        val context=when { info.lowMemory || mib<768 -> 512; mib<2048 -> 1024; else -> 2048 }
        val threads=if(info.lowMemory) 1 else (Runtime.getRuntime().availableProcessors()/2).coerceIn(1,4)
-       model.generate(q,threads,context,if(context==512) 96 else 256)
+       val recent=history.takeLast(if(context==512) 2 else 6)
+       val answer=model.generate(q,threads,context,if(context==512) 96 else 256,recent)
+       if(!model.isCancelled() && answer.isNotBlank()){
+        history.add("user" to q); history.add("assistant" to answer)
+        while(history.size>6) history.removeAt(0)
+       }
+       answer
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
       runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=prefix.removeSuffix("JARVIS: "); append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else "") } }
@@ -111,6 +118,7 @@ class MainActivity : Activity() {
      candidate=next
      next.load(target.absolutePath)
      nativeModel=next
+     history.clear()
      candidate=null
      getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",target.name).apply()
      filesDir.listFiles()?.filter { it.name.startsWith("model-") && it.extension=="gguf" && it!=target }?.forEach { it.delete() }
