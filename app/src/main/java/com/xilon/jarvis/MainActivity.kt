@@ -48,6 +48,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val history=mutableListOf<Pair<String,String>>()
  private lateinit var voice: OfflineVoice
  private var speakReplies=false
+ private var kokoroVoice:NeuralVoice?=null
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
  private var busy = false
@@ -76,6 +77,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   modelStatus = TextView(this).apply { text = "Selectează un model GGUF pentru inferență locală." }
   root.addView(modelStatus)
   root.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
+  root.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;runCatching{v.speak("Hello. This is Xilon Jarvis.")}.onFailure{append("Kokoro: "+it.message)}}} })
   root.addView(Button(this).apply { text = "Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
@@ -168,7 +170,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
+  root.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
   root.addView(Button(this).apply{text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   root.addView(Button(this).apply{text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   root.addView(Button(this).apply{text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
@@ -330,7 +332,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
  }
- override fun onStop(){stopNeural();stopWake();stopAirTouch();super.onStop()}
+ override fun onStop(){kokoroVoice?.stop();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
   screenHandler.removeCallbacksAndMessages(null);observedScreen=null
   stopWake()
