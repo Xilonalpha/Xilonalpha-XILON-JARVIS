@@ -18,3 +18,8 @@ dependencies {
 }
 
 dependencies { implementation("androidx.activity:activity:1.9.3") }
+
+dependencies {
+ implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
+ implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+}
