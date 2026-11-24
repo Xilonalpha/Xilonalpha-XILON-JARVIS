@@ -84,6 +84,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   voiceInput=input
   root.addView(input)
   root.addView(Button(this).apply { text="Microfon offline"; setOnClickListener { startMicrophone() } })
+  root.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
+   if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");android.os.Handler(mainLooper).postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();append(observed ?: "Ecran indisponibil.");}},5000)}
+  } })
   root.addView(Button(this).apply { text = "Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
