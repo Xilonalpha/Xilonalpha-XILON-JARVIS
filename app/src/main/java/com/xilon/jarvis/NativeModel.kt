@@ -9,9 +9,9 @@ class NativeModel : AutoCloseable {
  fun publishProgress(bytes: ByteArray) { onProgress?.invoke(bytes.toString(Charsets.UTF_8)) }
  private var handle = 0L
  @Synchronized fun load(path: String) { close(); handle = openModel(path); check(handle != 0L) { "Model loading failed" } }
- @Synchronized fun generate(prompt: String): String { check(handle != 0L); return infer(handle,prompt) }
+ @Synchronized fun generate(prompt: String, threads: Int = 2, context: Int = 1024, maxTokens: Int = 128): String { check(handle != 0L); return infer(handle,prompt,threads.coerceIn(1,8),context.coerceIn(512,4096),maxTokens.coerceIn(32,512)) }
  @Synchronized override fun close() { if(handle != 0L) { freeModel(handle); handle=0 } }
  private external fun openModel(path:String):Long
- private external fun infer(handle:Long,prompt:String):String
+ private external fun infer(handle:Long,prompt:String,threads:Int,context:Int,maxTokens:Int):String
  private external fun freeModel(handle:Long)
 }
