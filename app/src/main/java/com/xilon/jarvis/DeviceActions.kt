@@ -1,0 +1,40 @@
+package com.xilon.jarvis
+import android.app.Activity
+import android.content.Intent
+import android.provider.Settings
+import android.provider.AlarmClock
+import android.net.Uri
+import java.util.Locale
+
+class DeviceActions(private val activity:Activity) {
+ fun execute(command:String):String? {
+  val q=command.trim().lowercase(Locale.ROOT)
+  val intent=when(q){
+   "deschide setări" -> Intent(Settings.ACTION_SETTINGS)
+   "deschide wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
+   "deschide bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+   "deschide alarme" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
+   else -> when {
+    q.startsWith("alarmă ") -> {
+     val m=Regex("alarmă (\\d{1,2}):(\\d{2})").matchEntire(q) ?: return "Format: alarmă HH:MM"
+     val h=m.groupValues[1].toInt();val min=m.groupValues[2].toInt()
+     if(h !in 0..23 || min !in 0..59)return "Ora invalidă."
+     Intent(AlarmClock.ACTION_SET_ALARM).putExtra(AlarmClock.EXTRA_HOUR,h).putExtra(AlarmClock.EXTRA_MINUTES,min).putExtra(AlarmClock.EXTRA_SKIP_UI,false)
+    }
+    q.startsWith("cronometru ") -> {
+     val seconds=q.substringAfter(" ").toIntOrNull() ?: return "Format: cronometru secunde"
+     if(seconds !in 1..86400)return "Durata trebuie să fie între 1 și 86400 secunde."
+     Intent(AlarmClock.ACTION_SET_TIMER).putExtra(AlarmClock.EXTRA_LENGTH,seconds).putExtra(AlarmClock.EXTRA_SKIP_UI,false)
+    }
+    q.startsWith("formează ") -> {
+     val number=q.substringAfter(" ")
+     if(!Regex("[+]?[0-9]{3,15}").matches(number))return "Număr invalid."
+     Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",number,null))
+    }
+    else -> return null
+   }
+  }
+  return try { activity.startActivity(intent); "Solicitare transmisă aplicației Android; verifică și confirmă acolo." }
+  catch(e:Exception){ "Acțiunea nu a putut fi deschisă: "+e.message }
+ }
+}
