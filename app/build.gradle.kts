@@ -29,3 +29,5 @@ if (sherpaEnabled) {
  android.sourceSets.getByName("main").java.srcDir("src/sherpa/java")
  dependencies { implementation("com.github.k2-fsa:sherpa-onnx:v1.12.38") }
 }
+
+dependencies { testImplementation("junit:junit:4.13.2") }
