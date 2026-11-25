@@ -8,7 +8,10 @@ object ToolCatalog {
   Spec("ram","Memorie RAM disponibilă"),
   Spec("stocare","Spațiu disponibil"),
   Spec("profil dispozitiv","Profil hardware și stare termică"),
-  Spec("lista aplicații","Aplicații Android vizibile")
+  Spec("lista aplicații","Aplicații Android vizibile"),
+  Spec("volum","Nivel multimedia actual"),
+  Spec("rețea","Starea conexiunii active"),
+  Spec("încărcare","Starea încărcării bateriei")
  )
  fun permits(name:String)=readOnly.any{it.name==name}
  fun describe()=readOnly.joinToString("; "){it.name+": "+it.description}
