@@ -310,6 +310,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
+    val lexicalTool=RomanianLexicon.parse(q)
+    if(lexicalTool!=null){executeRequestedTool(lexicalTool.tool,lexicalTool.args);return@setOnClickListener}
     val naturalTool=NaturalToolCommands.parse(q)
     if(naturalTool!=null && !RegistryIntent.compound(q)){
      executeRequestedTool(naturalTool.tool,naturalTool.args)
