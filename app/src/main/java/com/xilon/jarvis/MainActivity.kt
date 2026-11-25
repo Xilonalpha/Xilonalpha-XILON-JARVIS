@@ -357,6 +357,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian=="raport performanta"){
+     val records=getSharedPreferences("model_benchmarks",MODE_PRIVATE).all.entries.mapNotNull{entry->runCatching{entry.key to org.json.JSONObject(entry.value as String)}.getOrNull()}.sortedByDescending{it.second.optLong("timestamp")}.take(10)
+     append(records.joinToString("\n\n"){(name,row)->
+      val elapsed=row.optLong("elapsed_ms");val tokens=row.optLong("tokens")
+      name.take(120)+"\nTokeni: "+tokens+"; durată: "+elapsed+" ms; primul token: "+row.optLong("first_token_ms")+" ms\nViteză: "+(if(elapsed>0 && tokens>0)String.format(java.util.Locale.ROOT,"%.2f",tokens*1000.0/elapsed)+" tokeni/s" else "indisponibilă")
+     }.ifBlank{"Nu există benchmarkuri salvate."});return@setOnClickListener
+    }
+    if(normalizedRomanian=="stare permisiuni"){
+     val permissions=listOf(android.Manifest.permission.RECORD_AUDIO,android.Manifest.permission.CAMERA,android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.READ_CONTACTS)
+     append(permissions.joinToString("\n"){it.substringAfterLast('.')+": "+(if(checkSelfPermission(it)==android.content.pm.PackageManager.PERMISSION_GRANTED)"acordată" else "neacordată")}+"\nObservare ecran: "+(if(LocalScreen.snapshot()!=null)"disponibilă" else "indisponibilă"))
+     return@setOnClickListener
+    }
+    if(normalizedRomanian=="deschide setarile jarvis"){
+     runCatching{startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+packageName)))}.onFailure{append("Setări indisponibile: "+it.javaClass.simpleName)}
+     return@setOnClickListener
+    }
     if(normalizedRomanian=="diagnostic telefon"){
      val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
      val battery=getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -1516,6 +1532,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun runRegistryPlan(steps:List<com.jarvis.mobile.core.tools.PlannedAction>){
   if(busy||agentCancelled||isDestroyed)return
   if(steps.isEmpty()){append("Planul nu conține pași.");return}
+  if(steps.size>30){append("Plan prea lung: maximum 30 de pași.");return}
   try { PendingRegistryStore(this).clear() } catch(e:Exception){append("Execuție blocată: "+e.message);return}
   pendingRegistry=emptyList();busy=true;refreshOmegaStatus()
   worker.execute{
