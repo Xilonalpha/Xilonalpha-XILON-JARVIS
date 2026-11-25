@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "locale": "ro-RO",
   "commands": [
     {
@@ -232,6 +232,95 @@
       "args": {
         "on": false
       }
+    },
+    {
+      "tool": "list_apps",
+      "english": "list apps",
+      "phrases": [
+        "ce aplicatii sunt instalate",
+        "ce aplicatii am pe telefon",
+        "arata toate aplicatiile",
+        "lista aplicatiilor"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_home",
+      "english": "home screen",
+      "phrases": [
+        "du ma la meniul principal",
+        "iesi la ecranul principal",
+        "mergi la inceput"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_back",
+      "english": "go back",
+      "phrases": [
+        "intoarce te",
+        "revino la pagina anterioara",
+        "da inapoi o pagina"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "take_screenshot",
+      "english": "take screenshot",
+      "phrases": [
+        "fa screenshot",
+        "salveaza o captura de ecran",
+        "captureaza ecranul"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_notifications",
+      "english": "show notifications",
+      "phrases": [
+        "deschide bara de notificari",
+        "trage bara de notificari",
+        "vezi notificarile"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "control_flashlight",
+      "english": "turn flashlight on",
+      "phrases": [
+        "aprinde lumina telefonului",
+        "porneste blitzul",
+        "activeaza blitzul"
+      ],
+      "args": {
+        "on": true
+      }
+    },
+    {
+      "tool": "control_flashlight",
+      "english": "turn flashlight off",
+      "phrases": [
+        "stinge lumina telefonului",
+        "opreste blitzul",
+        "dezactiveaza blitzul"
+      ],
+      "args": {
+        "on": false
+      }
+    },
+    {
+      "tool": "youtube_search",
+      "english": "search YouTube for music",
+      "phrases": [
+        "cauta melodii pe youtube",
+        "gaseste muzica pe youtube",
+        "vreau muzica",
+        "pune niste muzica",
+        "baga o melodie"
+      ],
+      "args": {
+        "query": "muzică"
+      }
     }
   ],
   "verbs": [
@@ -264,7 +353,30 @@
     "fa",
     "da drumul",
     "revino",
-    "mergi"
+    "mergi",
+    "gaseste",
+    "adauga",
+    "elimina",
+    "modifica",
+    "actualizeaza",
+    "instaleaza",
+    "descarca",
+    "incarca",
+    "copiaza",
+    "lipeste",
+    "selecteaza",
+    "alege",
+    "calculeaza",
+    "tradu",
+    "explica",
+    "rezuma",
+    "genereaza",
+    "verifica",
+    "continua",
+    "reia",
+    "asteapta",
+    "mareste",
+    "micsoreaza"
   ],
   "translations": {
     "deschide": "open",
@@ -295,6 +407,127 @@
     "porneste": "start",
     "opreste": "stop",
     "ajutor": "help",
-    "setari": "settings"
+    "setari": "settings",
+    "apel": "call",
+    "mesaj": "message",
+    "contact": "contact",
+    "agenda": "contacts",
+    "calendar": "calendar",
+    "eveniment": "event",
+    "intalnire": "meeting",
+    "ora": "hour",
+    "minut": "minute",
+    "secunda": "second",
+    "maine": "tomorrow",
+    "astazi": "today",
+    "ieri": "yesterday",
+    "acum": "now",
+    "mai tarziu": "later",
+    "dimineata": "morning",
+    "seara": "evening",
+    "noapte": "night",
+    "saptamana": "week",
+    "luna": "month",
+    "an": "year",
+    "poza": "photo",
+    "imagine": "image",
+    "camera": "camera",
+    "microfon": "microphone",
+    "casti": "headphones",
+    "difuzor": "speaker",
+    "sunet": "sound",
+    "melodie": "song",
+    "cantec": "song",
+    "artist": "artist",
+    "album": "album",
+    "film": "movie",
+    "serial": "series",
+    "stiri": "news",
+    "vreme": "weather",
+    "harta": "map",
+    "adresa": "address",
+    "locatie": "location",
+    "destinatie": "destination",
+    "drum": "road",
+    "trafic": "traffic",
+    "masina": "car",
+    "autobuz": "bus",
+    "tren": "train",
+    "avion": "plane",
+    "baterie": "battery",
+    "incarcare": "charging",
+    "memorie": "memory",
+    "stocare": "storage",
+    "retea": "network",
+    "internet": "internet",
+    "conexiune": "connection",
+    "parola": "password",
+    "cont": "account",
+    "securitate": "security",
+    "confidentialitate": "privacy",
+    "permisiune": "permission",
+    "confirmare": "confirmation",
+    "anulare": "cancellation",
+    "eroare": "error",
+    "rezultat": "result",
+    "sarcina": "task",
+    "plan": "plan",
+    "pas": "step",
+    "continua": "continue",
+    "reia": "resume",
+    "asteapta": "wait",
+    "verifica": "check",
+    "gaseste": "find",
+    "afiseaza": "display",
+    "arata": "show",
+    "adauga": "add",
+    "elimina": "remove",
+    "modifica": "modify",
+    "actualizeaza": "update",
+    "instaleaza": "install",
+    "descarca": "download",
+    "incarca": "upload",
+    "copiaza": "copy",
+    "lipeste": "paste",
+    "selecteaza": "select",
+    "alege": "choose",
+    "calculeaza": "calculate",
+    "tradu": "translate",
+    "explica": "explain",
+    "rezuma": "summarize",
+    "creeaza": "create",
+    "genereaza": "generate",
+    "deseneaza": "draw",
+    "asculta": "listen",
+    "vorbeste": "speak",
+    "raspunde": "reply",
+    "apeleaza": "call",
+    "navigheaza": "navigate",
+    "deruleaza": "scroll",
+    "aprinde": "turn on",
+    "stinge": "turn off",
+    "activeaza": "enable",
+    "dezactiveaza": "disable",
+    "mareste": "increase",
+    "micsoreaza": "decrease",
+    "repeta": "repeat",
+    "incepe": "begin",
+    "termina": "finish",
+    "urmatorul": "next",
+    "anteriorul": "previous",
+    "primul": "first",
+    "ultimul": "last",
+    "sus": "up",
+    "jos": "down",
+    "stanga": "left",
+    "dreapta": "right",
+    "da": "yes",
+    "nu": "no",
+    "multumesc": "thank you",
+    "salut": "hello",
+    "buna dimineata": "good morning",
+    "buna seara": "good evening",
+    "te rog": "please",
+    "la revedere": "goodbye"
   }
 }
