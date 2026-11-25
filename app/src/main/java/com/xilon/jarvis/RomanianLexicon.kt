@@ -40,7 +40,7 @@ object RomanianLexicon {
    for (phrase in obj.getValue("phrases").jsonArray) map[normalize(phrase.jsonPrimitive.content)] = entry
   }
   glossary = root.getValue("translations").jsonObject.entries.associate { normalize(it.key) to it.value.jsonPrimitive.content }
-  reverseGlossary = glossary.entries.groupBy { normalize(it.value) }
+  reverseGlossary = root.getValue("translations").jsonObject.entries.groupBy { normalize(it.value.jsonPrimitive.content) }
    .mapValues { (_, values) -> values.map { it.key }.sorted().joinToString(" / ") }
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
   entries = map.toMap()
@@ -49,7 +49,7 @@ object RomanianLexicon {
    corpus = null
    synonymCache.clear()
    corpusAssets = context.applicationContext.assets
-   indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-v2.db")
+   indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-v3.db")
    indexState = "idle"
   }
   warmUp()
@@ -120,10 +120,12 @@ object RomanianLexicon {
    }
    val db = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null)
    try {
-    if (db.version != 2) {
+    if (db.version != 3) {
      db.beginTransaction()
      try {
       db.execSQL("DROP TABLE IF EXISTS lex")
+      db.execSQL("DROP TABLE IF EXISTS folded")
+      db.execSQL("DROP TABLE IF EXISTS thesaurus")
       db.execSQL("CREATE TABLE lex(word TEXT NOT NULL, flags TEXT NOT NULL, PRIMARY KEY(word,flags))")
       db.execSQL("CREATE TABLE IF NOT EXISTS folded(key TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY(key,word))")
       val folded = db.compileStatement("INSERT OR IGNORE INTO folded VALUES (?,?)")
@@ -147,7 +149,28 @@ object RomanianLexicon {
        }
       } finally { statement.close(); folded.close() }
       check(count > 10000) { "Incomplete Romanian dictionary" }
-      db.version = 2
+      db.execSQL("CREATE TABLE thesaurus(key TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY(key,term))")
+      val syn = db.compileStatement("INSERT OR IGNORE INTO thesaurus VALUES (?,?)")
+      try {
+       assets.open("ro_hunspell/th_ro_RO_v2.dat").bufferedReader(Charsets.UTF_8).use { reader ->
+        check(reader.readLine()?.trim()?.removePrefix("\uFEFF")?.equals("UTF-8", true) == true)
+        while (true) {
+         val header = reader.readLine() ?: break
+         val count = header.substringAfterLast('|').toIntOrNull() ?: continue
+         check(count in 0..1000)
+         val key = normalize(header.substringBefore('|'))
+         repeat(count) {
+          val line = reader.readLine() ?: error("Incomplete thesaurus")
+          for (term in line.split('|').drop(1).map { it.trim() }) {
+           if (term.isNotBlank() && normalize(term) != key) {
+            syn.bindString(1,key); syn.bindString(2,term); syn.executeInsert()
+           }
+          }
+         }
+        }
+       }
+      } finally { syn.close() }
+      db.version = 3
       db.setTransactionSuccessful()
      } finally { db.endTransaction() }
     }
@@ -192,33 +215,39 @@ object RomanianLexicon {
  private val synonymCache = object : LinkedHashMap<String, List<String>>(64, 0.75f, true) {
   override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean = size > 64
  }
- @Synchronized fun synonyms(word: String): List<String> {
+ fun synonyms(word: String): List<String> {
+  if (indexState != "ready") return emptyList()
   val key = normalize(word)
   if (key.isBlank() || key.length > 80) return emptyList()
-  synonymCache[key]?.let { return it }
-  val assets = corpusAssets ?: return emptyList()
-  val result = linkedSetOf<String>()
-  try {
-   assets.open("ro_hunspell/th_ro_RO_v2.dat").bufferedReader(Charsets.UTF_8).use { reader ->
-    val encoding = reader.readLine()?.trim()?.removePrefix("\uFEFF") ?: return emptyList()
-    if (!encoding.equals("UTF-8", true)) return emptyList()
-    while (true) {
-     val header = reader.readLine() ?: break
-     val count = header.substringAfterLast('|').toIntOrNull() ?: continue
-     if (count !in 0..1000) break
-     val matches = normalize(header.substringBefore('|')) == key
-     repeat(count) {
-      val line = reader.readLine() ?: return emptyList()
-      if (matches) line.split('|').drop(1).forEach { value ->
-       val term = value.trim()
-       if (term.isNotEmpty() && normalize(term) != key && result.size < 64) result.add(term)
-      }
-     }
-     if (matches) break
+  return synchronized(this) {
+   synonymCache[key]?.let { return@synchronized it }
+   val c = corpus ?: return@synchronized emptyList()
+   val result = linkedSetOf<String>()
+   val keys = (listOf(key) + morphologicalRoots(word).map { normalize(it) }).distinct().take(12)
+   for (root in keys) {
+    c.words.rawQuery("SELECT term FROM thesaurus WHERE key=? ORDER BY term LIMIT 64", arrayOf(root)).use { cursor ->
+     while (cursor.moveToNext() && result.size < 64) result.add(cursor.getString(0))
     }
    }
-  } catch (_: java.io.IOException) { return emptyList() }
-  return result.toList().also { synonymCache[key] = it }
+   result.toList().also { synonymCache[key] = it }
+  }
+ }
+ // Reverse the imported affix rules; return only stems licensed by dictionary flags.
+ fun morphologicalRoots(word: String): List<String> {
+  if (indexState != "ready" || word.length !in 2..80) return emptyList()
+  return synchronized(this) {
+   val c = corpus ?: return@synchronized emptyList()
+   val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
+   val result = linkedSetOf<String>()
+   if (c.flags(w) != null) result.add(w)
+   for (r in c.rules) {
+    val stem = if (r.prefix && w.startsWith(r.add)) r.strip + w.removePrefix(r.add)
+     else if (!r.prefix && w.endsWith(r.add)) w.removeSuffix(r.add) + r.strip else continue
+    if (r.condition.containsMatchIn(stem) && c.flags(stem)?.contains(r.flag) == true) result.add(stem)
+    if (result.size >= 24) break
+   }
+   result.toList()
+  }
  }
  // Synonyms are suggestions only: never silently execute a different action.
  fun suggestedPhrases(text: String): List<String> {
