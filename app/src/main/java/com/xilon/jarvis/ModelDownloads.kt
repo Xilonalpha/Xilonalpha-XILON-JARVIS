@@ -40,13 +40,14 @@ class ModelDownloads(context:Context){
     require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
     check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
    }
-   connection=(URL(url).openConnection() as HttpURLConnection).apply{connectTimeout=20000;readTimeout=30000;instanceFollowRedirects=true;setRequestProperty("Accept-Encoding","identity")}
-   check(connection.responseCode==200){"HTTP "+connection.responseCode}
-   val total=ref?.bytes?:connection.contentLengthLong
+   val http=(URL(url).openConnection() as HttpURLConnection).apply{connectTimeout=20000;readTimeout=30000;instanceFollowRedirects=true;setRequestProperty("Accept-Encoding","identity")}
+   connection=http
+   check(http.responseCode==200){"HTTP "+http.responseCode}
+   val total=ref?.bytes?:http.contentLengthLong
    val limit=ref?.bytes?:if(entry==ModelCatalog.hand)64L*1024*1024 else 512L*1024*1024
    var bytes=0L
    val started=android.os.SystemClock.elapsedRealtime()
-   connection.inputStream.use{src->part(entry).outputStream().use{dst->
+   http.inputStream.use{src->part(entry).outputStream().use{dst->
     val buffer=ByteArray(65536)
     while(true){
      check(!cancelled.contains(entry.file)){"Anulat"}
@@ -83,7 +84,7 @@ class ModelDownloads(context:Context){
    DownloadManager.STATUS_SUCCESSFUL->"Descărcat local"
    DownloadManager.STATUS_FAILED->"Eșuat: "+(error?:"Transfer întrerupt")
    DownloadManager.STATUS_PENDING->"Pregătire transfer"
-   else->(percent?.let{"Transfer: "+it+"%"}?:"Transfer: "+bytes/1048576+" MiB")+" • "+speed/1024+" KiB/s"
+   else->(percent?.let{"Transfer: "+it+"%"}?:"Transfer: "+bytes/1048576+" MiB")+" • "+speed/1024+" KiB/s"+(if(speed>0&&total>bytes)" • "+((total-bytes)/speed)+" s rămase" else "")
   }
  }
  fun transfer(entry:ModelCatalog.Entry):Transfer{
