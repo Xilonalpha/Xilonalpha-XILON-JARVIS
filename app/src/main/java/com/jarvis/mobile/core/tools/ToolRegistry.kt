@@ -13,7 +13,11 @@ object ToolRegistry {
 
     fun registerAll(list: List<Tool>) {
         synchronized(lock) {
-            for (t in list) tools[t.spec.name] = t
+            require(list.map { it.spec.name }.distinct().size == list.size) { "Duplicate tool names in registration" }
+            for (t in list) {
+                if (tools.containsKey(t.spec.name)) Log.w(TAG, "Replacing registered tool: ${t.spec.name}")
+                tools[t.spec.name] = t
+            }
         }
         Log.i(TAG, "Registered ${list.size} tools: ${list.joinToString(",") { it.spec.name }}")
     }
