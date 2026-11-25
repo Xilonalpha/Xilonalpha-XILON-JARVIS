@@ -149,7 +149,7 @@ class MemoryStore private constructor(context: Context) :
     /** Saves a note. Identical notes are not duplicated. Keeps at most [MAX_FACTS] notes (oldest plain ones go first). */
     fun addFact(text: String, style: Boolean): Long {
         val clean = MemoryPrompt.sanitize(text, 200)
-        if (clean.length < 3) return -1
+        if (clean.length < 3 || SensitiveFilter.isSensitive(text) || SensitiveFilter.isSensitive(clean)) return -1
         val db = writableDatabase
         val existing = db.rawQuery("SELECT id FROM fact WHERE lower(text) = lower(?)", arrayOf(clean)).use {
             if (it.moveToFirst()) it.getLong(0) else -1L
@@ -171,7 +171,7 @@ class MemoryStore private constructor(context: Context) :
 
     fun updateFact(id: Long, text: String) {
         val clean = MemoryPrompt.sanitize(text, 200)
-        if (clean.length < 3) return
+        if (clean.length < 3 || SensitiveFilter.isSensitive(text) || SensitiveFilter.isSensitive(clean)) return
         val db = writableDatabase
         db.execSQL("UPDATE fact SET text = ?, updated = ? WHERE id = ?", arrayOf(clean, System.currentTimeMillis(), id))
         ftsDelete(db, id)
@@ -186,21 +186,12 @@ class MemoryStore private constructor(context: Context) :
     fun search(query: String, limit: Int = 4): List<MemoryFact> {
         val terms = MemoryPrompt.searchTerms(query)
         if (terms.isEmpty()) return emptyList()
-        if (ftsReady) {
-            try {
-                val match = terms.joinToString(" OR ") { "$it*" }
-                return readFacts(
-                    "SELECT f.id, f.text, f.style FROM fact f JOIN fact_fts ON f.id = fact_fts.docid " +
-                        "WHERE fact_fts MATCH ? ORDER BY f.updated DESC LIMIT ?",
-                    arrayOf(match, limit.toString()),
-                )
-            } catch (_: SQLException) {
-                // fall through to LIKE
-            }
-        }
-        val where = terms.joinToString(" OR ") { "lower(text) LIKE ?" }
-        val args = terms.map { "%$it%" } + limit.toString()
-        return readFacts("SELECT id, text, style FROM fact WHERE $where ORDER BY updated DESC LIMIT ?", args.toTypedArray())
+        return readFacts("SELECT id, text, style FROM fact ORDER BY updated DESC, id DESC", emptyArray())
+            .map { it to terms.count { term -> MemoryPrompt.normalize(it.text).contains(term) } }
+            .filter { it.second > 0 }
+            .sortedByDescending { it.second }
+            .take(limit.coerceIn(0, MAX_FACTS))
+            .map { it.first }
     }
 
     /**
@@ -208,8 +199,8 @@ class MemoryStore private constructor(context: Context) :
      * unless [shareWithCloud] is on.
      */
     fun promptContext(task: String, toLocal: Boolean, shareWithCloud: Boolean): String {
-        val style = styleFacts()
         val shareable = toLocal || shareWithCloud
+        val style = if (shareable) styleFacts() else emptyList()
         val relevant = if (shareable) search(task) else emptyList()
         val tasks = if (shareable) relatedTasks(task) else emptyList()
         return MemoryPrompt.build(style, relevant, tasks)
@@ -319,7 +310,7 @@ class MemoryStore private constructor(context: Context) :
 
     /** Deletes notes that mention [what] and app names that match it. Returns how many were removed. */
     fun forget(what: String): Int {
-        val w = what.trim().lowercase()
+        val w = MemoryPrompt.normalize(what.trim())
         if (w.isEmpty()) return 0
 
         val db = writableDatabase
@@ -337,14 +328,8 @@ class MemoryStore private constructor(context: Context) :
         // Avoid deleting unrelated facts from very short search terms.
         if (w.length < 3) return removed
 
-        val ids = db.rawQuery(
-            "SELECT id FROM fact WHERE lower(text) LIKE ?",
-            arrayOf("%$w%"),
-        ).use {
-            val l = ArrayList<Long>()
-            while (it.moveToNext()) l += it.getLong(0)
-            l
-        }
+        val ids = readFacts("SELECT id, text, style FROM fact", emptyArray())
+            .filter { MemoryPrompt.normalize(it.text).contains(w) }.map { it.id }
 
         ids.forEach { delete(Kind.FACT, it); removed++ }
         return removed
