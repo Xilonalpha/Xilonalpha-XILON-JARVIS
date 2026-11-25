@@ -31,7 +31,7 @@ package com.jarvis.assistant.agent
  */
 object SensitiveActions {
     private val SENSITIVE = Regex(
-        """^\s*(send|call|dial|post|tweet|publish|share|reply|pay|transfer|place order|buy now|confirm payment|delete|submit)\b""",
+        """^\s*(send|call|dial|post|tweet|publish|share|reply|pay|transfer|place order|buy now|confirm payment|delete|submit|trimite|apelează|apeleaza|sună|suna|publică|publica|distribuie|răspunde|raspunde|plătește|plateste|transferă|transfera|cumpără|cumpara|șterge|sterge|confirmă plata|confirma plata|finalizează comanda|finalizeaza comanda)\b""",
         RegexOption.IGNORE_CASE,
     )
     private val YES = Regex(
