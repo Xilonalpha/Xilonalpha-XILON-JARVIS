@@ -1071,7 +1071,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val result=runCatching{
       val ref=downloads.reference(entry)
       contentResolver.openInputStream(uri)?.let{ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)}?:error("Fișier inaccesibil")
-      LocalVision.install(this@MainActivity,uri,index==1)
+      if(entry==ModelCatalog.pose)LocalPose.install(this@MainActivity,uri) else LocalVision.install(this@MainActivity,uri,index==1)
       "Model Vision instalat și validat."
      }.getOrElse{"Instalare eșuată: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result}}

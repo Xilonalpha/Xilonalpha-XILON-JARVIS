@@ -14,6 +14,7 @@ object ModelInventory {
    in ModelCatalog.ocr->File(root,"tesseract/tessdata/"+entry.file)
    in ModelCatalog.whisper->File(root,"models/"+entry.file)
    in ModelCatalog.wake->File(root,"models/"+if(entry.file=="hey_jarvis.onnx")"jarvis_wake_word.onnx" else entry.file)
+   ModelCatalog.pose->File(root,entry.file)
    in ModelCatalog.vision->File(root,if(entry==ModelCatalog.vision[1])"face_detector.tflite" else "object_detector.tflite")
    ModelCatalog.hand->File(root,entry.file)
    ModelCatalog.kokoro->{val dir=File(root,"kokoro");return listOf("model.int8.onnx","voices.bin","tokens.txt").all{File(dir,it).let{f->f.isFile&&f.length()>0}}&&File(dir,"espeak-ng-data").let{it.isDirectory&&it.list()?.isNotEmpty()==true}}
