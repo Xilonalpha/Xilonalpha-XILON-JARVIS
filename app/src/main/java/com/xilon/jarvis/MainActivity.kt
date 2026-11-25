@@ -423,11 +423,25 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   settings.addView(Button(this).apply{text="Catalog Hey Jarvis";setOnClickListener{
    if(busy)return@setOnClickListener
-   val components=listOf("hey_jarvis.onnx","melspectrogram.onnx","embedding_model.onnx")
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hey Jarvis • ONNX (compatibilitate de testat)").setItems(components.toTypedArray()){_,index->
-    android.app.AlertDialog.Builder(this@MainActivity).setTitle(components[index]).setMessage("Importă toate cele trei componente. Compatibilitatea tensorilor trebuie verificată prin test vocal.")
-     .setPositiveButton("Descarcă"){_,_->runCatching{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/Soulcreek2/speechkit-wakeword-models/resolve/main/"+components[index]+"?download=true"))) }}
-     .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}.setNegativeButton("Închide",null).show()
+   val entries=ModelCatalog.wake
+   val downloads=ModelDownloads(this@MainActivity)
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hey Jarvis • experimental").setItems(entries.map{it.file+" • "+downloads.status(it)}.toTypedArray()){_,index->
+    val entry=entries[index];val uri=downloads.uri(entry)
+    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.file).setMessage(downloads.status(entry)+"\nCompatibilitatea necesită test vocal.")
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){stopWake();busy=true;worker.execute{
+     val result=runCatching{
+      val root=java.io.File(filesDir,"models");check(root.isDirectory||root.mkdirs())
+      val target=java.io.File(root,if(entry.file=="hey_jarvis.onnx")"jarvis_wake_word.onnx" else entry.file)
+      val temp=java.io.File.createTempFile("wake-", ".part",root)
+      try{contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=2000000L);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
+       require(temp.length()>1024);check(temp.renameTo(target));"Componentă instalată; inferență neverificată."
+      }finally{temp.delete()}
+     }.getOrElse{"Import eșuat: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }}}
+    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message})}
+    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+    dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Catalog Kokoro";setOnClickListener{
