@@ -381,7 +381,7 @@ class MemoryStore private constructor(context: Context) :
         val count = db.rawQuery("SELECT COUNT(*) FROM fact", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
         if (count <= MAX_FACTS) return
         val victims = db.rawQuery(
-            "SELECT id FROM fact WHERE style = 0 ORDER BY updated ASC LIMIT ?", arrayOf((count - MAX_FACTS).toString()),
+            "SELECT id FROM fact ORDER BY style ASC, updated ASC, id ASC LIMIT ?", arrayOf((count - MAX_FACTS).toString()),
         ).use {
             val l = ArrayList<Long>()
             while (it.moveToNext()) l += it.getLong(0)
