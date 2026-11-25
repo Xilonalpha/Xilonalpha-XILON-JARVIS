@@ -226,7 +226,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -280,6 +280,28 @@ class MainActivity : androidx.activity.ComponentActivity() {
      finally{runCatching{candidate?.close()}}
     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result;navigate("AI")}}
    }
+  }})
+  settings.addView(Button(this).apply{text="Bibliotecă GGUF";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val models=filesDir.listFiles()?.filter{it.isFile && it.name.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.sortedByDescending{it.lastModified()}.orEmpty()
+   if(models.isEmpty()){report("Bibliotecă GGUF"){"Nu există modele importate."};return@setOnClickListener}
+   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+   val labels=models.map{it.name+" • "+it.length()/1048576+" MiB"+if(it.name==saved)" • selectat" else ""}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Modele locale").setItems(labels.toTypedArray()){_,index->
+    val file=models[index]
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Schimbă modelul?").setMessage("Modelul curent va fi eliberat din RAM. Istoricul conversației AI va fi resetat.")
+     .setPositiveButton("Încarcă"){_,_->if(!busy){busy=true;worker.execute{
+      var candidate:NativeModel?=null
+      val result=try{
+       nativeModel?.close();nativeModel=null
+       val next=NativeModel();candidate=next;next.load(file.absolutePath);nativeModel=next;candidate=null
+       history.clear();persistHistory()
+       getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",file.name).apply()
+       "Model selectat și încărcat."
+      }catch(e:Exception){"Încărcare eșuată: "+e.message}catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}finally{runCatching{candidate?.close()}}
+      runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result;navigate("AI")}}
+     }}}.setNegativeButton("Anulează",null).show()
+   }.setNegativeButton("Închide",null).show()
   }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
@@ -495,7 +517,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      persistHistory()
      candidate=null
      getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",target.name).apply()
-     filesDir.listFiles()?.filter { it.name.startsWith("model-") && it.extension=="gguf" && it!=target }?.forEach { it.delete() }
+     // Retain previously imported GGUF files for model switching.
      "Model GGUF încărcat. Poți trimite un mesaj."
     } catch(e:Exception) { candidate?.close(); target.delete(); "Încărcare eșuată: "+e.message } catch(e:LinkageError) { target.delete(); "Biblioteca nativă indisponibilă: "+e.message }
     runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
