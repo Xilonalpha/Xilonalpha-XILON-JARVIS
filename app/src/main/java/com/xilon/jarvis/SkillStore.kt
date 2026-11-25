@@ -10,7 +10,7 @@ class SkillStore(context:Context){
  }
  fun save(name:String,steps:List<String>){
   val k=key(name)
-  require(steps.size in 1..4 && steps.distinct().size==steps.size && steps.all{ToolCatalog.permits(it)}){"Pași neautorizați"}
+  require(steps.size in 1..ToolCatalog.readOnly.size && steps.distinct().size==steps.size && steps.all{ToolCatalog.permits(it)}){"Pași neautorizați"}
   require(prefs.contains(k)||prefs.all.size<100){"Maximum 100 abilități"}
   check(prefs.edit().putString(k,JSONArray(steps).toString()).commit()){"Salvare eșuată"}
  }
