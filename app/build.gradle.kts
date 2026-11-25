@@ -33,3 +33,5 @@ if (sherpaEnabled) {
 dependencies { testImplementation("junit:junit:4.13.2") }
 
 dependencies { implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0") }
+
+dependencies { implementation("org.apache.commons:commons-compress:1.27.1") }
