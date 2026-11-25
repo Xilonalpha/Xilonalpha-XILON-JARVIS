@@ -49,7 +49,7 @@ object RomanianLexicon {
    corpus = null
    synonymCache.clear()
    corpusAssets = context.applicationContext.assets
-   indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-3.3.10-v1.db")
+   indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-v2.db")
    indexState = "idle"
   }
   warmUp()
@@ -119,11 +119,13 @@ object RomanianLexicon {
    }
    val db = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null)
    try {
-    if (db.version != 1) {
+    if (db.version != 2) {
      db.beginTransaction()
      try {
       db.execSQL("DROP TABLE IF EXISTS lex")
       db.execSQL("CREATE TABLE lex(word TEXT NOT NULL, flags TEXT NOT NULL, PRIMARY KEY(word,flags))")
+      db.execSQL("CREATE TABLE IF NOT EXISTS folded(key TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY(key,word))")
+      val folded = db.compileStatement("INSERT OR IGNORE INTO folded VALUES (?,?)")
       val statement = db.compileStatement("INSERT OR IGNORE INTO lex VALUES (?,?)")
       var count = 0
       try {
@@ -135,13 +137,16 @@ object RomanianLexicon {
           statement.bindString(1, word)
           statement.bindString(2, token.substringAfter('/', ""))
           statement.executeInsert()
+          folded.bindString(1, normalize(word))
+          folded.bindString(2, word)
+          folded.executeInsert()
           count++
          }
         }
        }
-      } finally { statement.close() }
+      } finally { statement.close(); folded.close() }
       check(count > 10000) { "Incomplete Romanian dictionary" }
-      db.version = 1
+      db.version = 2
       db.setTransactionSuccessful()
      } finally { db.endTransaction() }
     }
@@ -159,6 +164,7 @@ object RomanianLexicon {
   val c = corpus ?: return false
   val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
   if (c.flags(w) != null) return true
+  if (w == normalize(w) && c.words.rawQuery("SELECT 1 FROM folded WHERE key=? LIMIT 1", arrayOf(w)).use { it.moveToFirst() }) return true
   return c.rules.any { r ->
    val stem = if (r.prefix && w.startsWith(r.add)) r.strip + w.removePrefix(r.add)
     else if (!r.prefix && w.endsWith(r.add)) w.removeSuffix(r.add) + r.strip else return@any false
@@ -253,6 +259,35 @@ object RomanianLexicon {
  fun parse(text: String): PlannedAction? {
   if (negated(text) || split(text).any { negated(it) }) return null
   return entries[normalize(clean(text))]?.action ?: entries[normalize(canonicalCommand(text))]?.action
+ }
+ fun dictionarySuggestions(word: String): List<String> {
+  if (indexState != "ready" || word.length !in 3..40 || !word.all(Char::isLetter)) return emptyList()
+  val key = normalize(word)
+  return synchronized(this) {
+   val c = corpus ?: return@synchronized emptyList()
+   val result = linkedSetOf<String>()
+   c.words.rawQuery("SELECT word FROM folded WHERE key=? ORDER BY word LIMIT 12", arrayOf(key)).use { cursor ->
+    while (cursor.moveToNext()) result.add(cursor.getString(0))
+   }
+   if (result.isEmpty()) {
+    val alphabet = "abcdefghijklmnopqrstuvwxyz"
+    val variants = linkedSetOf<String>()
+    for (i in key.indices) {
+     variants.add(key.removeRange(i,i+1))
+     if (i+1 < key.length) variants.add(key.substring(0,i)+key[i+1]+key[i]+key.substring(i+2))
+     for (ch in alphabet) variants.add(key.substring(0,i)+ch+key.substring(i+1))
+    }
+    for (i in 0..key.length) for (ch in alphabet) variants.add(key.substring(0,i)+ch+key.substring(i))
+    for (batch in variants.chunked(200)) {
+     val placeholders = batch.joinToString(",") { "?" }
+     c.words.rawQuery("SELECT word FROM folded WHERE key IN ($placeholders) ORDER BY word LIMIT 12", batch.toTypedArray()).use { cursor ->
+      while (cursor.moveToNext()) if (result.size < 12) result.add(cursor.getString(0))
+     }
+     if (result.size >= 12) break
+    }
+   }
+   result.toList()
+  }
  }
  fun translateReverse(text: String): String? {
   val key = normalize(text)
