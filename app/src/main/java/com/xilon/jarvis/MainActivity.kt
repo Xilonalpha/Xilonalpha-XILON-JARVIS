@@ -417,9 +417,25 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   settings.addView(Button(this).apply{text="Catalog gesturi";setOnClickListener{
    if(busy)return@setOnClickListener
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("MediaPipe Hand Landmarker").setMessage("7,82 MB • FP16 • "+if(java.io.File(filesDir,"hand_landmarker.task").isFile)"Fișier prezent" else "Fișier absent")
-    .setPositiveButton("Descarcă"){_,_->runCatching{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/Leo-TX/mediapipe-hand/resolve/main/hand_landmarker.task?download=true"))) }}
-    .setNeutralButton("Importă"){_,_->if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}.setNegativeButton("Închide",null).show()
+   val entry=ModelCatalog.hand;val downloads=ModelDownloads(this@MainActivity);val uri=downloads.uri(entry)
+   val target=java.io.File(filesDir,entry.file)
+   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(downloads.status(entry)+"\n"+(if(target.isFile)"Fișier prezent" else "Fișier absent"))
+   if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){stopAirTouch();busy=true;worker.execute{
+    val result=runCatching{
+     val temp=java.io.File.createTempFile("hand-", ".part",filesDir)
+     try{
+      val digest=java.security.MessageDigest.getInstance("SHA-256")
+      contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=7819105L);digest.update(buf,0,n);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
+      require(temp.length()==7819105L){"Dimensiune incorectă"}
+      require(digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}=="fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"){"SHA-256 diferit"}
+      check(temp.renameTo(target));"Model gesturi instalat, SHA-256 verificat. Testează Air Touch."
+     }finally{temp.delete()}
+    }.getOrElse{"Instalare eșuată: "+it.message}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+   }}}
+   else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message})}
+   if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+   dialog.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Catalog Hey Jarvis";setOnClickListener{
    if(busy)return@setOnClickListener
