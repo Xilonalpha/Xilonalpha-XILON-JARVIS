@@ -39,6 +39,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var combinedAirVision=false
  private var gestureSelect=false
  private var gestureMedia=false
+ private var gestureNavigation=false
+ private var gestureReverse=false
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
   stopLiveVision()
@@ -749,6 +751,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";setOnCheckedChangeListener{_,checked->gestureSelect=checked}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch multimedia: palmă orizontal = melodie; vertical = volum";setOnCheckedChangeListener{_,checked->gestureMedia=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch navigare Android: palmă orizontală = Înapoi / Acasă";setOnCheckedChangeListener{_,checked->gestureNavigation=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: inversează direcțiile";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_reverse",false);gestureReverse=isChecked;setOnCheckedChangeListener{_,checked->gestureReverse=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_reverse",checked).apply()}})
   settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
   settings.addView(android.widget.SeekBar(this).apply{max=55;progress=12;setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
    override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f}
@@ -1187,7 +1191,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
-  cursor.onHorizontal={direction->if(conversationForeground && airTouch!=null && !busy && gestureMedia){MediaActions(this).execute(if(direction>0)"următoarea melodie" else "melodia anterioară")?.let{modelStatus.text=it}}}
+  cursor.onHorizontal={raw->if(conversationForeground && airTouch!=null && !busy){
+   val direction=if(gestureReverse)-raw else raw
+   if(gestureNavigation){
+    val action=if(direction>0)android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME else android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+    val label=if(direction>0)"Acasă" else "Înapoi"
+    if(LocalScreen.connected())android.app.AlertDialog.Builder(this).setTitle("Navigare prin gest").setMessage(label).setNegativeButton("Anulează",null).setPositiveButton("Confirmă"){_,_->if(conversationForeground && airTouch!=null && !busy){modelStatus.text=if(LocalScreen.service()?.performGlobalAction(action)==true)"Navigare solicitată." else "Navigare indisponibilă."}}.show()
+    else modelStatus.text="Activează accesibilitatea JARVIS."
+   }else if(gestureMedia)MediaActions(this).execute(if(direction>0)"următoarea melodie" else "melodia anterioară")?.let{modelStatus.text=it}
+  }}
   cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){if(gestureMedia){MediaActions(this).execute(if(direction>0)"crește volumul" else "scade volumul")?.let{modelStatus.text=it}}else{val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}}
   cursor.onFistHold={if(conversationForeground && airTouch!=null){voice.stop();kokoroVoice?.stop();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
   cursor.visibility=android.view.View.GONE
