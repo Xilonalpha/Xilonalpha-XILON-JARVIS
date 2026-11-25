@@ -156,7 +156,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație: "+steps.size+" acțiuni").setMessage(steps.mapIndexed{index,target->"${index+1}. ${target.pkg}: ${target.viewId}"}.joinToString("\n").ifBlank{"Nicio apăsare capturată."}).setView(name).setNegativeButton("Renunță",null).setPositiveButton("Salvează"){_,_->
     val label=name.text.toString().trim()
     if(label.isBlank()||steps.isEmpty()){append("Nume sau demonstrație lipsă.");return@setPositiveButton}
-    worker.execute{val result=runCatching{DemonstrationStore(this@MainActivity).use{it.save(label,steps)}};runOnUiThread{if(!isDestroyed)append(result.fold({"Demonstrație salvată: "+label},{"Salvare eșuată: "+it.message}))}}
+    worker.execute{val result=runCatching{DemonstrationStore(this@MainActivity).use{it.save(label,steps)};val graph=runCatching{LocalGraph(this@MainActivity).use{it.recordDemonstration(steps)}};"Demonstrație salvată: "+label+if(graph.isSuccess)" • Graf actualizat." else " • Graf neactualizat: "+graph.exceptionOrNull()?.message};runOnUiThread{if(!isDestroyed)append(result.getOrElse{"Salvare eșuată: "+it.message})}}
    }.show()
   } })
   settings.addView(Button(this).apply{text="Biblioteca demonstrațiilor";setOnClickListener{
@@ -307,7 +307,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
-  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{it.summary()}}}})
+  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
   settings.addView(Button(this).apply{text="Detalii model local";setOnClickListener{report("Model local"){
    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
    val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
