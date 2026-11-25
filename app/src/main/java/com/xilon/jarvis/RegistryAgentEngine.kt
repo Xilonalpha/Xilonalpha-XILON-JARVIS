@@ -19,9 +19,10 @@ object RegistryAgentEngine {
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
    if(!confirm(action))return Outcome("STOPPED",steps.toList(),plan.drop(index))
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
-   val result=try { ToolEnvironment.execute(action.tool,action.args,true) }
+   val result=try { ToolEnvironment.execute(action.tool,action.args,false) }
    catch(e:CancellationException){throw e}
    catch(e:Exception){return Outcome("EXECUTION_UNKNOWN",steps.toList(),plan.drop(index+1),"Rezultatul pasului ${index+1} (${action.tool}) este necunoscut: ${e.javaClass.simpleName}. Nu relua automat.")}
+   if(result.status==ToolStatus.REQUIRES_CONFIRMATION)return Outcome("REQUIRES_CONFIRMATION",steps.toList(),plan.drop(index),result.message)
    val step=Step(action,result)
    steps.add(step)
    try { onStep(step) } catch(e:CancellationException){throw e} catch(e:Exception){return Outcome("REPORTING_FAILED",steps.toList(),plan.drop(index+1),"Raportarea pasului a eșuat: ${e.javaClass.simpleName}")}
