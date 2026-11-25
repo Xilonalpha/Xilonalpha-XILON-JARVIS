@@ -34,6 +34,23 @@ object NaturalToolCommands {
   }
 
   if(q.equals("redare pauză",true)||q.equals("redare pauza",true))return call("media_play_pause")
-  return null
+  // Map only supported upstream commands to existing confirmed Android tools.
+  if(q.contains(Regex("\\b(and|then|aur|not|never|don.t)\\b",RegexOption.IGNORE_CASE)))return null
+  return when(val cmd=com.jarvis.assistant.router.FastCommandRouter.parse(q)){
+   is com.jarvis.assistant.router.FastCommand.OpenApp ->
+    call("open_app","app" to JsonPrimitive(cmd.query))
+   is com.jarvis.assistant.router.FastCommand.Flashlight ->
+    cmd.on?.let{call("control_flashlight","on" to JsonPrimitive(it))}
+   is com.jarvis.assistant.router.FastCommand.Volume ->
+    if(cmd.change==com.jarvis.assistant.router.VolumeChange.SET)
+     cmd.percent?.let{call("control_volume","value" to JsonPrimitive(it))} else null
+   is com.jarvis.assistant.router.FastCommand.SetAlarm ->
+    call("set_alarm","hour" to JsonPrimitive(cmd.hour),"minute" to JsonPrimitive(cmd.minute))
+   is com.jarvis.assistant.router.FastCommand.SetTimer ->
+    call("set_timer","seconds" to JsonPrimitive(cmd.seconds))
+   is com.jarvis.assistant.router.FastCommand.WebSearch ->
+    if(cmd.site=="youtube")call("youtube_search","query" to JsonPrimitive(cmd.query)) else null
+   else -> null
+  }
  }
 }
