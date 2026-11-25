@@ -7,13 +7,14 @@ class ModelDownloads(private val context:Context){
  private val dm=context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
  private val prefs=context.getSharedPreferences("model_downloads",Context.MODE_PRIVATE)
  fun start(entry:ModelCatalog.Entry):Long{
-  require(entry in ModelCatalog.entries)
+  require(entry in (ModelCatalog.entries+ModelCatalog.ocr))
   check(!prefs.contains(entry.file)){"Există deja o descărcare pentru acest model."}
   check(context.filesDir.usableSpace>=entry.mb*2000000L+200000000L){"Spațiu insuficient"}
   val id=dm.enqueue(DownloadManager.Request(Uri.parse(entry.url)).setTitle(entry.name)
    .setAllowedOverMetered(false).setAllowedOverRoaming(false)
    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
    .setDestinationInExternalFilesDir(context,Environment.DIRECTORY_DOWNLOADS,entry.file))
+  check(id>=0){"Transferul nu a fost acceptat"}
   prefs.edit().putLong(entry.file,id).apply()
   return id
  }
