@@ -1,6 +1,6 @@
 package com.jarvis.mobile.core.safety
 
-
+import com.jarvis.mobile.core.observer.ScreenObservation
 
 /**
  * Screen content is UNTRUSTED INPUT (spec: PROMPT INJECTION DEFENSE).
@@ -25,6 +25,12 @@ object InjectionGuard {
         Regex("assistant\\s*:\\s*send", RegexOption.IGNORE_CASE),
         Regex("jarvis,?\\s+(ignore|forget)\\b", RegexOption.IGNORE_CASE),
     )
+
+    fun inspect(obs: ScreenObservation?): Verdict {
+        if (obs == null) return Verdict(Level.CLEAN, emptyList())
+        val corpus = obs.elements.joinToString("\n") { (it.text ?: "") + " " + (it.desc ?: "") }
+        return inspect(corpus)
+    }
 
     fun inspect(corpus: String): Verdict {
         val hits = patterns.mapNotNull { p ->
