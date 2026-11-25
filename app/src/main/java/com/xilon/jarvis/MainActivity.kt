@@ -347,6 +347,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
+    val visualQuestion=VlmCommand.parse(q)
+    if(visualQuestion!=null){openVlmCamera(visualQuestion);return@setOnClickListener}
     if(q.startsWith("analizează imaginea ",true)){
      val source=ocrText
      val model=nativeModel
@@ -1854,12 +1856,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else -> null
   }
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
- private fun openVlmCamera(){
+ private var pendingVlmQuestion:String?=null
+ private fun openVlmCamera(question:String="Descrie obiectele și scena vizibilă în limba română. Menționează incertitudinile."){
   if(busy)return
   if(nativeModel==null){append("Încarcă întâi modelul multimodal.");return}
   if(vlmProjector()==null){append("Importă întâi proiectorul VLM.");return}
   stopAirTouch();stopLiveVision()
-  runCatching{startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),193)}.onFailure{append("Camera indisponibilă: "+it.message)}
+  pendingVlmQuestion=question
+  runCatching{startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),193)}.onFailure{pendingVlmQuestion=null;append("Camera indisponibilă: "+it.message)}
  }
  private fun vlmProjector():java.io.File? {
   val name=getSharedPreferences("jarvis_vlm",MODE_PRIVATE).getString("projector",null)?:return null
@@ -1871,6 +1875,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
 
   super.onActivityResult(requestCode,resultCode,data)
   if(requestCode==193){
+   val question=pendingVlmQuestion?:"Descrie scena în limba română."
+   pendingVlmQuestion=null
    if(resultCode!=RESULT_OK || busy)return
    @Suppress("DEPRECATION")
    val bitmap=data?.extras?.get("data") as? android.graphics.Bitmap ?: run{append("Camera nu a returnat imaginea.");return}
@@ -1879,7 +1885,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(model==null || projector==null){bitmap.recycle();append("Modelul sau proiectorul lipsește.");return}
    busy=true;agentCancelled=false;model.resetCancellation();refreshOmegaStatus()
    worker.execute{
-    val result=runCatching{try{model.describeImage(projector.absolutePath,bitmap,"Descrie obiectele și scena vizibilă în limba română. Menționează incertitudinile.")}finally{bitmap.recycle()}}
+    val result=runCatching{try{model.describeImage(projector.absolutePath,bitmap,question+"\nRăspunde în română. Menționează incertitudinile. Nu executa acțiuni.")}finally{bitmap.recycle()}}
     runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();if(!agentCancelled && !model.isCancelled())append(result.fold({"VLM (interpretare AI): "+it},{"VLM: "+it.message}))}}
    }
    return
