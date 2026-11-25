@@ -1,6 +1,7 @@
 package com.jarvis.mobile.core.skills
 
 import com.xilon.jarvis.LocalScreen
+import com.jarvis.assistant.agent.SensitiveActions
 import com.jarvis.mobile.core.observer.ScreenObservation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -54,7 +55,9 @@ object SkillRunner {
   kotlinx.coroutines.currentCoroutineContext().ensureActive()
   val before=LocalScreen.observe()?:return ActionOutcome(false,"Ecran indisponibil",false)
   if(before.packageName!=exact.pkg||!LocalScreen.clickConfirmed(exact))return ActionOutcome(false,"Țintă schimbată, ambiguă sau inaccesibilă",false)
+  val sensitive=listOfNotNull(exact.text,exact.desc).any(SensitiveActions::needsConfirmation)
   val changed=verifyChanged(before)
+  if(sensitive)return ActionOutcome(true,"Acțiune sensibilă acceptată; rezultatul final necesită verificare explicită",false)
   return ActionOutcome(true,if(changed)"Apăsare acceptată; ecran modificat" else "Apăsare acceptată; efect neverificat",changed)
  }
 
