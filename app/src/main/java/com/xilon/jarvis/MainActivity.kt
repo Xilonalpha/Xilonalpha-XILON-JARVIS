@@ -457,7 +457,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      append("AEC Android disponibil: "+android.media.audiofx.AcousticEchoCanceler.isAvailable()+" | Reducere zgomot disponibilă: "+android.media.audiofx.NoiseSuppressor.isAvailable()+" | Întrerupere vocală: "+voiceInterrupt+"\nDisponibilitatea nu garantează activarea în serviciul Android de recunoaștere.");return@setOnClickListener
     }
     if(normalizedRomanian=="profil dispozitiv"){
-     val p=com.jarvis.mobile.core.model.DeviceProfiler(this).profile()
+     val p=com.jarvis.mobile.core.model.DeviceProfiler(this@MainActivity).profile()
      append("Profil local: "+p.model+" | "+p.deviceClass+" | RAM disponibil: "+p.availRamGb+" GB | CPU: "+p.cores+" | temperatură: "+p.thermalStatus+" | stocare: "+p.storageFreeGb+" GB");return@setOnClickListener
     }
     if(normalizedRomanian=="stare agent"){
