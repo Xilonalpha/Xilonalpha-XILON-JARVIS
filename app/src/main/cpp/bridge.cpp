@@ -32,8 +32,10 @@ static void fail(JNIEnv* e,const char* msg){e->ThrowNew(e->FindClass("java/lang/
 extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(JNIEnv* e,jobject,jstring path){
  std::call_once(init,[]{llama_backend_init();});
  const char* p=e->GetStringUTFChars(path,nullptr); if(!p)return 0;
- auto params=llama_model_default_params(); params.n_gpu_layers=0; params.load_mode=LLAMA_LOAD_MODE_AUTO;
- auto* m=llama_model_load_from_file(p,params); e->ReleaseStringUTFChars(path,p);
+ auto params=llama_model_default_params(); params.n_gpu_layers=llama_supports_gpu_offload()? 16 : 0; params.load_mode=LLAMA_LOAD_MODE_AUTO;
+ auto* m=llama_model_load_from_file(p,params);
+ if(!m && params.n_gpu_layers>0){params.n_gpu_layers=0;m=llama_model_load_from_file(p,params);}
+ e->ReleaseStringUTFChars(path,p);
  if(!m){fail(e,"GGUF load failed: unsupported architecture, invalid tensors, or insufficient memory; see native logcat");return 0;}
  return reinterpret_cast<jlong>(new ModelState{m});
 }
