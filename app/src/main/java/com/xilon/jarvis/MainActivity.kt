@@ -239,13 +239,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
       .setPositiveButton("Continuă"){_,_->pendingRegistry=emptyList();agentCancelled=false;runRegistryPlan(pending)}.show()
      return@setOnClickListener
     }
-    if(RegistryIntent.matches(q) && nativeModel!=null){
-     startRegistryPlan(q)
+    val naturalTool=NaturalToolCommands.parse(q)
+    if(naturalTool!=null && !RegistryIntent.compound(q)){
+     confirmTool(naturalTool.tool,naturalTool.args)
      return@setOnClickListener
     }
-    val naturalTool=NaturalToolCommands.parse(q)
-    if(naturalTool!=null){
-     confirmTool(naturalTool.tool,naturalTool.args)
+    if(RegistryIntent.matches(q) && nativeModel!=null){
+     startRegistryPlan(q)
      return@setOnClickListener
     }
     if(q.equals("instrumente",true)){
