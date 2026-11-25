@@ -413,6 +413,8 @@ object RomanianLexicon {
   worker.execute {
    var db: android.database.sqlite.SQLiteDatabase? = null
    try {
+    val fingerprint = runCatching { context.assets.open("ro_wiktionary/source.sha256").bufferedReader().use { it.readLine() }.trim() }.getOrNull()?.takeIf { it.matches(Regex("[a-fA-F0-9]{64}")) } ?: "legacy"
+    val databaseFile = java.io.File(context.noBackupFilesDir,"romanian-definitions-v5-$fingerprint.db")
     val input = try {
      java.util.zip.GZIPInputStream(context.assets.open("ro_wiktionary/lexicon.jsonl.gz"), 65536)
     } catch (_: java.io.FileNotFoundException) {
@@ -420,7 +422,7 @@ object RomanianLexicon {
     }
     input.bufferedReader(Charsets.UTF_8).useLines { lines ->
      val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
-      java.io.File(context.noBackupFilesDir,"romanian-definitions-v5.db"),null)
+      databaseFile,null)
      db = opened
      if (opened.version != 5) {
       opened.beginTransaction()
@@ -488,9 +490,12 @@ object RomanianLexicon {
       synonymCache.clear()
       definitionsState = "ready"
      }
+     // Delete obsolete indexes only after a successful replacement.
+     context.noBackupFilesDir.listFiles()?.filter { it.name.matches(Regex("romanian-definitions-v[0-9]+(?:-[a-fA-F0-9]{64}|-legacy)?\\.db")) && it != databaseFile }?.forEach { android.database.sqlite.SQLiteDatabase.deleteDatabase(it) }
     }
-   } catch (_: Exception) {
+   } catch (e: Exception) {
     db?.close()
+    android.util.Log.e("RomanianLexicon", "Offline definition index failed", e)
     definitionsState = "unavailable"
    }
   }
