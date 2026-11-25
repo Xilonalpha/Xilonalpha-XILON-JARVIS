@@ -356,7 +356,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(!busy){val field=EditText(this@MainActivity).apply{hint="Titlul conversației";setSingleLine(true)}
     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Salvează conversația local").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Salvează"){_,_->if(!busy){
      val title=field.text.toString().trim().take(100)
-     if(title.isNotBlank())runCatching{val dir=java.io.File(filesDir,"saved_chats");check(dir.exists()||dir.mkdirs());val file=java.io.File(dir,java.util.UUID.randomUUID().toString()+".json");val atomic=android.util.AtomicFile(file);val stream=atomic.startWrite();try{stream.write(org.json.JSONObject().put("title",title).put("messages",org.json.JSONArray(visibleHistory)).toString().toByteArray(Charsets.UTF_8));atomic.finishWrite(stream)}catch(e:Exception){atomic.failWrite(stream);throw e}}.fold({android.widget.Toast.makeText(this@MainActivity,"Conversație salvată",android.widget.Toast.LENGTH_SHORT).show()},{append("Salvare eșuată: "+it.message)})
+     if(title.isNotBlank())runCatching{val dir=java.io.File(filesDir,"saved_chats");check(dir.exists()||dir.mkdirs());val file=java.io.File(dir,java.util.UUID.randomUUID().toString()+".json");val atomic=android.util.AtomicFile(file);val stream=atomic.startWrite();try{stream.write(org.json.JSONObject().put("title",title).put("messages",org.json.JSONArray(visibleHistory)).put("context",org.json.JSONArray(history.map{org.json.JSONObject().put("role",it.first).put("text",it.second)})).toString().toByteArray(Charsets.UTF_8));atomic.finishWrite(stream)}catch(e:Exception){atomic.failWrite(stream);throw e}}.fold({android.widget.Toast.makeText(this@MainActivity,"Conversație salvată",android.widget.Toast.LENGTH_SHORT).show()},{append("Salvare eșuată: "+it.message)})
     }}.show()
    }
   }})
@@ -366,7 +366,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(entries.isEmpty())report("Conversații"){"Nicio conversație salvată."}
     else android.app.AlertDialog.Builder(this@MainActivity).setTitle("Conversații salvate").setItems(entries.map{it.second.optString("title")}.toTypedArray()){_,index->
      val entry=entries[index];val messages=entry.second.getJSONArray("messages")
-     android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.second.optString("title")).setMessage((0 until messages.length()).joinToString("\n\n"){messages.optString(it)}).setNegativeButton("Închide",null).setPositiveButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi această arhivă?").setNegativeButton("Nu",null).setPositiveButton("Da"){_,_->if(!entry.first.delete())append("Arhiva nu a putut fi ștearsă.")}.show()}.show()
+     android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.second.optString("title")).setMessage((0 until messages.length()).joinToString("\n\n"){messages.optString(it)}).setNegativeButton("Închide",null).setNeutralButton("Continuă"){_,_->
+      if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setTitle("Deschide conversația salvată?").setMessage("Conversația curentă va fi înlocuită. Salveaz-o înainte dacă dorești să o păstrezi.").setNegativeButton("Anulează",null).setPositiveButton("Deschide"){_,_->if(!busy){
+       val restoredMessages=(0 until messages.length()).map{messages.optString(it)}.filter{it.isNotBlank()}.takeLast(150)
+       val context=entry.second.optJSONArray("context")
+       val restoredContext=if(context==null)emptyList() else (0 until context.length()).mapNotNull{i->context.optJSONObject(i)?.let{item->val role=item.optString("role");val value=item.optString("text");if(role in listOf("user","assistant")&&value.isNotBlank())role to value else null}}.takeLast(6)
+       visibleHistory.clear();visibleHistory.addAll(restoredMessages);history.clear();history.addAll(restoredContext);persistHistory()
+       getSharedPreferences("chat_archive",MODE_PRIVATE).edit().putString("messages",org.json.JSONArray(visibleHistory).toString()).apply()
+       transcript.removeAllViews();visibleHistory.forEach{messageBubble(it)}
+       if(context==null)append("JARVIS: Arhivă veche restaurată fără context AI.")
+      }}.show()
+     }.setPositiveButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi această arhivă?").setNegativeButton("Nu",null).setPositiveButton("Da"){_,_->if(!entry.first.delete())append("Arhiva nu a putut fi ștearsă.")}.show()}.show()
     }.setNegativeButton("Închide",null).show()
    }
   }})
