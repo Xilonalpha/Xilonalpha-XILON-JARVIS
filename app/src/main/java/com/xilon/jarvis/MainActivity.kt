@@ -1057,6 +1057,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Vision: importă model poziție corporală";setOnClickListener{
+   if(!busy)startActivityForResult(android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(android.content.Intent.CATEGORY_OPENABLE)},190)
+  }})
   settings.addView(Button(this).apply{text="Catalog Vision";setOnClickListener{
    if(busy)return@setOnClickListener
    val downloads=ModelDownloads(this@MainActivity)
@@ -1846,6 +1849,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+  if(requestCode==190){super.onActivityResult(requestCode,resultCode,data);val uri=data?.data;if(resultCode==RESULT_OK && uri!=null && !busy){stopAirTouch();stopLiveVision();busy=true;worker.execute{val message=runCatching{LocalPose.install(this,uri);"Model poziție corporală instalat și validat."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=message}}}};return}
+
   super.onActivityResult(requestCode,resultCode,data)
   if(requestCode==57){
    if(resultCode!=RESULT_OK||busy)return
