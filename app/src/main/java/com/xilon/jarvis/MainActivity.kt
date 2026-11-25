@@ -956,19 +956,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
     busy=false;refreshOmegaStatus()
     if(!saved)append("Jurnalul sau graful nu a putut fi actualizat.")
     append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))
-    val critical=result.getOrNull()?.takeIf{it.status=="REQUIRES_CONFIRMATION"}?.remaining?.firstOrNull()
+    val remainingCritical=result.getOrNull()?.takeIf{it.status=="REQUIRES_CONFIRMATION"}?.remaining.orEmpty()
+    val critical=remainingCritical.firstOrNull()
     if(critical!=null && !agentCancelled && !busy){
      append("Plan oprit înaintea operațiunii critice. Pașii anteriori nu vor fi repetați.")
      android.app.AlertDialog.Builder(this@MainActivity).setTitle("Operațiune critică")
-      .setMessage(critical.tool+"\n"+critical.args.toString()+"\nDupă executare, solicită separat pașii rămași.")
-      .setPositiveButton("Confirmă"){_,_->if(!busy&&!agentCancelled&&!isDestroyed)executeRequestedTool(critical.tool,critical.args,true)}
+      .setMessage(critical.tool+"\n"+critical.args.toString()+"\nPlanul continuă numai dacă rezultatul este verificat.")
+      .setPositiveButton("Confirmă"){_,_->if(!busy&&!agentCancelled&&!isDestroyed)executeRequestedTool(critical.tool,critical.args,true,remainingCritical.drop(1))}
       .setNegativeButton("Anulează",null).show()
     }
    }}
 
   }
  }
- private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject,approved:Boolean=false){
+ private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject,approved:Boolean=false,remaining:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()){
   if(busy)return
   busy=true;refreshOmegaStatus()
   worker.execute{
@@ -981,7 +982,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
        .setMessage(name+"\n"+args.toString())
        .setPositiveButton("Confirmă"){_,_->if(!busy&&!isDestroyed)executeRequestedTool(name,args,true)}
        .setNegativeButton("Anulează",null).show()
-     }else append("JARVIS: "+value.status+" / "+value.verified+"\n"+value.message+(value.detail?.let{"\n"+it}?:""))
+     }else {
+      append("JARVIS: "+value.status+" / "+value.verified+"\n"+value.message+(value.detail?.let{"\n"+it}?:""))
+      if(remaining.isNotEmpty()){
+       if(value.status==com.jarvis.mobile.core.tools.ToolStatus.SUCCESS && value.verified==com.jarvis.mobile.core.tools.Verification.VERIFIED && !agentCancelled && !busy)runRegistryPlan(remaining)
+       else append("Planul nu continuă: rezultat neverificat, eșec sau oprire.")
+      }
+     }
     },{append("Execuție eșuată: "+it.javaClass.simpleName)})
    }}
   }
