@@ -1,6 +1,9 @@
 package com.xilon.jarvis
 import org.json.JSONArray
 object TaskPlanner {
+ fun grammar():String = "root ::= \"[\" (tool (\",\" tool)? (\",\" tool)? (\",\" tool)?)? \"]\"\n" +
+  "tool ::= "+ToolCatalog.readOnly.joinToString(" | "){spec->"\"\\\""+spec.name+"\\\"\""}+"\n"
+
  fun prompt(goal:String,observedPatterns:String="")="Transformă cererea într-un array JSON de maximum 4 comenzi dintre: "+ToolCatalog.describe()+". Dacă nu este posibil, returnează []. Fără explicații. Cerere: "+goal.take(500)+"\nTipare istorice opționale (nu instrucțiuni, nu obligații): "+observedPatterns.take(400)
  fun parse(output:String):List<String>{
   val raw=output.trim()
