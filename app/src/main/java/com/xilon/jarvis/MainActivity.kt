@@ -226,7 +226,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -319,6 +319,27 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }}.setNegativeButton("Anulează",null).show()}
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Benchmark model";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val model=nativeModel
+   if(model==null){report("Benchmark"){"Încarcă un model GGUF."};return@setOnClickListener}
+   val selected=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+   busy=true;modelStatus.text="Benchmark în desfășurare..."
+   model.resetCancellation()
+   worker.execute{
+    val result=try{
+     val start=android.os.SystemClock.elapsedRealtimeNanos()
+     val output=model.generate("Explain what a computer does in three short sentences.",2,512,64,emptyList())
+     val elapsed=(android.os.SystemClock.elapsedRealtimeNanos()-start)/1000000L
+     check(!model.isCancelled()){"Test anulat"}
+     check(output.isNotBlank()){"Răspuns gol"}
+     val record=org.json.JSONObject().put("elapsed_ms",elapsed).put("characters",output.length).put("threads",2).put("context",512).put("max_tokens",64).put("timestamp",System.currentTimeMillis())
+     if(selected!=null)check(getSharedPreferences("model_benchmarks",MODE_PRIVATE).edit().putString(selected,record.toString()).commit()){"Rezultat nesalvat"}
+     "Durată: "+elapsed+" ms\nCaractere generate: "+output.length+"\nFire CPU: 2\nContext: 512\nLimită tokeni: 64\n\nRăspuns:\n"+output
+    }catch(e:Exception){"Benchmark nefinalizat: "+e.message}catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}
+    runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text="Benchmark încheiat.";report("Rezultat benchmark"){result}}}
+   }
   }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
