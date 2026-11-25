@@ -3,22 +3,34 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.content.ContentValues
-class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null,3){
+class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null,4){
  override fun onCreate(db:SQLiteDatabase){
   createRegistryEdges(db)
+  createRegistryTriples(db)
   createDemonstrationEdges(db)
   db.execSQL("CREATE TABLE edges (source TEXT NOT NULL, target TEXT NOT NULL, count INTEGER NOT NULL, last_seen INTEGER NOT NULL, PRIMARY KEY(source,target))")
  }
  private fun createDemonstrationEdges(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS demo_edges(source TEXT NOT NULL,target TEXT NOT NULL,count INTEGER NOT NULL,last_seen INTEGER NOT NULL,PRIMARY KEY(source,target))")}
- override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){if(oldVersion<2)createDemonstrationEdges(db);if(oldVersion<3)createRegistryEdges(db)}
+ override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){if(oldVersion<2)createDemonstrationEdges(db);if(oldVersion<3)createRegistryEdges(db);if(oldVersion<4)createRegistryTriples(db)}
  private fun createRegistryEdges(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS registry_edges(source TEXT NOT NULL,target TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(source,target))")}
+ // Adapted from Open Jarvis AnalysisEngine sequence detection (MIT, Copyright 2024 TokenArc).
+ // Count each observed verified window once, rather than rescanning history.
+ private fun createRegistryTriples(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS registry_triples(a TEXT NOT NULL,b TEXT NOT NULL,c TEXT NOT NULL,count INTEGER NOT NULL,last_seen INTEGER NOT NULL,PRIMARY KEY(a,b,c))")}
+ fun registryPatterns():String=readableDatabase.rawQuery("SELECT a,b,c,count FROM registry_triples WHERE count>=2 ORDER BY count DESC,last_seen DESC,a,b,c LIMIT 20",null).use{cursor->buildList{while(cursor.moveToNext())add(cursor.getString(0)+" → "+cursor.getString(1)+" → "+cursor.getString(2)+" : "+cursor.getLong(3))}.joinToString("\n").ifBlank{"Niciun tipar repetat verificat."}}
  fun recordRegistry(outcome:RegistryAgentEngine.Outcome){
   val verified=outcome.steps.takeWhile{it.result.status==com.jarvis.mobile.core.tools.ToolStatus.SUCCESS && it.result.verified==com.jarvis.mobile.core.tools.Verification.VERIFIED}
   val db=writableDatabase;db.beginTransaction()
   try{for((a,b) in verified.map{it.action.tool}.zipWithNext()){
    db.execSQL("INSERT OR IGNORE INTO registry_edges(source,target,count) VALUES(?,?,0)",arrayOf(a,b))
    db.execSQL("UPDATE registry_edges SET count=count+1 WHERE source=? AND target=?",arrayOf(a,b))
-  };db.setTransactionSuccessful()}finally{db.endTransaction()}
+  }
+  for(window in verified.map{it.action.tool}.windowed(3)){
+   val (a,b,c)=window
+   val now=System.currentTimeMillis()
+   db.execSQL("INSERT OR IGNORE INTO registry_triples(a,b,c,count,last_seen) VALUES(?,?,?,0,?)",arrayOf(a,b,c,now))
+   db.execSQL("UPDATE registry_triples SET count=count+1,last_seen=? WHERE a=? AND b=? AND c=?",arrayOf(now,a,b,c))
+  }
+  db.setTransactionSuccessful()}finally{db.endTransaction()}
  }
  fun registrySummary():String=readableDatabase.rawQuery("SELECT source,target,count FROM registry_edges ORDER BY count DESC,source,target LIMIT 30",null).use{c->buildList{while(c.moveToNext())add(c.getString(0)+" → "+c.getString(1)+" : "+c.getLong(2))}.joinToString("\n").ifBlank{"Nicio tranziție verificată."}}
  fun recordDemonstration(steps:List<com.jarvis.mobile.core.skills.ElementTarget>){
@@ -67,5 +79,5 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
    rows.joinToString("\n").ifBlank{"Date insuficiente pentru recomandare."}
   }
  }
- fun clear(){val db=writableDatabase;db.beginTransaction();try{db.delete("registry_edges",null,null);db.delete("edges",null,null);db.delete("demo_edges",null,null);db.setTransactionSuccessful()}finally{db.endTransaction()}}
+ fun clear(){val db=writableDatabase;db.beginTransaction();try{db.delete("registry_triples",null,null);db.delete("registry_edges",null,null);db.delete("edges",null,null);db.delete("demo_edges",null,null);db.setTransactionSuccessful()}finally{db.endTransaction()}}
 }
