@@ -86,13 +86,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val header=LinearLayout(this).apply{gravity=android.view.Gravity.CENTER_VERTICAL}
   val title=TextView(this).apply{text="XILON • OMEGA";textSize=22f;setTextColor(cyan)}
   header.addView(title,LinearLayout.LayoutParams(0,-2,1f))
-  header.addView(Button(this).apply{text="Setări";setOnClickListener{
-   val open=settingsScroll.visibility!=android.view.View.VISIBLE
-   settingsScroll.visibility=if(open)android.view.View.VISIBLE else android.view.View.GONE
-   chat.visibility=if(open)android.view.View.GONE else android.view.View.VISIBLE
-   if(open)for(i in 0 until settings.childCount)settings.getChildAt(i).visibility=android.view.View.VISIBLE
-   text="Setări"
-  }})
+  var navigate:(String)->Unit={}
+  header.addView(Button(this).apply{text="";contentDescription="Setări";background=null;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("Setări",dp(24),cyan),null,null,null);minWidth=0;minimumWidth=0;setPadding(dp(12),0,0,0);setOnClickListener{navigate("Setări")}},LinearLayout.LayoutParams(dp(48),dp(48)))
   root.addView(header)
   androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root){v,insets->
    val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.ime())
@@ -233,17 +228,33 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   val aiControls=setOf("Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF")
+  val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
+  val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
+  settings.addView(panelTitle,0)
+  settings.addView(panelInfo,1)
   fun showPage(page:String){
+   panelTitle.text=when(page){"AI"->"Modele și inteligență locală";"Agenți"->"Centrul de control";else->"Configurare OMEGA"}
+   val memory=android.app.ActivityManager.MemoryInfo()
+   (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
+   panelInfo.text=when(page){
+    "AI"->"Model GGUF: "+(if(nativeModel!=null)"încărcat" else "neîncărcat")+"\nRAM disponibilă: "+memory.availMem/1048576+" MiB\nInferență locală"
+    "Agenți"->"Procesare: "+(if(busy)"activă" else "în repaus")+"\nHey Jarvis: "+(if(wake!=null)"activ" else "oprit")+"\nAir Touch: "+(if(airTouch!=null)"activ" else "oprit")
+    else->"Configurare locală • Android"
+   }
+   for(k in 0 until nav.childCount){val button=nav.getChildAt(k) as Button;val selected=button.text.toString()==page;button.isSelected=selected;button.background=if(selected)rounded(0xff19384a.toInt(),12) else null}
+
    chat.visibility=if(page=="Chat")android.view.View.VISIBLE else android.view.View.GONE
    settingsScroll.visibility=if(page=="Chat")android.view.View.GONE else android.view.View.VISIBLE
    for(i in 0 until settings.childCount){
     val v=settings.getChildAt(i);val label=(v as? TextView)?.text?.toString()
-    v.visibility=if(page=="Setări" || page=="AI" && label in aiControls || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
+    v.visibility=if(v===panelTitle || v===panelInfo || page=="Setări" || page=="AI" && (label in aiControls || label=="Microfon neuronal Sherpa" || label=="Testează Kokoro (engleză)" || label?.startsWith("Voce neuronală EN:")==true) || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
    }
   }
   for(page in listOf("Chat","AI","Agenți","Setări")){
    nav.addView(Button(this).apply{text=page;setCompoundDrawablesWithIntrinsicBounds(null,OmegaIcon(page,dp(24),cyan),null,null);compoundDrawablePadding=dp(4);isAllCaps=false;setTextColor(cyan);background=null;setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
   }
+  navigate={page->showPage(page)}
+  showPage("Chat")
   root.addView(android.view.View(this).apply{setBackgroundColor(0xff284357.toInt())},LinearLayout.LayoutParams(-1,dp(1)))
   root.addView(nav)
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy)startMicrophone()}
