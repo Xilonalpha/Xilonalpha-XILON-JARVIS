@@ -20,6 +20,13 @@ class LocalScreen:AccessibilityService(){
  override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
  override fun onInterrupt(){com.jarvis.mobile.core.skills.SkillRecorder.stop()}
  override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
+ internal fun swipeConfirmed(x1:Int,y1:Int,x2:Int,y2:Int):Boolean {
+  val m=resources.displayMetrics
+  if(listOf(x1,x2).any{it !in 0 until m.widthPixels}||listOf(y1,y2).any{it !in 0 until m.heightPixels})return false
+  val path=android.graphics.Path().apply{moveTo(x1.toFloat(),y1.toFloat());lineTo(x2.toFloat(),y2.toFloat())}
+  val gesture=android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,350)).build()
+  return dispatchGesture(gesture,null,null)
+ }
  private fun clickExact(target:ElementTarget):Boolean{
   if(target.pkg.isNullOrBlank()||!target.hasNode)return false
   val root=rootInActiveWindow?:return false
