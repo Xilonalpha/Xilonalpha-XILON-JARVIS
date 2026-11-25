@@ -8,7 +8,11 @@ class ModelDownloads(private val context:Context){
  private val prefs=context.getSharedPreferences("model_downloads",Context.MODE_PRIVATE)
  fun start(entry:ModelCatalog.Entry):Long{
   require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+listOf(ModelCatalog.hand,ModelCatalog.kokoro)))
-  check(!prefs.contains(entry.file)){"Există deja o descărcare pentru acest model."}
+  if(prefs.contains(entry.file)){
+   val previous=transfer(entry)
+   if(previous.state==DownloadManager.STATUS_FAILED||previous.state == -2)cancel(entry)
+   else error("Există deja o descărcare pentru acest model.")
+  }
   check(context.filesDir.usableSpace>=if(entry==ModelCatalog.kokoro) 1024L*1024*1024 else entry.mb*2000000L+200000000L){"Spațiu insuficient"}
   val reference=if(entry==ModelCatalog.kokoro)ModelMetadata.kokoro() else if(entry.directUrl==null && entry!=ModelCatalog.hand)ModelMetadata.fetch(entry) else null
   val url=if(reference!=null && entry.directUrl==null)entry.copy(revision=reference.revision).url else entry.url
@@ -57,6 +61,7 @@ class ModelDownloads(private val context:Context){
   }?:Transfer(-2,0,-1,0)
  }
  fun status(entry:ModelCatalog.Entry)=transfer(entry).label
+ fun canStart(entry:ModelCatalog.Entry):Boolean=transfer(entry).state in setOf(-1,-2,DownloadManager.STATUS_FAILED)
  fun cancel(entry:ModelCatalog.Entry){val id=id(entry);if(id>=0)dm.remove(id);prefs.edit().remove(entry.file).remove(entry.file+".sha").remove(entry.file+".bytes").remove(entry.file+".revision").remove(entry.file+".algorithm").apply()}
  fun uri(entry:ModelCatalog.Entry):Uri?=id(entry).takeIf{it>=0}?.let{dm.getUriForDownloadedFile(it)}
 }
