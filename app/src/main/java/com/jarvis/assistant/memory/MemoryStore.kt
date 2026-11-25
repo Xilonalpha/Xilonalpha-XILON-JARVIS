@@ -272,12 +272,15 @@ class MemoryStore private constructor(context: Context) :
     fun relatedTasks(query: String, limit: Int = 3): List<String> {
         val terms = MemoryPrompt.searchTerms(query)
         if (terms.isEmpty()) return emptyList()
-        val where = terms.joinToString(" OR ") { "lower(text) LIKE ?" }
-        val args = terms.map { "%$it%" } + limit.toString()
-        return readableDatabase.rawQuery("SELECT text, ok FROM task WHERE for_context = 1 AND (state IS NULL OR state IN ('Completed','Failed')) AND ($where) ORDER BY id DESC LIMIT ?", args.toTypedArray()).use {
-            val l = ArrayList<String>()
-            while (it.moveToNext()) l += it.getString(0) + if (it.getInt(1) == 1) "" else " (did not work)"
-            l
+        return readableDatabase.rawQuery("SELECT text, ok FROM task WHERE for_context = 1 AND (state IS NULL OR state IN ('Completed','Failed')) ORDER BY id DESC", null).use {
+            val matches = mutableListOf<Pair<String, Int>>()
+            while (it.moveToNext()) {
+                val text = it.getString(0)
+                val normalized = MemoryPrompt.normalize(text)
+                val score = terms.count { term -> normalized.contains(term) }
+                if (score > 0) matches.add((text + if (it.getInt(1) == 1) "" else " (did not work)") to score)
+            }
+            matches.sortedByDescending { it.second }.take(limit.coerceIn(0, MAX_TASKS)).map { it.first }
         }
     }
 
