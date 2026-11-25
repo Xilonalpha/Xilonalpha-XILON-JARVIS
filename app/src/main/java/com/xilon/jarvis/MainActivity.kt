@@ -151,8 +151,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
   } })
   settings.addView(Button(this).apply { text="Oprește și inspectează demonstrația";setOnClickListener{
    val steps=com.jarvis.mobile.core.skills.SkillRecorder.stop()
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație: "+steps.size+" acțiuni").setMessage(steps.mapIndexed{index,target->"${index+1}. ${target.pkg}: ${target.viewId}"}.joinToString("\n").ifBlank{"Nicio apăsare capturată."}).setPositiveButton("Închide",null).show()
+   val name=EditText(this@MainActivity).apply{hint="Numele demonstrației";setSingleLine(true)}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație: "+steps.size+" acțiuni").setMessage(steps.mapIndexed{index,target->"${index+1}. ${target.pkg}: ${target.viewId}"}.joinToString("\n").ifBlank{"Nicio apăsare capturată."}).setView(name).setNegativeButton("Renunță",null).setPositiveButton("Salvează"){_,_->
+    val label=name.text.toString().trim()
+    if(label.isBlank()||steps.isEmpty()){append("Nume sau demonstrație lipsă.");return@setPositiveButton}
+    worker.execute{val result=runCatching{DemonstrationStore(this@MainActivity).use{it.save(label,steps)}};runOnUiThread{if(!isDestroyed)append(result.fold({"Demonstrație salvată: "+label},{"Salvare eșuată: "+it.message}))}}
+   }.show()
   } })
+  settings.addView(Button(this).apply{text="Biblioteca demonstrațiilor";setOnClickListener{
+   worker.execute{val result=runCatching{DemonstrationStore(this@MainActivity).use{it.list()}};runOnUiThread{if(!isDestroyed)result.onSuccess{items->
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrații salvate").setItems(items.map{it.name+" • "+it.count+" acțiuni"}.toTypedArray()){_,index->
+     val item=items[index]
+     android.app.AlertDialog.Builder(this@MainActivity).setTitle(item.name).setMessage("Acțiuni salvate: "+item.count).setNegativeButton("Închide",null).setPositiveButton("Șterge"){_,_->worker.execute{val deleted=runCatching{DemonstrationStore(this@MainActivity).use{it.delete(item.id)}};runOnUiThread{if(!isDestroyed)append(if(deleted.getOrDefault(false))"Demonstrație ștearsă." else "Ștergere eșuată.")}}}.show()
+    }.setMessage(if(items.isEmpty())"Nicio demonstrație salvată." else null).setNegativeButton("Închide",null).show()
+   }.onFailure{append("Bibliotecă indisponibilă: "+it.message)}}}
+  }})
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
