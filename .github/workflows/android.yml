@@ -78,6 +78,11 @@ jobs:
           ls -lh "$dest/lexicon.jsonl.gz"
           test "$(gzip -dc "$dest/lexicon.jsonl.gz" | sha256sum | cut -d ' ' -f 1)" = "$(cat "$dest/source.sha256")"
       - run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xilon-jarvis-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
       - name: Build experimental VLM APK
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -96,8 +101,3 @@ jobs:
           name: xilon-jarvis-test-reports
           path: app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        with:
-          name: xilon-jarvis-debug
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error

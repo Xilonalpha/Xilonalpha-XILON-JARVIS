@@ -5,6 +5,6 @@ internal class VoiceEchoGate {
  fun remember(text:String){spoken=normalize(text)}
  fun isStop(text:String):Boolean {
   val command=normalize(text)
-  return command in setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata") && !spoken.contains(command)
+  return command in setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde") && !spoken.contains(command)
  }
 }
