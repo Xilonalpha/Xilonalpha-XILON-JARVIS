@@ -12,15 +12,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var neural:NeuralSpeech?=null
  private var neuralCancelled=false
  private fun stopNeural(){neuralCancelled=true;neural?.stop()}
- private fun startNeural(){
+ private fun startNeural(fallback:Boolean=false){
   if(busy || wake!=null)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
   val engine=try{NeuralSpeechFactory.create(this)}catch(e:Exception){append("Sherpa indisponibil: "+e.message);return}catch(e:LinkageError){append("Sherpa nativ indisponibil: "+e.message);return}
-  if(engine==null){append("APK fără profil Sherpa.");return}
-  listening.close();voice.stop();busy=true;neuralCancelled=false;neural=engine
+  if(engine==null){if(fallback)startAndroidMicrophone() else modelStatus.text="Motor Sherpa indisponibil.";return}
+  listening.close();voice.stop();kokoroVoice?.stop();busy=true;neuralCancelled=false;neural=engine;omegaCore.listening=true;refreshOmegaStatus()
   worker.execute{
    val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{runCatching{engine.close()};neural=null}
-   runOnUiThread{if(!isDestroyed){busy=false;if(!neuralCancelled)result.fold({if(it.isBlank())append("Nicio comandă detectată.") else voiceInput.setText(it)},{append("Eroare Sherpa: "+it.message)})}}
+   runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled)result.fold({if(it.isBlank())modelStatus.text="Nicio comandă detectată." else {voiceInput.setText(it);voiceInput.setSelection(voiceInput.text.length)}},{modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
   }
  }
  private var wake:WakeController?=null
@@ -647,12 +647,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
   append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
  private fun startMicrophone(){
+  if(busy)return
+  stopWake()
+  if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
+  startNeural(true)
+ }
+ private fun startAndroidMicrophone(){
   if(busy || wake!=null)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
-  voice.stop()
-  listening.listen({ text -> if(!isDestroyed) voiceInput.setText(text) },{ error -> if(!isDestroyed) append(error) })
+  voice.stop();kokoroVoice?.stop()
+  listening.listen({ text -> if(!isDestroyed){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)} },{ error -> if(!isDestroyed) modelStatus.text=error })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
