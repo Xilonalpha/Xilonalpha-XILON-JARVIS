@@ -4,6 +4,9 @@ import android.speech.tts.TextToSpeech
 import java.util.Locale
 
 class OfflineVoice(context: Context) : AutoCloseable {
+ var onSpeaking:(Boolean)->Unit={}
+ private val main=android.os.Handler(android.os.Looper.getMainLooper())
+ private var generation=0L
  private var ready=false
  private var closed=false
  private val tts=TextToSpeech(context.applicationContext) { status -> ready=!closed && status==TextToSpeech.SUCCESS }
@@ -14,11 +17,18 @@ class OfflineVoice(context: Context) : AutoCloseable {
   if(tts.setVoice(voice)!=TextToSpeech.SUCCESS) return "Vocea nu poate fi activată."
   val chunks=com.jarvis.assistant.voice.SpeechChunks.split(text)
   if(chunks.isEmpty())return null
+  val id=++generation
+  tts.setOnUtteranceProgressListener(object:android.speech.tts.UtteranceProgressListener(){
+   private fun publish(value:Boolean){main.post{if(!closed && generation==id)onSpeaking(value)}}
+   override fun onStart(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)publish(true)}
+   override fun onDone(utteranceId:String?){if(utteranceId=="xilon-$id-${chunks.lastIndex}")publish(false)}
+   override fun onError(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)publish(false)}
+  })
   for((i,chunk) in chunks.withIndex()){
-   if(tts.speak(chunk,if(i==0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,null,"xilon-reply-$i")!=TextToSpeech.SUCCESS){tts.stop();return "Sinteza vocală a eșuat."}
+   if(tts.speak(chunk,if(i==0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,null,"xilon-$id-$i")!=TextToSpeech.SUCCESS){stop();return "Sinteza vocală a eșuat."}
   }
   return null
  }
- fun stop(){ if(!closed) tts.stop() }
- override fun close(){ if(!closed){ closed=true; ready=false; tts.stop(); tts.shutdown() } }
+ fun stop(){ generation++;if(!closed)tts.stop();onSpeaking(false) }
+ override fun close(){ if(!closed){ stop();closed=true; ready=false; tts.shutdown() } }
 }
