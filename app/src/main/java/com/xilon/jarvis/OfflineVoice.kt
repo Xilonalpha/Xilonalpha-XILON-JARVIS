@@ -24,6 +24,7 @@ class OfflineVoice(context: Context) : AutoCloseable {
    override fun onDone(utteranceId:String?){if(utteranceId=="xilon-$id-${chunks.lastIndex}")publish(false)}
    override fun onError(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)publish(false)}
   })
+  onSpeaking(true)
   for((i,chunk) in chunks.withIndex()){
    if(tts.speak(chunk,if(i==0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,null,"xilon-$id-$i")!=TextToSpeech.SUCCESS){stop();return "Sinteza vocală a eșuat."}
   }

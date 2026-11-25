@@ -55,7 +55,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var voiceInput: EditText
  private lateinit var sendControl: android.view.View
  private var autoVoiceSend=false
- private fun acceptVoice(text:String){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length);if(autoVoiceSend&&text.isNotBlank()&&::sendControl.isInitialized&&!busy)sendControl.performClick()}
+ private var continuousVoice=false
+ private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ private val voiceLoop=object:Runnable{override fun run(){
+  if(!continuousVoice || !conversationForeground || isDestroyed)return
+  if(!busy && !omegaCore.speaking && !omegaCore.listening && wake==null)startMicrophone()
+  if(continuousVoice)voiceLoopHandler.postDelayed(this,2500L)
+ }}
+ private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop)}
+ private fun acceptVoice(text:String){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length);if((autoVoiceSend||continuousVoice)&&text.isNotBlank()&&::sendControl.isInitialized&&!busy)sendControl.performClick()}
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
  @Volatile private var agentCancelled=false
@@ -357,6 +365,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian=="conversatie continua"){
+     if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){append("Acordă întâi permisiunea microfonului.");return@setOnClickListener}
+     continuousVoice=true;voiceLoopHandler.removeCallbacks(voiceLoop);voiceLoopHandler.postDelayed(voiceLoop,500L);append("Conversație continuă activată în prim-plan.");return@setOnClickListener
+    }
+    if(normalizedRomanian=="opreste conversatia continua"){
+     stopVoiceLoop();stopNeural();listening.close();voice.stop();kokoroVoice?.stop();append("Conversație continuă oprită.");return@setOnClickListener
+    }
     runCatching{DeviceReports.execute(this@MainActivity,normalizedRomanian)}.getOrElse{"Diagnostic indisponibil: "+it.javaClass.simpleName}?.let{append(it);return@setOnClickListener}
     if(normalizedRomanian=="raport performanta"){
      val records=getSharedPreferences("model_benchmarks",MODE_PRIVATE).all.entries.mapNotNull{entry->runCatching{entry.key to org.json.JSONObject(entry.value as String)}.getOrNull()}.sortedByDescending{it.second.optLong("timestamp")}.take(10)
@@ -650,7 +665,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -1128,7 +1143,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun speakReply(text:String,manual:Boolean=false){
   if((!manual && !speakReplies) || text.isBlank())return
   val neural=kokoroVoice
-  if(englishNeuralVoice && neural!=null && neural.installed()){
+  if(!continuousVoice && englishNeuralVoice && neural!=null && neural.installed()){
    voice.stop();val result=runCatching{neural.speak(text)}
    if(result.isSuccess)return
    append("Kokoro indisponibil: "+result.exceptionOrNull()?.message)
@@ -1777,6 +1792,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerHandler.post(triggerTick)
  }
  override fun onPause(){
+  stopVoiceLoop();listening.close()
   conversationForeground=false
   conversationHandler.removeCallbacks(conversationTick)
   triggerActive=false
