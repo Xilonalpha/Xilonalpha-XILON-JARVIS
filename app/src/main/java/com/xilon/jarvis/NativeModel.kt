@@ -20,6 +20,7 @@ class NativeModel : AutoCloseable {
  @Synchronized fun supportsVisionProjector(path:String):Boolean { check(handle != 0L); return probeVision(handle,path) }
  @Synchronized fun describeImage(projector:String,bitmap:android.graphics.Bitmap,question:String,context:Int=2048,maxTokens:Int=128):String {
   check(handle!=0L);require(question.isNotBlank() && question.length<=4000)
+  require(!bitmap.isRecycled && bitmap.width>0 && bitmap.height>0)
   val scale=minOf(1.0,1024.0/maxOf(bitmap.width,bitmap.height))
   val image=android.graphics.Bitmap.createScaledBitmap(bitmap,(bitmap.width*scale).toInt().coerceAtLeast(1),(bitmap.height*scale).toInt().coerceAtLeast(1),true)
   try {

@@ -253,7 +253,13 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_com_xilon_jarvis_NativeModel_inferI
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");if(!cancel)return nullptr;
  llama_pos pos=0;
  if(e->CallBooleanMethod(self,cancel)){return e->NewByteArray(0);}
- if(mtmd_helper_eval_chunks(vision.get(),ctx.get(),chunks.get(),0,0,llama_n_batch(ctx.get()),true,&pos)!=0){fail(e,"Vision embedding evaluation failed");return nullptr;}
+ JavaVM* vm=nullptr;
+ if(e->GetJavaVM(&vm)!=JNI_OK){fail(e,"Java VM unavailable");return nullptr;}
+ jobject owner=e->NewGlobalRef(self);if(!owner)return nullptr;
+ AbortState abortState{vm,owner,cancel};
+ llama_set_abort_callback(ctx.get(),abortDecode,&abortState);
+ struct AbortCleanup { llama_context* ctx; JNIEnv* env; jobject owner; ~AbortCleanup(){llama_synchronize(ctx);llama_set_abort_callback(ctx,nullptr,nullptr);env->DeleteGlobalRef(owner);} } cleanup{ctx.get(),e,owner};
+ if(mtmd_helper_eval_chunks(vision.get(),ctx.get(),chunks.get(),0,0,llama_n_batch(ctx.get()),true,&pos)!=0){if(e->CallBooleanMethod(self,cancel))return e->NewByteArray(0);fail(e,"Vision embedding evaluation failed");return nullptr;}
  auto* vocab=llama_model_get_vocab(state->model);
  std::unique_ptr<llama_sampler,decltype(&llama_sampler_free)> sampler(llama_sampler_init_greedy(),llama_sampler_free);
  std::unique_ptr<llama_batch_ext,decltype(&llama_batch_ext_free)> batch(llama_batch_ext_init(ctx.get()),llama_batch_ext_free);

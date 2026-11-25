@@ -83,14 +83,12 @@ jobs:
           name: xilon-jarvis-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-      - name: Build experimental VLM APK
-        if: github.event_name == 'workflow_dispatch'
+      - name: Build VLM APK on every change
         run: |
           gradle :app:assembleDebug -PenableVlm=true --stacktrace
           mkdir -p vlm-apk
           cp app/build/outputs/apk/debug/*.apk vlm-apk/
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
         with:
           name: xilon-jarvis-vlm-debug
           path: vlm-apk/*.apk
