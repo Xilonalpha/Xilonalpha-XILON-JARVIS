@@ -55,7 +55,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
  private var busy = false
-  set(value){field=value;if(::omegaCore.isInitialized)omegaCore.active=value;if(::activityStatus.isInitialized)activityStatus.text=if(value)"Sistem local • Procesează" else "Sistem local • În așteptare"}
+  set(value){field=value;if(::omegaCore.isInitialized)omegaCore.active=value;refreshOmegaStatus()}
  private var observedScreen:String?=null
  private var observedAt=0L
  private val screenHandler=android.os.Handler(android.os.Looper.getMainLooper())
@@ -121,7 +121,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   activityStatus=TextView(this).apply{text="Sistem local • În așteptare";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)}
   corePanel.addView(activityStatus)
   listening.onLevel={level->omegaCore.level=level}
-  listening.onListening={enabled->omegaCore.listening=enabled;activityStatus.text=if(enabled)"Sistem local • Ascultă" else if(busy)"Sistem local • Procesează" else "Sistem local • În așteptare"}
+  listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
+  voice.onSpeaking={enabled->omegaCore.speaking=enabled;refreshOmegaStatus()}
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
@@ -279,6 +280,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
+ }
+ private fun refreshOmegaStatus(){
+  if(!::activityStatus.isInitialized || !::omegaCore.isInitialized)return
+  activityStatus.text=when{
+   omegaCore.listening->"Sistem local • Ascultă"
+   omegaCore.speaking->"Sistem local • Vorbește"
+   busy->"Sistem local • Procesează"
+   else->"Sistem local • În așteptare"
+  }
  }
  private fun speakReply(text:String){
   if(!speakReplies || text.isBlank())return
