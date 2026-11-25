@@ -24,6 +24,20 @@ internal object DeviceReports {
      val transports=listOf("Wi-Fi" to android.net.NetworkCapabilities.TRANSPORT_WIFI,"Mobil" to android.net.NetworkCapabilities.TRANSPORT_CELLULAR,"Ethernet" to android.net.NetworkCapabilities.TRANSPORT_ETHERNET,"VPN" to android.net.NetworkCapabilities.TRANSPORT_VPN)
      return ("Transport activ: "+transports.filter{caps?.hasTransport(it.second)==true}.joinToString(", "){it.first}.ifBlank{"indisponibil"}+"\nInternet validat: "+(caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)==true))
    }
+   "stare baterie detaliata" -> {
+    val battery=context.registerReceiver(null,android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)) ?: return "Date baterie indisponibile."
+    val level=battery.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL,-1)
+    val scale=battery.getIntExtra(android.os.BatteryManager.EXTRA_SCALE,-1)
+    val temperature=battery.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE,Int.MIN_VALUE)
+    val voltage=battery.getIntExtra(android.os.BatteryManager.EXTRA_VOLTAGE,-1)
+    return "Nivel: "+(if(level>=0&&scale>0)(level*100.0/scale).toInt().toString()+"%" else "indisponibil")+"\nTemperatură baterie: "+(if(temperature!=Int.MIN_VALUE)(temperature/10.0).toString()+" °C" else "indisponibilă")+"\nTensiune: "+(if(voltage>0)voltage.toString()+" mV" else "indisponibilă")
+   }
+   "stare termica" -> {
+    if(android.os.Build.VERSION.SDK_INT<29)return "Starea termică necesită Android 10."
+    val power=context.getSystemService(android.os.PowerManager::class.java)
+    val status=when(power.currentThermalStatus){0->"normală";1->"ușoară";2->"moderată";3->"severă";4->"critică";5->"urgență";6->"oprire";else->"necunoscută"}
+    return "Stare termică raportată de Android: "+status
+   }
    else -> return null
   }
  }

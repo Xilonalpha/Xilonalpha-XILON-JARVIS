@@ -20,11 +20,21 @@ class DeviceActions(private val activity:Activity) {
   val raw=command.trim()
   if(raw.equals("lista aplicații",true))return apps().map { it.loadLabel(activity.packageManager).toString()+" ("+it.activityInfo.packageName+")" }.sorted().joinToString("\n").ifEmpty { "Nicio aplicație vizibilă." }
   if(raw.startsWith("lansează ",true))return launch(raw.substringAfter(" ").trim())
+  if(raw.startsWith("caută aplicații ",true)){
+   val term=raw.substringAfter(" ").substringAfter(" ").trim()
+   if(term.isBlank())return "Specifică un nume."
+   return apps().filter{it.loadLabel(activity.packageManager).toString().contains(term,true)||it.activityInfo.packageName.contains(term,true)}.map{it.loadLabel(activity.packageManager).toString()+" ("+it.activityInfo.packageName+")"}.sorted().take(30).joinToString("\n").ifBlank{"Nicio aplicație vizibilă potrivită."}
+  }
   val q=command.trim().lowercase(Locale.ROOT)
   val intent=when(q){
    "deschide setări" -> Intent(Settings.ACTION_SETTINGS)
    "deschide wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
    "deschide bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+   "deschide setări baterie" -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+   "deschide setări afișaj" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+   "deschide setări sunet" -> Intent(Settings.ACTION_SOUND_SETTINGS)
+   "deschide setări stocare" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+   "deschide setări accesibilitate" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
    "deschide alarme" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
    else -> when {
     q.startsWith("alarmă ") -> {

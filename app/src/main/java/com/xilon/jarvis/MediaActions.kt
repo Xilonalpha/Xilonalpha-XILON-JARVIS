@@ -34,6 +34,13 @@ class MediaActions(private val activity:Activity){
    }.getOrElse{"Comanda multimedia a eșuat: "+it.javaClass.simpleName}
   }
   val stream=AudioManager.STREAM_MUSIC
+  if(q in setOf("crește volumul","scade volumul")){
+   return runCatching{
+    if(audio.isVolumeFixed)return "Volumul este fix pe acest dispozitiv."
+    audio.adjustStreamVolume(stream,if(q=="crește volumul")AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,AudioManager.FLAG_SHOW_UI)
+    "Volum multimedia: "+audio.getStreamVolume(stream)+"/"+audio.getStreamMaxVolume(stream)
+   }.getOrElse{"Ajustare indisponibilă: "+it.javaClass.simpleName}
+  }
   if(q=="volum" || q.startsWith("volum ")){
    val max=audio.getStreamMaxVolume(stream)
    if(q!="volum"){
@@ -48,8 +55,7 @@ class MediaActions(private val activity:Activity){
    val query=raw.substringAfter(" ").substringAfter(" ").trim()
    if(query.isBlank())return "Specifică melodia."
    val uri=Uri.parse("https://www.youtube.com/results").buildUpon().appendQueryParameter("search_query",query).build()
-   activity.startActivity(Intent(Intent.ACTION_VIEW,uri))
-   return "Căutare YouTube deschisă; redarea automată nu este confirmată."
+   return runCatching{activity.startActivity(Intent(Intent.ACTION_VIEW,uri));"Căutare YouTube deschisă; redarea automată nu este confirmată."}.getOrElse{"YouTube indisponibil: "+it.javaClass.simpleName}
   }
   return null
  }
