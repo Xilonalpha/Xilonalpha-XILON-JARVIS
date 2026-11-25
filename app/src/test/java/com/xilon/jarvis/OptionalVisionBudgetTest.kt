@@ -6,6 +6,7 @@ class OptionalVisionBudgetTest {
   assertFalse(ResourceBudget.allowOptionalVision(511,false,0))
   assertFalse(ResourceBudget.allowOptionalVision(4096,true,0))
   assertFalse(ResourceBudget.allowOptionalVision(4096,false,4))
-  assertTrue(ResourceBudget.allowOptionalVision(512,false,3))
+  assertFalse(ResourceBudget.allowOptionalVision(512,false,3))
+  assertTrue(ResourceBudget.allowOptionalVision(2048,false,0))
  }
 }

@@ -1,6 +1,6 @@
 package com.xilon.jarvis
 /** Speech echo is valid only around the current TTS turn, never indefinitely. */
-internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val clock:()->Long={android.os.SystemClock.elapsedRealtime()}) {
+internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val clock:()->Long={System.nanoTime()/1_000_000L}) {
  @Volatile private var spoken=""
  @Volatile private var spokenAt=Long.MIN_VALUE
  private fun normalize(s:String)=java.text.Normalizer.normalize(s.lowercase(java.util.Locale.ROOT),java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"),"").replace(Regex("[^a-z0-9 ]")," ").replace(Regex("\\s+")," ").trim()
