@@ -96,7 +96,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    v.setPadding(bars.left+dp(12),bars.top+dp(8),bars.right+dp(12),bars.bottom+dp(8));insets
   }
   modelStatus = TextView(this).apply { text = "Selectează un model GGUF pentru inferență locală." }
-  modelStatus.setTextColor(cyan)
+  modelStatus.setTextColor(0xffa7bdcf.toInt());modelStatus.textSize=12f;modelStatus.maxLines=2;modelStatus.setPadding(0,dp(4),0,dp(10))
   root.addView(modelStatus)
   root.addView(chat,LinearLayout.LayoutParams(-1,0,1f))
   root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
@@ -136,7 +136,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer)
-  actions.addView(Button(this).apply { text="🎙";contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } })
+  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("mic",dp(24),cyan),null,null,null);contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } })
   settings.addView(Button(this).apply { text="Înregistrează demonstrație";setOnClickListener{
    if(!busy){
     val field=EditText(this@MainActivity).apply{hint="Pachete Android separate prin virgulă";setSingleLine(true)}
@@ -169,7 +169,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  actions.addView(Button(this).apply { text = "➤";contentDescription="Trimite"; setOnClickListener {
+  actions.addView(Button(this).apply { text = "";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("send",dp(24),cyan),null,null,null);contentDescription="Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
@@ -549,10 +549,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val category=when{
      label.contains("demonstra",true)||label.contains("abilități",true)->"Învățare și demonstrații"
      label.contains("jurnal",true)||label.contains("graf local",true)||label.contains("observă",true)->"Agenți și memorie"
-     label.contains("Kokoro",true)||label.contains("vocal",true)||label.contains("Sherpa",true)||label.contains("Jarvis ON",true)||label.contains("voce",true)->"Voce și ascultare"
+     label.contains("Kokoro",true)||label.contains("vocal",true)||label.contains("vocale",true)||label.contains("Sherpa",true)||label.contains("Jarvis ON",true)||label.contains("voce",true)->"Voce și ascultare"
      label.contains("gesturi",true)||label.contains("Air Touch",true)->"Control prin gesturi"
      label.contains("OCR",true)->"Percepție vizuală"
-     label.contains("GGUF",true)||label.contains("model",true)||label.contains("benchmark",true)->"Modele și resurse AI"
+     label=="OMEGA Model Center"||label.contains("GGUF",true)||label.contains("model",true)||label.contains("benchmark",true)->"Modele și resurse AI"
      else->"Configurare locală"
     }
     val owner=when(category){"Învățare și demonstrații","Agenți și memorie"->"Agenți";"Modele și resurse AI","Percepție vizuală"->"AI";else->"Setări"}
@@ -562,7 +562,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    for((category,items) in groups){
     val card=Button(this).apply{
      tag="omega_category";text=category+"   ›";isAllCaps=false;textSize=17f;gravity=android.view.Gravity.CENTER_VERTICAL
-     setTextColor(cyan);background=rounded(0xff142437.toInt(),18);setPadding(dp(20),dp(16),dp(20),dp(16))
+     setTextColor(cyan);backgroundTintList=null;background=rounded(0xff142437.toInt(),18);setPadding(dp(20),dp(16),dp(20),dp(16));compoundDrawablePadding=dp(14);setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(when(category){"Voce și ascultare"->"mic";"Control prin gesturi"->"hand";"Percepție vizuală"->"eye";"Modele și resurse AI"->"AI";"Învățare și demonstrații"->"record";"Agenți și memorie"->"Agenți";else->"Setări"},dp(28),cyan),null,null,null)
      setOnClickListener{
       val expanded=items.any{it.visibility==android.view.View.VISIBLE}
       items.forEach{it.visibility=if(expanded)android.view.View.GONE else android.view.View.VISIBLE}
@@ -572,7 +572,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     settings.addView(card,LinearLayout.LayoutParams(-1,dp(64)).apply{topMargin=dp(10);bottomMargin=dp(6)})
     for(v in items){
      settings.removeView(v)
-     if(v is Button){v.isAllCaps=false;v.setTextColor(0xffd9edf7.toInt());v.textSize=15f;v.gravity=android.view.Gravity.CENTER_VERTICAL;v.backgroundTintList=null;v.background=rounded(0xff101e2d.toInt(),12);v.setPadding(dp(18),dp(10),dp(18),dp(10))}
+     if(v is Button){v.isAllCaps=false;v.setTextColor(0xffd9edf7.toInt());v.textSize=15f;v.gravity=android.view.Gravity.CENTER_VERTICAL;v.backgroundTintList=null;v.background=rounded(0xff101e2d.toInt(),12);v.setPadding(dp(18),dp(10),dp(18),dp(10));v.minHeight=dp(48);v.elevation=0f;v.stateListAnimator=null}
      settings.addView(v,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(4);bottomMargin=dp(4);leftMargin=dp(8);rightMargin=dp(8)})
     }
    }
