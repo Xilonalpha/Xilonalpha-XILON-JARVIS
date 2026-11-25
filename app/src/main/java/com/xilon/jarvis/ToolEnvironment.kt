@@ -30,7 +30,7 @@ object ToolEnvironment {
   validate(name,args)?.let{return it}
   val obs=LocalScreen.observe()
   val risk=RiskClassifier.classify(tool.spec,args,obs?.packageName)
-  if(!confirmed && (risk!=Risk.LOW || name=="launch_intent")) return ToolResult(ToolStatus.REQUIRES_CONFIRMATION,"Confirmare necesară",Verification.COULD_NOT_VERIFY)
+  if(!confirmed && (RiskClassifier.requiresConfirmation(risk,true) || name=="launch_intent")) return ToolResult(ToolStatus.REQUIRES_CONFIRMATION,"Confirmare necesară",Verification.COULD_NOT_VERIFY)
   return try {tool.execute(args,ToolContext(obs))} catch(e:kotlinx.coroutines.CancellationException){throw e} catch(e:Exception){ToolResult.fail("Execuție eșuată: "+e.javaClass.simpleName)}
  }
 }
