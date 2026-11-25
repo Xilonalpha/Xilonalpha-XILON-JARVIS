@@ -20,6 +20,13 @@ class LocalScreen:AccessibilityService(){
  override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
  override fun onInterrupt(){com.jarvis.mobile.core.skills.SkillRecorder.stop()}
  override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
+ internal fun scrollConfirmed(forward:Boolean):Boolean {
+  val m=resources.displayMetrics
+  val x=m.widthPixels/2
+  val top=(m.heightPixels*0.25).toInt()
+  val bottom=(m.heightPixels*0.75).toInt()
+  return if(forward)swipeConfirmed(x,bottom,x,top) else swipeConfirmed(x,top,x,bottom)
+ }
  internal fun swipeConfirmed(x1:Int,y1:Int,x2:Int,y2:Int):Boolean {
   val m=resources.displayMetrics
   if(listOf(x1,x2).any{it !in 0 until m.widthPixels}||listOf(y1,y2).any{it !in 0 until m.heightPixels})return false
