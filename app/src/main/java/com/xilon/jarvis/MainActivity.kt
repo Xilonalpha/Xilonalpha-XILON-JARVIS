@@ -127,7 +127,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(corePanel.visibility!=visible)corePanel.visibility=visible
   }
   fun rounded(color:Int,radius:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=dp(radius).toFloat()}
-  val input = EditText(this).apply { hint = "Scrie o comandă"; maxLines = 4;setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY) }
+  val input = EditText(this).apply { hint = "Mesaj pentru OMEGA..."; textSize=15f; maxLines = 4;setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY) }
   voiceInput=input
   val composer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL;background=rounded(0xff142437.toInt(),18);setPadding(dp(4),dp(4),dp(4),dp(4))}
   input.background=null
@@ -136,7 +136,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer)
-  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("mic",dp(24),cyan),null,null,null);contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } })
+  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("mic",dp(24),cyan),null,null,null);contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } },LinearLayout.LayoutParams(dp(44),dp(48)))
   settings.addView(Button(this).apply { text="Înregistrează demonstrație";setOnClickListener{
    if(!busy){
     val field=EditText(this@MainActivity).apply{hint="Pachete Android separate prin virgulă";setSingleLine(true)}
@@ -560,16 +560,26 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
    controls.filter{it.tag=="omega_category"}.forEach{settings.removeView(it)}
    for((category,items) in groups){
-    val card=Button(this).apply{
-     tag="omega_category";text=category+"   ›";isAllCaps=false;textSize=17f;gravity=android.view.Gravity.CENTER_VERTICAL
-     setTextColor(cyan);backgroundTintList=null;background=rounded(0xff142437.toInt(),18);setPadding(dp(20),dp(16),dp(20),dp(16));compoundDrawablePadding=dp(14);setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(when(category){"Voce și ascultare"->"mic";"Control prin gesturi"->"hand";"Percepție vizuală"->"eye";"Modele și resurse AI"->"AI";"Învățare și demonstrații"->"record";"Agenți și memorie"->"Agenți";else->"Setări"},dp(28),cyan),null,null,null)
-     setOnClickListener{
-      val expanded=items.any{it.visibility==android.view.View.VISIBLE}
-      items.forEach{it.visibility=if(expanded)android.view.View.GONE else android.view.View.VISIBLE}
-      text=category+if(expanded)"   ›" else "   ⌄"
-     }
+    val iconKind=when(category){"Voce și ascultare"->"mic";"Control prin gesturi"->"hand";"Percepție vizuală"->"eye";"Modele și resurse AI"->"AI";"Învățare și demonstrații"->"record";"Agenți și memorie"->"Agenți";else->"Setări"}
+    val subtitle=when(category){"Voce și ascultare"->"Kokoro · Sherpa · activare vocală";"Control prin gesturi"->"Air Touch · MediaPipe";"Percepție vizuală"->"Recunoaștere text locală";"Modele și resurse AI"->"Catalog · bibliotecă · performanță";"Învățare și demonstrații"->"Înregistrare · bibliotecă";"Agenți și memorie"->"Observații · jurnal · graf";else->"Preferințe și instrumente"}
+    val card=LinearLayout(this).apply{
+     tag="omega_category";orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL
+     background=rounded(0xff142437.toInt(),18);setPadding(dp(14),dp(12),dp(14),dp(12));isClickable=true;isFocusable=true
     }
-    settings.addView(card,LinearLayout.LayoutParams(-1,dp(64)).apply{topMargin=dp(10);bottomMargin=dp(6)})
+    val icon=ImageView(this).apply{setImageDrawable(OmegaIcon(iconKind,dp(28),cyan));background=rounded(0xff19384a.toInt(),12);setPadding(dp(10),dp(10),dp(10),dp(10))}
+    card.addView(icon,LinearLayout.LayoutParams(dp(48),dp(48)))
+    val labels=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(14),0,dp(8),0)}
+    labels.addView(TextView(this).apply{text=category;textSize=16f;setTextColor(0xffe2f2fa.toInt())})
+    labels.addView(TextView(this).apply{text=subtitle;textSize=12f;setTextColor(0xffa7bdcf.toInt())})
+    card.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+    val arrow=TextView(this).apply{text="›";textSize=25f;setTextColor(cyan)}
+    card.addView(arrow)
+    card.setOnClickListener{
+     val expanded=items.any{it.visibility==android.view.View.VISIBLE}
+     items.forEach{it.visibility=if(expanded)android.view.View.GONE else android.view.View.VISIBLE}
+     arrow.text=if(expanded)"›" else "⌄"
+    }
+    settings.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10);bottomMargin=dp(6)})
     for(v in items){
      settings.removeView(v)
      if(v is Button){v.isAllCaps=false;v.setTextColor(0xffd9edf7.toInt());v.textSize=15f;v.gravity=android.view.Gravity.CENTER_VERTICAL;v.backgroundTintList=null;v.background=rounded(0xff101e2d.toInt(),12);v.setPadding(dp(18),dp(10),dp(18),dp(10));v.minHeight=dp(48);v.elevation=0f;v.stateListAnimator=null}
