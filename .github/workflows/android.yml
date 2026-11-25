@@ -110,11 +110,13 @@ jobs:
           test -n "$config"
           test -f "$config"
           echo "XILON_SPIRV_HEADERS_DIR=$(dirname "$config")" >> "$GITHUB_ENV"
+          echo "SPIRV-Headers CMake package: $config"
+          test -f "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan/vulkan.h"
           glslc --version
       - name: Build Vulkan and VLM APK
         run: |
           set -euo pipefail
-          gradle :app:assembleDebug -PenableVlm=true -PenableVulkan=true --stacktrace
+          gradle :app:assembleDebug -PenableVlm=true -PenableVulkan=true -Pandroid.injected.build.abi=arm64-v8a --stacktrace
           mkdir -p vulkan-apk
           cp app/build/outputs/apk/debug/*.apk vulkan-apk/
       - uses: actions/upload-artifact@v4

@@ -8,6 +8,7 @@ internal object ResourceBudget {
   when {lowMemory || thermal>=3 || availableMiB<1024 -> 1;thermal>=2 || availableMiB<3072 -> 2;else -> 4}
  fun speechThreads(cpus:Int,availableMiB:Long,lowMemory:Boolean,thermal:Int):Int = when {lowMemory || availableMiB<768 || thermal>=3 -> 1;thermal>=2 || availableMiB<1536 -> minOf(2,cpus.coerceAtLeast(1));else -> (cpus/2).coerceIn(1,4)}
  fun allowOptionalVision(availableMiB:Long,lowMemory:Boolean,thermal:Int):Boolean = maxConcurrentOptionalVision(availableMiB,lowMemory,thermal,false)>0
+ fun gpuEnabled(availableMiB:Long,lowMemory:Boolean,thermal:Int,powerSave:Boolean):Boolean = gpuLayers(availableMiB,lowMemory,thermal,powerSave)>0
  fun visionInterval(availableMiB:Long, lowMemory:Boolean, thermal:Int, powerSave:Boolean):Long =
   when { lowMemory || thermal>=3 -> 10000L
    powerSave || thermal>=2 || availableMiB<768 -> 6000L
