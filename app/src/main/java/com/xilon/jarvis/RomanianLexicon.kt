@@ -49,6 +49,8 @@ object RomanianLexicon {
    corpus = null
    synonymCache.clear()
    morphologyCache.clear()
+   spellingCache.clear()
+   grammarCache.clear()
    corpusAssets = context.applicationContext.assets
    indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-v3.db")
    indexState = "idle"
@@ -67,8 +69,11 @@ object RomanianLexicon {
  fun review(text: String): LanguageReview {
   val blocked = negated(text) || split(text).any { negated(it) }
   val lexical = if (blocked) emptyList() else sentenceSuggestions(text)
+  val first = clean(text).substringBefore(' ')
+  val corrected = if (blocked) null else correctVerb(first)
+  val correctedPhrase = corrected?.let { it + clean(text).substring(first.length) }?.takeIf { entries.containsKey(normalize(it)) }
   return LanguageReview(text, normalize(text), blocked,
-   if (blocked) emptyList() else (spellingSuggestions(text) + lexical).distinct().take(12),
+   if (blocked) emptyList() else (listOfNotNull(correctedPhrase) + spellingSuggestions(text) + lexical).distinct().take(12),
    if (blocked) emptyList() else suggestedPhrases(text),
    translateKnown(text) ?: translateReverse(text) ?: englishDefinitions(text).takeIf { it.isNotEmpty() }?.joinToString(" / ")?.let { "Definiții EN: " + it }, dictionaryStatus())
  }
@@ -195,6 +200,8 @@ object RomanianLexicon {
     catch (_: IllegalStateException) { null }
  }
  fun dictionaryContains(word: String): Boolean {
+  if (word.isBlank() || word.length > 160) return false
+  if (definitionsState == "ready" && grammarMatches(word).isNotEmpty()) return true
   if (indexState != "ready") return false
   return synchronized(this) { dictionaryContainsReady(word) }
  }
@@ -221,6 +228,12 @@ object RomanianLexicon {
   if (possible.isEmpty() || dictionaryContains(first)) return null
   val candidates = possible.filter { dictionaryContains(it) }
   return candidates.singleOrNull()
+ }
+ private val spellingCache = object : LinkedHashMap<String,List<String>>(128,0.75f,true) {
+  override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String,List<String>>?): Boolean = size > 128
+ }
+ private val grammarCache = object : LinkedHashMap<String,List<GrammarMatch>>(256,0.75f,true) {
+  override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String,List<GrammarMatch>>?): Boolean = size > 256
  }
  private val morphologyCache = object : LinkedHashMap<String,List<String>>(256,0.75f,true) {
   override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String,List<String>>?): Boolean = size > 256
@@ -337,7 +350,7 @@ object RomanianLexicon {
    val changed = tokens.indices.filter { tokens[it] != candidate[it] }
    if (changed.size != 1) return@filter false
    val i = changed.single()
-   tokens[i].length >= 5 && oneEdit(tokens[i], candidate[i]) &&
+   tokens[i].length >= 5 && (oneEdit(tokens[i], candidate[i]) || (i == 0 && typos[tokens[i]] == candidate[i])) &&
     !dictionaryContains(tokens[i]) && dictionaryContains(candidate[i])
   }.sorted().take(8).toList()
  }
@@ -348,7 +361,7 @@ object RomanianLexicon {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')
   val key = normalize(first)
-  val replacement = conjugations[key] ?: typos[key] ?: correctVerb(first) ?: return cleaned
+  val replacement = conjugations[key] ?: return cleaned
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {
@@ -379,6 +392,7 @@ object RomanianLexicon {
   if (indexState != "ready" || word.length !in 3..40 || !word.all(Char::isLetter)) return emptyList()
   val key = normalize(word)
   return synchronized(this) {
+   spellingCache[key]?.let { return@synchronized it }
    val c = corpus ?: return@synchronized emptyList()
    val result = linkedSetOf<String>()
    c.words.rawQuery("SELECT word FROM folded WHERE key=? ORDER BY word LIMIT 12", arrayOf(key)).use { cursor ->
@@ -401,7 +415,7 @@ object RomanianLexicon {
      if (result.size >= 12) break
     }
    }
-   result.toList()
+   result.toList().also { spellingCache[key] = it }
   }
  }
  // Optional imported Wiktionary JSONL, indexed separately from command translations.
@@ -488,6 +502,8 @@ object RomanianLexicon {
       definitionsDb?.close()
       definitionsDb = opened
       synonymCache.clear()
+      grammarCache.clear()
+      spellingCache.clear()
       definitionsState = "ready"
      }
      // Delete obsolete indexes only after a successful replacement.
@@ -504,11 +520,13 @@ object RomanianLexicon {
  fun grammarMatches(word: String): List<GrammarMatch> {
   if (definitionsState != "ready" || word.length !in 1..160) return emptyList()
   return synchronized(this) {
+   val key = normalize(word)
+   grammarCache[key]?.let { return@synchronized it }
    val db = definitionsDb ?: return@synchronized emptyList()
-   db.rawQuery("SELECT lemma,pos,tags FROM grammar WHERE key=? ORDER BY lemma,pos,tags LIMIT 24",arrayOf(normalize(word))).use { cursor ->
+   db.rawQuery("SELECT lemma,pos,tags FROM grammar WHERE key=? ORDER BY lemma,pos,tags LIMIT 24",arrayOf(key)).use { cursor ->
     val result = ArrayList<GrammarMatch>()
     while (cursor.moveToNext()) result.add(GrammarMatch(cursor.getString(0),cursor.getString(1),cursor.getString(2).split('|').filter { it.isNotBlank() }))
-    result
+    result.toList().also { grammarCache[key] = it }
    }
   }
  }
