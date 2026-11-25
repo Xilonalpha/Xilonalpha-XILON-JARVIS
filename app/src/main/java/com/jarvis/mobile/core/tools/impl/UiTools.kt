@@ -156,3 +156,46 @@ class SwipeTool : Tool(
     }
 }
 
+
+class ScrollTool : Tool(
+    ToolSpec(
+        "scroll", "Scroll the screen or a list.",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("forward", "bool", false, "true = down/forward (default true)"),
+            com.jarvis.mobile.core.tools.ParamSpec("direction", "string", false, "up|down|left|right (alternative to forward)"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.LOW,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility service not connected.")
+        val dir = T.str(args, "direction")?.lowercase()
+        val forward = when (dir) {
+            "up" -> false
+            "down" -> true
+            else -> T.bool(args, "forward") ?: true
+        }
+        // Horizontal directions ride a centered swipe gesture (pagers, galleries, tabs).
+        if (dir == "left" || dir == "right") {
+            val m = svc.resources.displayMetrics
+            val cy = m.heightPixels / 2
+            val ok = if (dir == "left") svc.swipeConfirmed((m.widthPixels * 0.78).toInt(), cy, (m.widthPixels * 0.22).toInt(), cy)
+            else svc.swipeConfirmed((m.widthPixels * 0.22).toInt(), cy, (m.widthPixels * 0.78).toInt(), cy)
+            return if (ok) ToolResult.ok("Swiped $dir.", Verification.UNVERIFIED)
+            else ToolResult.fail("Could not dispatch swipe gesture.")
+        }
+        val before = T.freshObserve(0)?.elements?.map { it.text to it.top } ?: emptyList()
+        val ok = svc.scrollConfirmed(forward)
+        if (!ok) return ToolResult.fail("Could not scroll.")
+        val after = T.freshObserve(420)?.elements?.map { it.text to it.top } ?: emptyList()
+        val changed = before.isNotEmpty() && after.isNotEmpty() && before != after
+        return ToolResult(
+            com.jarvis.mobile.core.tools.ToolStatus.SUCCESS,
+            if (changed) "Scrolled ${if (forward) "forward" else "back"}." else "Scrolled (screen may already be at the ${if (forward) "end" else "top"}).",
+            if (changed) Verification.VERIFIED else Verification.UNVERIFIED,
+            recoveryHint = if (!changed && forward) "list-end" else null,
+        )
+    }
+}
+
