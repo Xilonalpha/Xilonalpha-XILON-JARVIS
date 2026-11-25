@@ -4,6 +4,7 @@ import android.media.AudioRecord
 import android.media.AudioFormat
 import android.media.MediaRecorder
 import com.jarvis.ai.wake.WakeWordEngine
+import com.jarvis.assistant.voice.MicGain
 import kotlinx.coroutines.runBlocking
 class WakeController(private val context:Context,private val detected:()->Unit,private val status:(String)->Unit){
  @Volatile private var stopped=false
@@ -25,6 +26,8 @@ class WakeController(private val context:Context,private val detected:()->Unit,p
     rec.startRecording()
     status("Ascultare locală Hey Jarvis activă.")
     val frame=ShortArray(1280)
+    val gain=MicGain()
+    val samples=FloatArray(frame.size)
     while(!stopped){
      var offset=0
      while(offset<frame.size && !stopped){
@@ -32,7 +35,12 @@ class WakeController(private val context:Context,private val detected:()->Unit,p
       check(n>0){"Citire audio eșuată: "+n}
       offset+=n
      }
-     if(!stopped && runBlocking{e.detect(frame)}){hit=true;break}
+     if(!stopped){
+      for(i in frame.indices)samples[i]=frame[i]/32768f
+      gain.process(samples)
+      for(i in frame.indices)frame[i]=(samples[i]*32768f).toInt().coerceIn(-32768,32767).toShort()
+      if(runBlocking{e.detect(frame)}){hit=true;break}
+     }
     }
    }
   }catch(t:Exception){if(!stopped)status("WakeWord: "+t.message)}
