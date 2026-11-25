@@ -52,7 +52,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var englishNeuralVoice=false
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
+ private lateinit var omegaCore:OmegaCoreView
+ private lateinit var activityStatus:TextView
  private var busy = false
+  set(value){field=value;if(::omegaCore.isInitialized)omegaCore.active=value;if(::activityStatus.isInitialized)activityStatus.text=if(value)"Sistem local • Procesează" else "Sistem local • În așteptare"}
  private var observedScreen:String?=null
  private var observedAt=0L
  private val screenHandler=android.os.Handler(android.os.Looper.getMainLooper())
@@ -111,10 +114,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
   transcript = TextView(this).apply { textSize = 16f; setTextColor(android.graphics.Color.rgb(220,235,247)); setTextIsSelectable(true);setPadding(dp(8),dp(12),dp(8),dp(12)) }
   scroll = ScrollView(this).apply { addView(transcript) }
   val core=OmegaCoreView(this)
+  omegaCore=core
   val corePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=android.view.Gravity.CENTER}
   corePanel.addView(core,LinearLayout.LayoutParams(-1,dp(180)))
   corePanel.addView(TextView(this).apply{text="J.A.R.V.I.S.";textSize=20f;gravity=android.view.Gravity.CENTER;setTextColor(cyan)})
-  corePanel.addView(TextView(this).apply{text="Sistem local";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)})
+  activityStatus=TextView(this).apply{text="Sistem local • În așteptare";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)}
+  corePanel.addView(activityStatus)
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
