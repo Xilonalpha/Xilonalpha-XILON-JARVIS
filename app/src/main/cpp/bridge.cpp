@@ -19,6 +19,13 @@ static bool abortDecode(void* data){
  if(attached){if(env->ExceptionCheck())env->ExceptionClear();state->vm->DetachCurrentThread();}
  return stop;
 }
+struct ModelState {
+ llama_model* model;
+ llama_context* context=nullptr;
+ int size=0;
+ int threads=0;
+ ~ModelState(){if(context)llama_free(context);llama_model_free(model);}
+};
 static std::once_flag init;
 static void fail(JNIEnv* e,const char* msg){e->ThrowNew(e->FindClass("java/lang/IllegalStateException"),msg);}
 extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(JNIEnv* e,jobject,jstring path){
@@ -26,11 +33,11 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
  const char* p=e->GetStringUTFChars(path,nullptr); if(!p)return 0;
  auto params=llama_model_default_params(); params.n_gpu_layers=0;
  auto* m=llama_model_load_from_file(p,params); e->ReleaseStringUTFChars(path,p);
- return reinterpret_cast<jlong>(m);
+ return m?reinterpret_cast<jlong>(new ModelState{m}):0;
 }
-extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){llama_model_free(reinterpret_cast<llama_model*>(h));}
+extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){delete reinterpret_cast<ModelState*>(h);}
 extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
- auto* m=reinterpret_cast<llama_model*>(h); auto* v=llama_model_get_vocab(m);
+ auto* state=reinterpret_cast<ModelState*>(h); auto* m=state->model; auto* v=llama_model_get_vocab(m);
  const int count=e->GetArrayLength(messages);
  if(count<1 || count!=e->GetArrayLength(roles)){fail(e,"Invalid conversation");return nullptr;}
  std::vector<std::string> role(count),body(count);
@@ -76,15 +83,24 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   chat.erase(first,end);
  }
  auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_ubatch=std::min<int>(context,256);cp.n_threads=threads;cp.n_threads_batch=threads;
- auto* ctx=llama_init_from_model(m,cp);if(!ctx){fail(e,"Context allocation failed");return nullptr;}
+ if(state->context && (state->size!=context || state->threads!=threads)){
+  llama_free(state->context);state->context=nullptr;
+ }
+ if(!state->context){
+  state->context=llama_init_from_model(m,cp);
+  state->size=context;state->threads=threads;
+ }
+ auto* ctx=state->context;
+ if(!ctx){fail(e,"Context allocation failed");return nullptr;}
+ llama_kv_self_clear(ctx);
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
- if(!sampler){llama_free(ctx);fail(e,"Sampler allocation failed");return nullptr;}
+ if(!sampler){fail(e,"Sampler allocation failed");return nullptr;}
  const char* rules=e->GetStringUTFChars(grammar,nullptr);
- if(!rules){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ if(!rules){llama_sampler_free(sampler);return nullptr;}
  const bool constrainedOutput=*rules!=0;
  if(constrainedOutput){
   auto* constrained=llama_sampler_init_grammar(v,rules,"root");
-  if(!constrained){e->ReleaseStringUTFChars(grammar,rules);llama_sampler_free(sampler);llama_free(ctx);fail(e,"Invalid grammar");return nullptr;}
+  if(!constrained){e->ReleaseStringUTFChars(grammar,rules);llama_sampler_free(sampler);fail(e,"Invalid grammar");return nullptr;}
   llama_sampler_chain_add(sampler,constrained);
  }
  e->ReleaseStringUTFChars(grammar,rules);
@@ -98,15 +114,15 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  }
  std::string out;auto batch=llama_batch_get_one(tokens.data(),n);bool ok=true;
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");
- if(!cancel){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ if(!cancel){llama_sampler_free(sampler);return nullptr;}
  auto progress=e->GetMethodID(e->GetObjectClass(self),"publishProgress","([B)V");
- if(!progress){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ if(!progress){llama_sampler_free(sampler);return nullptr;}
  auto tokenEvent=e->GetMethodID(e->GetObjectClass(self),"publishToken","()V");
- if(!tokenEvent){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ if(!tokenEvent){llama_sampler_free(sampler);return nullptr;}
  JavaVM* vm=nullptr;
- if(e->GetJavaVM(&vm)!=JNI_OK){llama_sampler_free(sampler);llama_free(ctx);fail(e,"Java VM unavailable");return nullptr;}
+ if(e->GetJavaVM(&vm)!=JNI_OK){llama_sampler_free(sampler);fail(e,"Java VM unavailable");return nullptr;}
  jobject owner=e->NewGlobalRef(self);
- if(!owner){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ if(!owner){llama_sampler_free(sampler);return nullptr;}
  AbortState abortState{vm,owner,cancel};
  llama_set_abort_callback(ctx,abortDecode,&abortState);
  size_t publishedBytes=0;
@@ -135,7 +151,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   auto partial=e->NewByteArray(out.size());
   if(partial){e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));if(!e->ExceptionCheck())e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);}
  }
- llama_sampler_free(sampler);llama_free(ctx);e->DeleteGlobalRef(owner);
+ llama_synchronize(ctx);llama_set_abort_callback(ctx,nullptr,nullptr);llama_sampler_free(sampler);e->DeleteGlobalRef(owner);
  if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
