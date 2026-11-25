@@ -812,7 +812,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn 1s: oprire)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -1057,6 +1057,27 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Catalog Vision";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val downloads=ModelDownloads(this@MainActivity)
+   val entries=ModelCatalog.vision
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Vision • modele locale").setItems(entries.map{it.name+" • "+ModelInventory.display(ModelInventory.installed(this@MainActivity,it),downloads.transfer(it))}.toTypedArray()){_,index->
+    val entry=entries[index];val uri=downloads.uri(entry)
+    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(ModelInventory.display(ModelInventory.installed(this@MainActivity,entry),downloads.transfer(entry)))
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){stopAirTouch();busy=true;worker.execute{
+     val result=runCatching{
+      val ref=downloads.reference(entry)
+      contentResolver.openInputStream(uri)?.let{ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)}?:error("Fișier inaccesibil")
+      LocalVision.install(this@MainActivity,uri,index==1)
+      "Model Vision instalat și validat."
+     }.getOrElse{"Instalare eșuată: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result}}
+    }}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->modelStatus.text=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message}}
+    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+    dialog.setNegativeButton("Închide",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Catalog gesturi";setOnClickListener{
    if(busy)return@setOnClickListener
    val entry=ModelCatalog.hand;val downloads=ModelDownloads(this@MainActivity);val uri=downloads.uri(entry)
@@ -1130,7 +1151,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
    center.addView(resources)
    val manager=ModelDownloads(this@MainActivity)
-   val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
    val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
