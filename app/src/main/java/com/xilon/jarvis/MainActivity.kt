@@ -317,7 +317,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
     val naturalTool=NaturalToolCommands.parse(q)
     if(naturalTool!=null && !RegistryIntent.compound(q)){
-     confirmTool(naturalTool.tool,naturalTool.args)
+     executeRequestedTool(naturalTool.tool,naturalTool.args)
      return@setOnClickListener
     }
     if(RegistryIntent.matches(q)){
@@ -333,7 +333,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val name=raw.substringBefore(" ")
      val args=try{kotlinx.serialization.json.Json.parseToJsonElement(raw.substringAfter(" ","{}")) as kotlinx.serialization.json.JsonObject}catch(e:Exception){append("Argumente JSON invalide.");return@setOnClickListener}
      if(com.jarvis.mobile.core.tools.ToolRegistry.get(name)==null){append("Instrument necunoscut.");return@setOnClickListener}
-     confirmTool(name,args)
+     executeRequestedTool(name,args)
      return@setOnClickListener
     }
     if(q.startsWith("planifică ",true)){
@@ -966,22 +966,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
     append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
   }
  }
- private fun confirmTool(name:String,args:kotlinx.serialization.json.JsonObject){
-     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Execută instrumentul")
-      .setMessage(name+"\n"+args.toString())
-      .setNegativeButton("Anulează",null)
-      .setPositiveButton("Execută"){_,_->
-       if(!busy){
-        busy=true;refreshOmegaStatus()
-        worker.execute{
-         val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,true)}}.fold(
-          {it.status.toString()+" / "+it.verified+"\n"+it.message+(it.detail?.let{d->"\n"+d}?:"")},
-          {"Execuție eșuată: "+it.javaClass.simpleName})
-         runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append("JARVIS: "+result)}}
-        }
-       }
-      }.show()
-
+ private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject){
+  if(busy)return
+  busy=true;refreshOmegaStatus()
+  worker.execute{
+   val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,true)}}.fold(
+    {it.status.toString()+" / "+it.verified+"\n"+it.message+(it.detail?.let{d->"\n"+d}?:"")},
+    {"Execuție eșuată: "+it.javaClass.simpleName})
+   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append("JARVIS: "+result)}}
+  }
  }
  private fun executeAgentPlan(steps:List<String>){
   if(busy)return
