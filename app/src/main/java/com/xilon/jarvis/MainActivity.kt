@@ -37,6 +37,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var cursor:com.jarvis.ai.gesture.GestureCursorView
  private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
  private var combinedAirVision=false
+ private var gestureSelect=false
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
   stopLiveVision()
@@ -745,6 +746,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";setOnCheckedChangeListener{_,checked->gestureSelect=checked}})
+  settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
+  settings.addView(android.widget.SeekBar(this).apply{max=55;progress=12;setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
+   override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f}
+   override fun onStartTrackingTouch(bar:android.widget.SeekBar?){}
+   override fun onStopTrackingTouch(bar:android.widget.SeekBar?){}
+  })})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch + vedere frontală (local)";setOnCheckedChangeListener{_,checked->combinedAirVision=checked;if(airTouch!=null){stopAirTouch();startAirTouch()}}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn 1s: oprire)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
@@ -1163,7 +1171,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(android.view.View(this).apply{setBackgroundColor(0xff284357.toInt())},LinearLayout.LayoutParams(-1,dp(1)))
   root.addView(nav)
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy && conversationForeground && airTouch!=null)startMicrophone()}
-  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){(voiceInput.parent as? android.view.View)?.let{var node:android.view.View?=it;while(node!=null && node !is android.widget.ScrollView)node=node.parent as? android.view.View;(node as? android.widget.ScrollView)?.smoothScrollBy(0,direction*240)}}}
+  cursor.onPointTap={x,y->
+   if(conversationForeground && airTouch!=null && !busy){
+    if(!gestureSelect)startMicrophone()
+    else {
+     val location=IntArray(2);cursor.getLocationOnScreen(location)
+     val sx=x+location[0];val sy=y+location[1]
+     val bounds=android.graphics.Rect()
+     if(sendControl.isShown && sendControl.getGlobalVisibleRect(bounds) && bounds.contains(sx.toInt(),sy.toInt())){
+      android.app.AlertDialog.Builder(this).setTitle("Trimitere prin gest").setMessage("Trimiți comanda din câmpul de text?").setNegativeButton("Anulează",null).setPositiveButton("Trimite"){_,_->if(!busy && conversationForeground)sendControl.performClick()}.show()
+     }else if(voiceInput.isShown && voiceInput.getGlobalVisibleRect(bounds) && bounds.contains(sx.toInt(),sy.toInt()))startMicrophone()
+     else modelStatus.text="Indică zona de text sau butonul Trimite."
+    }
+   }
+  }
+  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}
   cursor.onFistHold={if(conversationForeground && airTouch!=null){voice.stop();kokoroVoice?.stop();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})

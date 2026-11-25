@@ -29,6 +29,8 @@ class GestureCursorView(
     private var cursorVisible = true
     var onFistHold:()->Unit={}
     var onScroll: (Int)->Unit={}
+    var onPointTap: ((Float,Float)->Unit)?=null
+    var smoothing=0.22f
     private var palmAnchor:Float?=null
     private var lastScroll=0L
     private var fistSince=0L
@@ -50,8 +52,8 @@ class GestureCursorView(
                     cursor.set(targetX, targetY)
                     hasPosition = true
                 } else {
-                    cursor.x += LOW_PASS_ALPHA * (targetX - cursor.x)
-                    cursor.y += LOW_PASS_ALPHA * (targetY - cursor.y)
+                    cursor.x += smoothing.coerceIn(0.1f,0.65f) * (targetX - cursor.x)
+                    cursor.y += smoothing.coerceIn(0.1f,0.65f) * (targetY - cursor.y)
                 }
             }
             if(frame.gesture!=HandGesture.OPEN_PALM)palmAnchor=null
@@ -76,7 +78,8 @@ class GestureCursorView(
                 }
                 HandGesture.PINCH_TAP -> {
                     cursorVisible = true
-                    onPinchTap()
+                    val action=onPointTap
+                    if(action!=null && hasPosition)action(cursor.x,cursor.y) else onPinchTap()
                 }
                 HandGesture.NONE -> Unit
             }
