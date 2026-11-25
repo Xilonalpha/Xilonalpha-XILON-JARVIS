@@ -285,3 +285,79 @@ class LongPressTool : Tool(
     }
 }
 
+
+class TypeTextTool : Tool(
+    ToolSpec(
+        "type_text", "Type text into an editable field. Refuses password/OTP fields.",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("text", "string", true, "the text to enter"),
+            com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index of the field (uses focused field if omitted)"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        if(T.int(args,"elementIdx")!=null) return ToolResult.fail("Focus the intended field manually; indexed editing is not supported")
+        val pkg = ctx.observation?.packageName ?: return ToolResult.fail("No initial screen")
+        val value = T.str(args,"text") ?: return ToolResult.fail("Missing text")
+        val ok = svc.editFocused(pkg,"type",value)
+        return if(ok) ToolResult.ok("Editor action accepted.",Verification.UNVERIFIED) else ToolResult.fail("No eligible focused editor or action rejected")
+    }
+}
+
+class ClearTextTool : Tool(
+    ToolSpec(
+        "clear_text", "Clear an editable text field.",
+        listOf(com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index of the field")),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        if(T.int(args,"elementIdx")!=null) return ToolResult.fail("Focus the intended field manually; indexed editing is not supported")
+        val pkg = ctx.observation?.packageName ?: return ToolResult.fail("No initial screen")
+        val value = ""
+        val ok = svc.editFocused(pkg,"clear",value)
+        return if(ok) ToolResult.ok("Editor action accepted.",Verification.UNVERIFIED) else ToolResult.fail("No eligible focused editor or action rejected")
+    }
+}
+
+class CopyTextTool : Tool(
+    ToolSpec(
+        "copy_text", "Select all text in a field and copy it to the clipboard.",
+        listOf(com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index of the field")),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        if(T.int(args,"elementIdx")!=null) return ToolResult.fail("Focus the intended field manually; indexed editing is not supported")
+        val pkg = ctx.observation?.packageName ?: return ToolResult.fail("No initial screen")
+        val value = ""
+        val ok = svc.editFocused(pkg,"copy",value)
+        return if(ok) ToolResult.ok("Editor action accepted.",Verification.UNVERIFIED) else ToolResult.fail("No eligible focused editor or action rejected")
+    }
+}
+
+class PasteTool : Tool(
+    ToolSpec(
+        "paste_text", "Paste the current clipboard content into an editable field.",
+        listOf(com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index of the field")),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        if(T.int(args,"elementIdx")!=null) return ToolResult.fail("Focus the intended field manually; indexed editing is not supported")
+        val pkg = ctx.observation?.packageName ?: return ToolResult.fail("No initial screen")
+        val value = ""
+        val ok = svc.editFocused(pkg,"paste",value)
+        return if(ok) ToolResult.ok("Editor action accepted.",Verification.UNVERIFIED) else ToolResult.fail("No eligible focused editor or action rejected")
+    }
+}
+
