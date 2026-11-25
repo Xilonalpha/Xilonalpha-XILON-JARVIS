@@ -226,7 +226,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -341,6 +341,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text="Benchmark încheiat.";report("Rezultat benchmark"){result}}}
    }
   }})
+  for((label,code) in listOf("OCR: importă limba română" to 50,"OCR: importă limba engleză" to 51,"OCR: citește imagine" to 52)){
+   settings.addView(Button(this).apply{text=label;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type=if(code==52)"image/*" else "*/*";addCategory(Intent.CATEGORY_OPENABLE)},code)}})
+  }
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
 
@@ -494,6 +497,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode in 50..52){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;busy=true;worker.execute{val result=runCatching{if(requestCode==52)LocalOcr.read(this,uri).ifBlank{"Niciun text detectat."} else {LocalOcr.install(this,uri,if(requestCode==50)"ron" else "eng");"Date OCR importate; validarea are loc la recunoaștere."}}.getOrElse{"OCR eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append("OCR: "+result);android.app.AlertDialog.Builder(this).setTitle("OCR local").setMessage(result).setPositiveButton("Închide",null).show()}}};return}
   if(requestCode==49){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;busy=true;worker.execute{val result=runCatching{KokoroImport.install(this,uri)}.fold({"Fișiere Kokoro instalate; inferența trebuie testată."},{"Import Kokoro eșuat: "+it.message});runOnUiThread{if(!isDestroyed){busy=false;append(result)}}};return}
   if(requestCode==46){
    if(resultCode==RESULT_OK && !busy){
