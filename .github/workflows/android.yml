@@ -16,18 +16,51 @@ jobs:
         with:
           packages: 'platform-tools'
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Restore validated Romanian corpus
+        id: romanian-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/ro_wiktionary
+          key: romanian-corpus-v2-${{ hashFiles('tools/import_romanian_wiktionary.py') }}
       - name: Prepare offline Romanian corpus
+        if: steps.romanian-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
           dest=app/src/main/assets/ro_wiktionary
           mkdir -p "$dest"
           source="$RUNNER_TEMP/romanian-wiktionary.jsonl"
-          curl --fail --location --retry 3 --max-time 600 'https://kaikki.org/dictionary/Romanian/kaikki.org-dictionary-Romanian.jsonl' -o "$source"
+          url='https://kaikki.org/dictionary/Romanian/kaikki.org-dictionary-Romanian.jsonl'
+          if ! curl --fail --location --retry 3 --max-time 600 "$url" -o "$source"; then
+            source="$RUNNER_TEMP/raw-wiktionary.jsonl.gz"
+            url='https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz'
+            curl --fail --location --retry 3 --max-time 1800 "$url" -o "$source"
+          fi
+          printf '%s\n' "$url" > "$dest/source.url"
           python3 tools/import_romanian_wiktionary.py "$source" "$dest/lexicon.jsonl"
           sha256sum "$source" | cut -d ' ' -f 1 > "$dest/source.sha256"
           cp tools/import_romanian_wiktionary.py "$dest/importer.py"
           printf '%s\n' 'English Wiktionary contributors via Kaikki/Wiktextract' 'https://kaikki.org/dictionary/Romanian/index.html' 'Derived lexical data: CC BY-SA 4.0' 'https://creativecommons.org/licenses/by-sa/4.0/' 'https://en.wiktionary.org/wiki/Wiktionary:Copyrights' 'Converted to JSONL; source links in each record.' > "$dest/ATTRIBUTION.txt"
+      - name: Validate packaged corpus
+        run: |
+          set -euo pipefail
+          dest=app/src/main/assets/ro_wiktionary
+          test -s "$dest/source.sha256"
+          test -s "$dest/ATTRIBUTION.txt"
+          python3 - "$dest/lexicon.jsonl" <<'PY'
+          import json, sys
+          words = set()
+          with open(sys.argv[1], encoding="utf-8") as data:
+              for line in data:
+                  row = json.loads(line)
+                  words.add(row["word"].casefold())
+                  assert isinstance(row["english_glosses"], list)
+                  assert isinstance(row["forms"], list)
+                  assert isinstance(row["grammar"], list)
+          if len(words) < 10000:
+              raise SystemExit("Incomplete Romanian corpus")
+          print(f"Validated {len(words)} distinct Romanian words")
+          PY
       - run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
