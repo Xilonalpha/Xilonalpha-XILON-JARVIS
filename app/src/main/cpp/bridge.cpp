@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <mutex>
+#include <chrono>
 static std::once_flag init;
 static void fail(JNIEnv* e,const char* msg){e->ThrowNew(e->FindClass("java/lang/IllegalStateException"),msg);}
 extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(JNIEnv* e,jobject,jstring path){
@@ -66,6 +67,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(!progress){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  auto tokenEvent=e->GetMethodID(e->GetObjectClass(self),"publishToken","()V");
  if(!tokenEvent){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ auto lastProgress=std::chrono::steady_clock::now();
  for(int i=0;i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   if(llama_decode(ctx,batch)!=0){ok=false;break;}
@@ -74,11 +76,15 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
   if(len<0){ok=false;break;}out.append(piece.data(),len);
   e->CallVoidMethod(self,tokenEvent);if(e->ExceptionCheck()){ok=false;break;}
+  const auto now=std::chrono::steady_clock::now();
+  if(i==0 || now-lastProgress>=std::chrono::milliseconds(50) || i==maxTokens-1){
+  lastProgress=now;
   auto partial=e->NewByteArray(out.size());
   if(!partial){ok=false;break;}
   e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
   e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);
   if(e->ExceptionCheck()){ok=false;break;}
+  }
   tokens[0]=t;batch=llama_batch_get_one(tokens.data(),1);
  }
  llama_sampler_free(sampler);llama_free(ctx);
