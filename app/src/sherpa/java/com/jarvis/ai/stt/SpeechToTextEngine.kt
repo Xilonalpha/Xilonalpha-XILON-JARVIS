@@ -125,7 +125,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         )
         check(minimumBufferBytes > 0) { "This device does not support 16 kHz microphone capture." }
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -144,7 +144,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var started = false
         var silentSamples = 0
         var totalSamples = 0
+        val aec=runCatching { if(android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId) else null }.getOrNull()
+        val ns=runCatching { if(android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId) else null }.getOrNull()
         try {
+            runCatching { aec?.setEnabled(true) }
+            runCatching { ns?.setEnabled(true) }
             recorder.startRecording()
             while (!closed && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val count = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
@@ -174,6 +178,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
             }
         } finally {
             runCatching { recorder.stop() }
+            runCatching { aec?.release() }
+            runCatching { ns?.release() }
             recorder.release()
             activeRecorder = null
         }

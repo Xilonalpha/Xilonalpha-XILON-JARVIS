@@ -453,6 +453,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val report=listOf("RAM: "+info.availMem/1048576+" MiB din "+info.totalMem/1048576+" MiB","Memorie redusă: "+info.lowMemory,"Stocare disponibilă: "+StatFs(filesDir.path).availableBytes/1048576+" MiB","Baterie: "+(if(battery in 0..100)battery.toString()+"%" else "indisponibilă"),"Rețea validată: "+connected,"GGUF încărcat: "+(nativeModel!=null),"Profil: "+com.jarvis.mobile.core.model.DeviceProfiler(this@MainActivity).profile().toString()).joinToString("\n")
      append(report);return@setOnClickListener
     }
+    if(normalizedRomanian=="stare audio"){
+     append("AEC Android disponibil: "+android.media.audiofx.AcousticEchoCanceler.isAvailable()+" | Reducere zgomot disponibilă: "+android.media.audiofx.NoiseSuppressor.isAvailable()+" | Întrerupere vocală: "+voiceInterrupt+"\nDisponibilitatea nu garantează activarea în serviciul Android de recunoaștere.");return@setOnClickListener
+    }
     if(normalizedRomanian=="profil dispozitiv"){
      val p=com.jarvis.mobile.core.model.DeviceProfiler(this).profile()
      append("Profil local: "+p.model+" | "+p.deviceClass+" | RAM disponibil: "+p.availRamGb+" GB | CPU: "+p.cores+" | temperatură: "+p.thermalStatus+" | stocare: "+p.storageFreeGb+" GB");return@setOnClickListener
