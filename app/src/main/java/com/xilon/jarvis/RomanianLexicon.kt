@@ -10,6 +10,21 @@ object RomanianLexicon {
  private data class Entry(val action: PlannedAction, val english: String)
  @Volatile private var entries: Map<String, Entry> = emptyMap()
  @Volatile private var glossary: Map<String, String> = emptyMap()
+ @Volatile private var reverseGlossary: Map<String, String> = emptyMap()
+ private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+ @Volatile private var indexState = "not_initialized"
+ fun dictionaryStatus(): String = indexState
+ fun warmUp() {
+  synchronized(this) {
+   if (indexState == "building" || indexState == "ready" || corpusAssets == null) return
+   indexState = "building"
+  }
+  worker.execute {
+   synchronized(this) {
+    indexState = if (loadCorpus() != null) "ready" else "unavailable"
+   }
+  }
+ }
  @Volatile var verbs: List<String> = emptyList()
   private set
  fun normalize(text: String): String =
@@ -25,6 +40,8 @@ object RomanianLexicon {
    for (phrase in obj.getValue("phrases").jsonArray) map[normalize(phrase.jsonPrimitive.content)] = entry
   }
   glossary = root.getValue("translations").jsonObject.mapValues { it.value.jsonPrimitive.content }
+  reverseGlossary = glossary.entries.groupBy { normalize(it.value) }
+   .mapValues { (_, values) -> values.map { it.key }.sorted().joinToString(" / ") }
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
   entries = map.toMap()
   synchronized(this) {
@@ -33,7 +50,9 @@ object RomanianLexicon {
    synonymCache.clear()
    corpusAssets = context.applicationContext.assets
    indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-3.3.10-v1.db")
+   indexState = "idle"
   }
+  warmUp()
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
@@ -109,8 +128,12 @@ object RomanianLexicon {
     catch (_: android.database.SQLException) { null }
     catch (_: IllegalStateException) { null }
  }
- @Synchronized fun dictionaryContains(word: String): Boolean {
-  val c = loadCorpus() ?: return false
+ fun dictionaryContains(word: String): Boolean {
+  if (indexState != "ready") return false
+  return synchronized(this) { dictionaryContainsReady(word) }
+ }
+ private fun dictionaryContainsReady(word: String): Boolean {
+  val c = corpus ?: return false
   val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
   if (c.flags(w) != null) return true
   return c.rules.any { r ->
@@ -130,7 +153,7 @@ object RomanianLexicon {
   return longer.indices.any { longer.removeRange(it,it+1) == shorter }
  }
  private fun correctVerb(first: String): String? {
-  if (first.length !in 5..40) return null
+  if (indexState != "ready" || first.length !in 5..40) return null
   val possible = verbs.distinct().filter { oneEdit(normalize(first), it) }
   if (possible.isEmpty() || dictionaryContains(first)) return null
   val candidates = possible.filter { dictionaryContains(it) }
@@ -177,6 +200,23 @@ object RomanianLexicon {
   return synonyms(first).map { normalize(it) + tail }
    .filter { entries.containsKey(it) }.distinct().take(8)
  }
+ // Only suggest corrections to complete registered phrases; preserve arbitrary payloads.
+ fun spellingSuggestions(text: String): List<String> {
+  if (negated(text) || split(text).size != 1 || indexState != "ready") return emptyList()
+  val key = normalize(clean(text))
+  if (key.length > 160 || entries.containsKey(key)) return emptyList()
+  val tokens = key.split(' ')
+  if (tokens.size > 12 || tokens.any { !it.all(Char::isLetter) }) return emptyList()
+  return entries.keys.asSequence().filter { phrase ->
+   val candidate = phrase.split(' ')
+   if (candidate.size != tokens.size) return@filter false
+   val changed = tokens.indices.filter { tokens[it] != candidate[it] }
+   if (changed.size != 1) return@filter false
+   val i = changed.single()
+   tokens[i].length >= 5 && oneEdit(tokens[i], candidate[i]) &&
+    !dictionaryContains(tokens[i]) && dictionaryContains(candidate[i])
+  }.sorted().take(8).toList()
+ }
  private val typos = mapOf("deschde" to "deschide", "deshide" to "deschide",
   "pornste" to "porneste", "oprestee" to "opreste", "setaza" to "seteaza",
   "catu a" to "cauta", "actveaza" to "activeaza", "dezactveaza" to "dezactiveaza")
@@ -193,8 +233,7 @@ object RomanianLexicon {
  }
  fun translateReverse(text: String): String? {
   val key = normalize(text)
-  val matches = glossary.filterValues { normalize(it) == key }.keys.sorted()
-  return matches.takeIf { it.isNotEmpty() }?.joinToString(" / ")
+  return reverseGlossary[key]
  }
  fun split(text: String): List<String> = clean(text).split(Regex("\\s+(?:și|si|apoi|după aceea|dupa aceea)\\s+|;\\s*", RegexOption.IGNORE_CASE)).map { it.trim() }.filter { it.isNotEmpty() }
  fun compoundPlan(text: String): List<PlannedAction>? {
