@@ -785,8 +785,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else->"Sistem local • În așteptare"
   }
  }
- private fun speakReply(text:String){
-  if(!speakReplies || text.isBlank())return
+ private fun speakReply(text:String,manual:Boolean=false){
+  if((!manual && !speakReplies) || text.isBlank())return
   val neural=kokoroVoice
   if(englishNeuralVoice && neural!=null && neural.installed()){
    voice.stop();val result=runCatching{neural.speak(text)}
@@ -819,7 +819,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val controls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
    fun action(label:String,run:()->Unit)=Button(this).apply{text=label;isAllCaps=false;textSize=12f;setTextColor(0xff69d4f2.toInt());background=null;minWidth=0;minimumWidth=0;setOnClickListener{run()}}
    controls.addView(action("Copiază"){val clipboard=getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager;clipboard.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS",bubble.text));android.widget.Toast.makeText(this,"Text copiat",android.widget.Toast.LENGTH_SHORT).show()})
-   controls.addView(action("Ascultă"){voice.speak(bubble.text.toString().removePrefix("JARVIS:").trim())?.let{append(it)}})
+   controls.addView(action("Ascultă"){speakReply(bubble.text.toString().removePrefix("JARVIS:").trim(),manual=true)})
    messageRow.addView(controls)
   }
   transcript.addView(messageRow,LinearLayout.LayoutParams(-1,-2))
