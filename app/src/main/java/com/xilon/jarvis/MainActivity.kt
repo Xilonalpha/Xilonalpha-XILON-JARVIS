@@ -537,10 +537,46 @@ class MainActivity : androidx.activity.ComponentActivity() {
 
    chat.visibility=if(page=="Chat")android.view.View.VISIBLE else android.view.View.GONE
    settingsScroll.visibility=if(page=="Chat")android.view.View.GONE else android.view.View.VISIBLE
-   for(i in 0 until settings.childCount){
-    val v=settings.getChildAt(i);val label=(v as? TextView)?.text?.toString()
-    v.visibility=if(label in catalogLabels)android.view.View.GONE else if(v===panelTitle || v===panelInfo || page=="Setări" || page=="AI" && (label in aiControls || label=="Actualizează starea" || label=="Microfon neuronal Sherpa" || label=="Testează Kokoro (engleză)" || label?.startsWith("Voce neuronală EN:")==true) || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
+   val controls=(0 until settings.childCount).map{settings.getChildAt(it)}
+   controls.forEach{it.visibility=android.view.View.GONE}
+   panelTitle.visibility=android.view.View.VISIBLE
+   panelInfo.visibility=android.view.View.VISIBLE
+   val groups=linkedMapOf<String,MutableList<android.view.View>>()
+   for(v in controls){
+    if(v===panelTitle||v===panelInfo||v.tag=="omega_category")continue
+    val label=(v as? TextView)?.text?.toString()?:continue
+    if(label in catalogLabels)continue
+    val category=when{
+     label.contains("demonstra",true)||label.contains("abilități",true)->"Învățare și demonstrații"
+     label.contains("jurnal",true)||label.contains("graf local",true)||label.contains("observă",true)->"Agenți și memorie"
+     label.contains("Kokoro",true)||label.contains("vocal",true)||label.contains("Sherpa",true)||label.contains("Jarvis ON",true)||label.contains("voce",true)->"Voce și ascultare"
+     label.contains("gesturi",true)||label.contains("Air Touch",true)->"Control prin gesturi"
+     label.contains("OCR",true)->"Percepție vizuală"
+     label.contains("GGUF",true)||label.contains("model",true)||label.contains("benchmark",true)->"Modele și resurse AI"
+     else->"Configurare locală"
+    }
+    val owner=when(category){"Învățare și demonstrații","Agenți și memorie"->"Agenți";"Modele și resurse AI","Percepție vizuală"->"AI";else->"Setări"}
+    if(owner==page)groups.getOrPut(category){mutableListOf()}.add(v)
    }
+   controls.filter{it.tag=="omega_category"}.forEach{settings.removeView(it)}
+   for((category,items) in groups){
+    val card=Button(this).apply{
+     tag="omega_category";text=category+"   ›";isAllCaps=false;textSize=17f;gravity=android.view.Gravity.CENTER_VERTICAL
+     setTextColor(cyan);background=rounded(0xff142437.toInt(),18);setPadding(dp(20),dp(16),dp(20),dp(16))
+     setOnClickListener{
+      val expanded=items.any{it.visibility==android.view.View.VISIBLE}
+      items.forEach{it.visibility=if(expanded)android.view.View.GONE else android.view.View.VISIBLE}
+      text=category+if(expanded)"   ›" else "   ⌄"
+     }
+    }
+    settings.addView(card,LinearLayout.LayoutParams(-1,dp(64)).apply{topMargin=dp(10);bottomMargin=dp(6)})
+    for(v in items){
+     settings.removeView(v)
+     if(v is Button){v.isAllCaps=false;v.setTextColor(0xffd9edf7.toInt());v.textSize=15f;v.gravity=android.view.Gravity.CENTER_VERTICAL;v.backgroundTintList=null;v.background=rounded(0xff101e2d.toInt(),12);v.setPadding(dp(18),dp(10),dp(18),dp(10))}
+     settings.addView(v,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(4);bottomMargin=dp(4);leftMargin=dp(8);rightMargin=dp(8)})
+    }
+   }
+   settingsScroll.scrollTo(0,0)
   }
   for(page in listOf("Chat","AI","Agenți","Setări")){
    nav.addView(Button(this).apply{text=page;setCompoundDrawablesWithIntrinsicBounds(null,OmegaIcon(page,dp(24),cyan),null,null);compoundDrawablePadding=dp(4);isAllCaps=false;setTextColor(cyan);background=null;setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
