@@ -250,3 +250,17 @@ class CreateCalendarEventTool : Tool(
         catch(e:Exception){ ToolResult.fail("Calendar editor unavailable") }
     }
 }
+
+class ReadNotificationsTool : Tool(
+    ToolSpec(
+        "read_notifications", "Read recent notifications (requires notification access permission).",
+        emptyList(),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+    ),
+) {
+    override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
+        val items = com.xilon.jarvis.LocalNotifications.snapshot() ?: return ToolResult.unavailable("Enable notification access and wait for listener connection")
+        val det = items.take(12).joinToString("\n") { it }
+        return ToolResult.ok("${items.size} active notification(s).",Verification.VERIFIED,detail=det)
+    }
+}
