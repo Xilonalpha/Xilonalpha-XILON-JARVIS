@@ -11,17 +11,27 @@ class MediaActions(private val activity:Activity){
   val raw=command.trim()
   val q=raw.lowercase(Locale.ROOT)
   val audio=activity.getSystemService(AudioManager::class.java)
+  val parsed=if(q.contains(Regex("\\b(and|then|aur|not|never|don.t)\\b")))null else com.jarvis.assistant.router.FastCommandRouter.parse(raw)
+  val media=(parsed as? com.jarvis.assistant.router.FastCommand.Media)?.action
   val key=when(q){
-   "play","redă" -> KeyEvent.KEYCODE_MEDIA_PLAY
-   "pause","pauză" -> KeyEvent.KEYCODE_MEDIA_PAUSE
+   "play","redă","reda","pornește muzica","porneste muzica" -> KeyEvent.KEYCODE_MEDIA_PLAY
+   "pause","pauză","pauza","oprește muzica","opreste muzica" -> KeyEvent.KEYCODE_MEDIA_PAUSE
    "următoarea melodie" -> KeyEvent.KEYCODE_MEDIA_NEXT
    "melodia anterioară" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
-   else -> null
+   else -> when(media){
+    com.jarvis.assistant.router.MediaAction.PLAY -> KeyEvent.KEYCODE_MEDIA_PLAY
+    com.jarvis.assistant.router.MediaAction.PAUSE -> KeyEvent.KEYCODE_MEDIA_PAUSE
+    com.jarvis.assistant.router.MediaAction.NEXT -> KeyEvent.KEYCODE_MEDIA_NEXT
+    com.jarvis.assistant.router.MediaAction.PREVIOUS -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+    null -> null
+   }
   }
   if(key!=null){
-   audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN,key))
-   audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP,key))
-   return "Comandă multimedia transmisă; redarea nu este verificată."
+   return runCatching {
+    audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN,key))
+    audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP,key))
+    "Comandă multimedia transmisă; redarea nu este verificată."
+   }.getOrElse{"Comanda multimedia a eșuat: "+it.javaClass.simpleName}
   }
   val stream=AudioManager.STREAM_MUSIC
   if(q=="volum" || q.startsWith("volum ")){
