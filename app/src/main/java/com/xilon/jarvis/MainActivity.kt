@@ -461,10 +461,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val name=names[index]
     val steps=runCatching{store.load(name)}.getOrNull()
     if(steps.isNullOrEmpty()){report("Abilitate"){"Pași indisponibili sau invalizi."}}
-    else android.app.AlertDialog.Builder(this@MainActivity).setTitle(name).setMessage(steps.joinToString(" → "))
-     .setPositiveButton("Execută"){_,_->if(!busy){executeAgentPlan(steps)}}
-     .setNeutralButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ștergi abilitatea?").setMessage(name).setPositiveButton("Șterge"){_,_->report("Abilitate"){if(store.delete(name))"Abilitate ștearsă." else "Abilitate negăsită."}}.setNegativeButton("Anulează",null).show()}
-     .setNegativeButton("Anulează",null).show()
+    else if(!busy){append("Abilitate: "+name);executeAgentPlan(steps)}
    }.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Declanșatoare abilități";setOnClickListener{
