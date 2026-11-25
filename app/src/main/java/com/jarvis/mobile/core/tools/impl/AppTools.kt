@@ -38,35 +38,17 @@ object AppResolve {
         return null
     }
 
-    /** Known alias map for common apps people call by short names. */
-    private val aliases = mapOf(
-        "whatsapp" to "com.whatsapp",
-        "telegram" to "org.telegram.messenger",
-        "instagram" to "com.instagram.android",
-        "gmail" to "com.google.android.gm",
-        "youtube" to "com.google.android.youtube",
-        "maps" to "com.google.android.apps.maps",
-        "chrome" to "com.android.chrome",
-        "spotify" to "com.spotify.music",
-        "photos" to "com.google.android.apps.photos",
-        "camera" to "com.android.camera2",
-        "settings" to "com.android.settings",
-        "phone" to "com.android.dialer",
-        "messages" to "com.google.android.apps.messaging",
-        "play store" to "com.android.vending",
-        "files" to "com.google.android.documentsui",
-    )
-
     fun findWithAliases(context: Context, query: String): AppEntry? {
-        find(context, query)?.let { return it }
-        val q = query.trim().lowercase()
-        val pkg = aliases[q] ?: aliases.entries.firstOrNull { q.contains(it.key) }?.value
-        if (pkg != null) {
-            launchables(context).firstOrNull { it.pkg == pkg }?.let { return it }
-            // Package may be installed but not launchable-listed yet; verify existence.
-            if (runCatching { context.packageManager.getPackageInfo(pkg, 0) }.isSuccess) return AppEntry(q, pkg)
-        }
-        return null
+        val all = launchables(context)
+        val q = query.trim()
+        if (q.isBlank()) return null
+        all.singleOrNull { it.pkg.equals(q, ignoreCase = true) }?.let { return it }
+        val match = com.jarvis.assistant.router.AppMatcher.match(q, all.map {
+            com.jarvis.assistant.router.AppEntry(it.label, it.pkg)
+        })
+        // Approximate and ambiguous matches require an explicit app name or package.
+        if (match.how !in setOf("builtin", "exact")) return null
+        return match.app?.let { AppEntry(it.label, it.packageName) }
     }
 }
 
@@ -90,7 +72,7 @@ class OpenAppTool : Tool(
             val ok = T.freshObserve(900)?.packageName == entry.pkg
             ToolResult(
                 com.jarvis.mobile.core.tools.ToolStatus.SUCCESS,
-                "Opened ${entry.label}.",
+                if (ok) "Opened ${entry.label}." else "Launch requested for ${entry.label}; foreground not verified.",
                 if (ok) Verification.VERIFIED else Verification.UNVERIFIED,
                 detail = "pkg=${entry.pkg}",
             )
