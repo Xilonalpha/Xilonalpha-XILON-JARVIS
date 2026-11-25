@@ -3,19 +3,22 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.content.ContentValues
-class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null,4){
+class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null,5){
  override fun onCreate(db:SQLiteDatabase){
   createRegistryEdges(db)
   createRegistryTriples(db)
+  createTemporalPatterns(db)
   createDemonstrationEdges(db)
   db.execSQL("CREATE TABLE edges (source TEXT NOT NULL, target TEXT NOT NULL, count INTEGER NOT NULL, last_seen INTEGER NOT NULL, PRIMARY KEY(source,target))")
  }
  private fun createDemonstrationEdges(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS demo_edges(source TEXT NOT NULL,target TEXT NOT NULL,count INTEGER NOT NULL,last_seen INTEGER NOT NULL,PRIMARY KEY(source,target))")}
- override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){if(oldVersion<2)createDemonstrationEdges(db);if(oldVersion<3)createRegistryEdges(db);if(oldVersion<4)createRegistryTriples(db)}
+ override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){if(oldVersion<2)createDemonstrationEdges(db);if(oldVersion<3)createRegistryEdges(db);if(oldVersion<4)createRegistryTriples(db);if(oldVersion<5)createTemporalPatterns(db)}
  private fun createRegistryEdges(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS registry_edges(source TEXT NOT NULL,target TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(source,target))")}
  // Adapted from Open Jarvis AnalysisEngine sequence detection (MIT, Copyright 2024 TokenArc).
  // Count each observed verified window once, rather than rescanning history.
  private fun createRegistryTriples(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS registry_triples(a TEXT NOT NULL,b TEXT NOT NULL,c TEXT NOT NULL,count INTEGER NOT NULL,last_seen INTEGER NOT NULL,PRIMARY KEY(a,b,c))")}
+ private fun createTemporalPatterns(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS registry_hours(a TEXT NOT NULL,b TEXT NOT NULL,c TEXT NOT NULL,hour INTEGER NOT NULL,count INTEGER NOT NULL,last_seen INTEGER NOT NULL,PRIMARY KEY(a,b,c,hour))")}
+ fun temporalPatterns():String=readableDatabase.rawQuery("SELECT a,b,c,hour,count FROM registry_hours WHERE count>=2 ORDER BY count DESC,last_seen DESC,a,b,c,hour LIMIT 20",null).use{cursor->buildList{while(cursor.moveToNext())add(cursor.getString(0)+" → "+cursor.getString(1)+" → "+cursor.getString(2)+" | ora locală "+cursor.getInt(3)+" : "+cursor.getLong(4)+" observații")}.joinToString("\n").ifBlank{"Date temporale insuficiente."}}
  fun registryPatterns():String=readableDatabase.rawQuery("SELECT a,b,c,count FROM registry_triples WHERE count>=2 ORDER BY count DESC,last_seen DESC,a,b,c LIMIT 20",null).use{cursor->buildList{while(cursor.moveToNext())add(cursor.getString(0)+" → "+cursor.getString(1)+" → "+cursor.getString(2)+" : "+cursor.getLong(3))}.joinToString("\n").ifBlank{"Niciun tipar repetat verificat."}}
  fun recordRegistry(outcome:RegistryAgentEngine.Outcome){
   val verified=outcome.steps.takeWhile{it.result.status==com.jarvis.mobile.core.tools.ToolStatus.SUCCESS && it.result.verified==com.jarvis.mobile.core.tools.Verification.VERIFIED}
@@ -29,6 +32,9 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
    val now=System.currentTimeMillis()
    db.execSQL("INSERT OR IGNORE INTO registry_triples(a,b,c,count,last_seen) VALUES(?,?,?,0,?)",arrayOf(a,b,c,now))
    db.execSQL("UPDATE registry_triples SET count=count+1,last_seen=? WHERE a=? AND b=? AND c=?",arrayOf(now,a,b,c))
+   val hour=java.util.Calendar.getInstance().apply{timeInMillis=now}.get(java.util.Calendar.HOUR_OF_DAY)
+   db.execSQL("INSERT OR IGNORE INTO registry_hours(a,b,c,hour,count,last_seen) VALUES(?,?,?,?,0,?)",arrayOf(a,b,c,hour,now))
+   db.execSQL("UPDATE registry_hours SET count=count+1,last_seen=? WHERE a=? AND b=? AND c=? AND hour=?",arrayOf(now,a,b,c,hour))
   }
   db.setTransactionSuccessful()}finally{db.endTransaction()}
  }
@@ -79,5 +85,5 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
    rows.joinToString("\n").ifBlank{"Date insuficiente pentru recomandare."}
   }
  }
- fun clear(){val db=writableDatabase;db.beginTransaction();try{db.delete("registry_triples",null,null);db.delete("registry_edges",null,null);db.delete("edges",null,null);db.delete("demo_edges",null,null);db.setTransactionSuccessful()}finally{db.endTransaction()}}
+ fun clear(){val db=writableDatabase;db.beginTransaction();try{db.delete("registry_hours",null,null);db.delete("registry_triples",null,null);db.delete("registry_edges",null,null);db.delete("edges",null,null);db.delete("demo_edges",null,null);db.setTransactionSuccessful()}finally{db.endTransaction()}}
 }
