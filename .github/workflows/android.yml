@@ -16,6 +16,18 @@ jobs:
         with:
           packages: 'platform-tools'
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Prepare offline Romanian corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest=app/src/main/assets/ro_wiktionary
+          mkdir -p "$dest"
+          source="$RUNNER_TEMP/romanian-wiktionary.jsonl"
+          curl --fail --location --retry 3 --max-time 600 'https://kaikki.org/dictionary/Romanian/kaikki.org-dictionary-Romanian.jsonl' -o "$source"
+          python3 tools/import_romanian_wiktionary.py "$source" "$dest/lexicon.jsonl"
+          sha256sum "$source" | cut -d ' ' -f 1 > "$dest/source.sha256"
+          cp tools/import_romanian_wiktionary.py "$dest/importer.py"
+          printf '%s\n' 'English Wiktionary contributors via Kaikki/Wiktextract' 'https://kaikki.org/dictionary/Romanian/index.html' 'Derived lexical data: CC BY-SA 4.0' 'https://creativecommons.org/licenses/by-sa/4.0/' 'https://en.wiktionary.org/wiki/Wiktionary:Copyrights' 'Converted to JSONL; source links in each record.' > "$dest/ATTRIBUTION.txt"
       - run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
