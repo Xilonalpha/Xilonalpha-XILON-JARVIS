@@ -48,6 +48,24 @@ data class SkillTrigger(
     val text: String? = null,               // NOTIFICATION substring (title or text)
     val cooldownSec: Long = 60,             // minimum seconds between fires
 ) {
+    fun isValid(): Boolean {
+        if (type !in TYPES || cooldownSec !in 0L..86400L) return false
+        if (pkg != null && (pkg.isBlank() || pkg.length > 255)) return false
+        if (text != null && text.length > 512) return false
+        return when (type) {
+            "TIME" -> hour in 0..23 && minute in 0..59
+            "APP_OPEN", "APP_CLOSE" -> !pkg.isNullOrBlank()
+            else -> true
+        }
+    }
+
+    fun matchesApp(packageName: String, opened: Boolean): Boolean =
+        isValid() && type == (if (opened) "APP_OPEN" else "APP_CLOSE") && pkg == packageName
+
+    fun matchesNotification(packageName: String, title: String, body: String): Boolean =
+        isValid() && type == "NOTIFICATION" && (pkg == null || pkg == packageName) &&
+            (text.isNullOrBlank() || title.contains(text, true) || body.contains(text, true))
+
     fun describe(): String = when (type) {
         "APP_OPEN" -> "When ${pkg?.substringBefore('.') ?: "an app"} opens"
         "APP_CLOSE" -> "When ${pkg?.substringBefore('.') ?: "an app"} closes"
