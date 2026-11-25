@@ -184,23 +184,6 @@ class TakeScreenshotTool : Tool(
     ToolSpec("take_screenshot", "Take a screenshot of the current screen (saved by the system).", emptyList(), com.jarvis.mobile.core.tools.Risk.LOW),
 ) {
     override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
-        if (android.os.Build.VERSION.SDK_INT < 30) {
-            return ToolResult.unavailable("Screenshots via accessibility need Android 11+; this device runs ${android.os.Build.VERSION.SDK_INT}.", "use-device-shortcut")
-        }
-        val svc = com.xilon.jarvis.LocalScreen.service()
-            ?: return ToolResult.unavailable("Accessibility service is off - screenshots need it.", "enable-accessibility")
-        val ok = runCatching { svc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT) }
-            .getOrDefault(false)
-        return if (ok) ToolResult.ok("Screenshot requested; check system notification.", Verification.UNVERIFIED)
-        else ToolResult.fail("The system refused the screenshot action.")
-    }
-}
-
-
-class TakeScreenshotTool : Tool(
-    ToolSpec("take_screenshot", "Take a screenshot of the current screen (saved by the system).", emptyList(), com.jarvis.mobile.core.tools.Risk.LOW),
-) {
-    override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
         if (Build.VERSION.SDK_INT < 30) {
             return ToolResult.unavailable("Screenshots via accessibility need Android 11+; this device runs ${Build.VERSION.SDK_INT}.", "use-device-shortcut")
         }
