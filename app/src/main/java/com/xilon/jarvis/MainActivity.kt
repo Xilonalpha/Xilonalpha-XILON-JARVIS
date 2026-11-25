@@ -467,6 +467,35 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Declanșatoare abilități";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val names=SkillStore(this@MainActivity).names()
+   val store=com.jarvis.mobile.core.triggers.TriggerStore(this@MainActivity)
+   if(names.isEmpty()){report("Declanșatoare"){"Salvează întâi o abilitate."};return@setOnClickListener}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Alege abilitatea").setItems(names.toTypedArray()){_,index->
+    val name=names[index]
+    val existing=store.bindings().firstOrNull{it.skill==name}?.trigger
+    val panel=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL}
+    val types=com.jarvis.mobile.core.triggers.SkillTrigger.TYPES
+    val type=Spinner(this@MainActivity).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,types);setSelection(types.indexOf(existing?.type).coerceAtLeast(0))}
+    fun field(label:String,value:String)=EditText(this@MainActivity).apply{hint=label;setText(value);setSingleLine(true);panel.addView(this)}
+    panel.addView(type)
+    val pkg=field("Pachet Android",existing?.pkg.orEmpty())
+    val filter=field("Filtru notificare",existing?.text.orEmpty())
+    val hour=field("Ora 0–23",existing?.hour?.takeIf{it>=0}?.toString().orEmpty())
+    val minute=field("Minut 0–59",existing?.minute?.takeIf{it>=0}?.toString().orEmpty())
+    val cooldown=field("Cooldown secunde",(existing?.cooldownSec?:60L).toString())
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle(name).setMessage("Configurează o propunere de execuție. Nu autorizează execuția automată.").setView(ScrollView(this@MainActivity).apply{addView(panel)})
+     .setPositiveButton("Salvează"){_,_->
+      val result=runCatching{
+       val trigger=com.jarvis.mobile.core.triggers.SkillTrigger(type.selectedItem.toString(),pkg.text.toString().trim().ifBlank{null},hour.text.toString().toIntOrNull()?:-1,minute.text.toString().toIntOrNull()?:-1,filter.text.toString().ifBlank{null},cooldown.text.toString().toLongOrNull()?:-1L)
+       store.save(name,trigger)
+      }
+      report("Declanșatoare"){if(result.isSuccess)"Configurație salvată. Sursele de evenimente nu sunt încă active." else "Configurație invalidă sau salvare eșuată."}
+     }.setNeutralButton("Elimină"){_,_->val result=runCatching{store.remove(name)};report("Declanșatoare"){if(result.isSuccess)"Configurație eliminată." else "Eliminare eșuată."}}
+     .setNegativeButton("Anulează",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nInstrumente agent verificate:\n"+it.registrySummary()+"\n\nTipare repetate verificate:\n"+it.registryPatterns()+"\n\nTipare după ora locală:\n"+it.temporalPatterns()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
   settings.addView(Button(this).apply{text="Detalii model local";setOnClickListener{report("Model local"){
    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
