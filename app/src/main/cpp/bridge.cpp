@@ -83,16 +83,27 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   while(end<chat.end()-1 && std::string(end->role)!="user" && std::string(end->role)!="system")++end;
   chat.erase(first,end);
  }
- auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=std::min<int>(context,512);cp.n_ubatch=std::min<int>(context,256);cp.n_threads=threads;cp.n_threads_batch=threads;
- if(state->context && (state->size!=context || state->threads!=threads)){
+ // Retry with smaller context and batch sizes without dropping the current prompt.
+ const int required=n+maxTokens;
+ const int requested=context;
+ if(state->context && (state->size!=requested || state->threads!=threads)){
   llama_free(state->context);state->context=nullptr;
  }
+ int batchSize=std::min<int>(requested,512);
  if(!state->context){
-  state->context=llama_init_from_model(m,cp);
-  state->size=context;state->threads=threads;
+  for(int attempt=requested;;attempt=std::max(required,attempt/2)){
+   auto cp=llama_context_default_params();
+   cp.n_ctx=attempt;cp.n_batch=std::min<int>(attempt,512);
+   cp.n_ubatch=std::min<int>(attempt,128);
+   cp.n_threads=threads;cp.n_threads_batch=threads;
+   state->context=llama_init_from_model(m,cp);
+   if(state->context){state->size=attempt;state->threads=threads;batchSize=cp.n_batch;break;}
+   if(attempt<=required)break;
+  }
  }
  auto* ctx=state->context;
- if(!ctx){fail(e,"Context allocation failed");return nullptr;}
+ if(!ctx){fail(e,"Context allocation failed even at minimum prompt budget; reduce history or use a smaller GGUF");return nullptr;}
+ batchSize=std::min<int>(state->size,512);
  llama_memory_clear(llama_get_memory(ctx), true);
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler){fail(e,"Sampler allocation failed");return nullptr;}
@@ -141,9 +152,9 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch);
  };
  bool ready=true;
- for(int offset=0;offset<n;offset+=512){
+ for(int offset=0;offset<n;offset+=batchSize){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
-  const int count=std::min(512,n-offset);
+  const int count=std::min(batchSize,n-offset);
   if(decode(tokens.data()+offset,count,offset,offset+count==n)!=0){ok=e->CallBooleanMethod(self,cancel);ready=false;break;}
  }
  for(int i=0;ready && i<maxTokens;i++){
