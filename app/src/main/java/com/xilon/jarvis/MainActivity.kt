@@ -228,7 +228,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(q.isNotEmpty() && !busy) {
     lastConversationActivity=android.os.SystemClock.elapsedRealtime()
     append("Tu: "+q); input.text.clear()
-    val deduction=symbolicQuery(q)
+    val deduction=logicMemoryCommand(q) ?: symbolicQuery(q)
     if(deduction!=null){append("JARVIS: "+deduction);speakReply(deduction);return@setOnClickListener}
     if(q.equals("șterge textul OCR",true)){ocrText=null;append("Text OCR eliminat din memoria de analiză.");return@setOnClickListener}
     if(q.startsWith("analizează imaginea ",true)){
@@ -1103,6 +1103,42 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun interestContext(question:String):String{
   val words=RomanianLexicon.normalize(question).split(Regex("\\W+")).filter{it.length>=4}.toSet()
   return conversationInterests().filter{topic->RomanianLexicon.normalize(topic).split(Regex("\\W+")).any{it in words}}.take(3).joinToString("; ").take(240)
+ }
+ private fun logicKnowledge():List<String>{
+  val raw=getSharedPreferences("conversation",MODE_PRIVATE).getString("logicKnowledge","[]") ?: "[]"
+  return runCatching{val a=org.json.JSONArray(raw);(0 until minOf(a.length(),80)).map{a.getString(it)}}.getOrDefault(emptyList())
+ }
+ private fun saveLogicKnowledge(items:List<String>){
+  getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("logicKnowledge",org.json.JSONArray(items.distinct().take(80)).toString()).apply()
+ }
+ private fun logicMemoryCommand(text:String):String?{
+  val normalized=RomanianLexicon.normalize(text)
+  val items=logicKnowledge()
+  val atom=Regex("!?[\\p{L}\\p{N}_ -]{1,80}")
+  if(normalized=="cunostinte logice")return items.mapIndexed{i,v->(i+1).toString()+". "+v}.joinToString("\n").ifBlank{"Baza logică este goală."}
+  if(normalized=="sterge cunostintele logice"){saveLogicKnowledge(emptyList());return "Baza logică a fost golită."}
+  if(normalized.startsWith("uita regula ")){
+   val index=normalized.substringAfter("uita regula ").toIntOrNull()?.minus(1)
+   if(index==null || index !in items.indices)return "Indică numărul unei reguli din lista de cunoștințe."
+   saveLogicKnowledge(items.filterIndexed{i,_->i!=index});return "Cunoștință eliminată."
+  }
+  val add=Regex("^re[tț]ine logic\\s*:\\s*",RegexOption.IGNORE_CASE)
+  if(add.containsMatchIn(text)){
+   val statement=text.replaceFirst(add,"").trim()
+   val sides=statement.split("->").map{it.trim()}
+   val valid=when(sides.size){1->atom.matches(sides[0]);2->atom.matches(sides[1]) && sides[0].split("&").all{atom.matches(it.trim())};else->false}
+   if(!valid || statement.length>140)return "Format: Reține logic: A sau A & B -> C (maxim 140 caractere)"
+   if(items.size>=80)return "Baza logică este plină."
+   saveLogicKnowledge(items+statement);return "Premisă declarată salvată local, fără validare factuală: "+statement
+  }
+  val ask=Regex("^verific[ăa] logic\\s*:\\s*",RegexOption.IGNORE_CASE)
+  if(ask.containsMatchIn(text)){
+   val target=text.replaceFirst(ask,"").trim()
+   if(!atom.matches(target))return "Format: Verifică logic: C"
+   if(items.isEmpty())return "Nu există premise salvate."
+   return symbolicQuery("Deduce: "+items.joinToString("; ")+"; ? "+target)
+  }
+  return null
  }
  private fun symbolicQuery(text:String):String?{
   val prefix=Regex("^deduce\\s*:\\s*",RegexOption.IGNORE_CASE)
