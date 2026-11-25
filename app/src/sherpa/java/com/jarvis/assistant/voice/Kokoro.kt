@@ -84,6 +84,7 @@ object Kokoro {
      */
     fun speak(context: Context, text: String, speaker: Int, speed: Float, onDone: () -> Unit) {
         val app = context.applicationContext
+        lastError = null
         val queuedAt = SystemClock.elapsedRealtime()
         val ticket = AudioOut.interrupt()
         val key = key(text, speaker, speed)

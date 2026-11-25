@@ -17,7 +17,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
   val engine=try{NeuralSpeechFactory.create(this)}catch(e:Exception){modelStatus.text="Sherpa indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}catch(e:LinkageError){modelStatus.text="Sherpa nativ indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}
   if(engine==null){if(fallback)startAndroidMicrophone() else modelStatus.text="Motor Sherpa indisponibil.";return}
-  listening.close();voice.stop();kokoroVoice?.stop();busy=true;neuralCancelled=false;neural=engine;omegaCore.listening=true;refreshOmegaStatus()
+  listening.close();stopAllSpeech();busy=true;neuralCancelled=false;neural=engine;omegaCore.listening=true;refreshOmegaStatus()
   worker.execute{
    val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{runCatching{engine.close()};neural=null}
    runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled)result.fold({if(it.isBlank())modelStatus.text="Nicio comandă detectată." else {acceptVoice(it)}},{modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
@@ -73,6 +73,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var voice: OfflineVoice
  private var speakReplies=false
  private var kokoroVoice:NeuralVoice?=null
+ private var voiceTicket=0L
+ private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop()}
+ private fun playNeural(text:String,engine:NeuralVoice){
+  stopAllSpeech();val ticket=voiceTicket
+  omegaCore.speaking=true;refreshOmegaStatus()
+  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Kokoro: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){omegaCore.speaking=false;refreshOmegaStatus();append("Kokoro: "+e.message);voice.speak(text)?.let{append(it)}}
+ }
  private var englishNeuralVoice=false
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
@@ -95,7 +102,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!busy && !omegaCore.listening && wake==null){
    if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && !omegaCore.listening)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){voice.stop();append("Răspuns vocal întrerupt.")}},{_->})
+   else if(voiceInterrupt && !omegaCore.listening)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){stopAllSpeech();append("Răspuns vocal întrerupt.")}},{_->})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
@@ -164,8 +171,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
   settings.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
   settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
-  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;kokoroVoice?.stop();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
-  settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;runCatching{v.speak("Hello. This is Xilon Jarvis.")}.onFailure{append("Kokoro: "+it.message)}}} })
+  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
+  settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
@@ -186,6 +193,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   listening.onSpeechStart={}
   listening.onPartialText={partial->if(continuousVoice && conversationForeground && !omegaCore.speaking && !busy){modelStatus.text=partial.take(200)}}
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
+  voice.onFailure={message->append(message)}
   voice.onSpeaking={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
@@ -759,7 +767,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision() } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision() } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -1338,11 +1346,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if((!manual && !speakReplies && !continuousVoice) || text.isBlank())return
   val neural=kokoroVoice
   if(!continuousVoice && englishNeuralVoice && neural!=null && neural.installed()){
-   voice.stop();val result=runCatching{neural.speak(text)}
-   if(result.isSuccess)return
-   append("Kokoro indisponibil: "+result.exceptionOrNull()?.message)
+   playNeural(text,neural);return
   }
-  voice.speak(text)?.let{append(it)}
+  stopAllSpeech();voice.speak(text)?.let{append(it)}
  }
  // Retrieve older dialogue as evidence, not executable instructions.
  private fun deliberateRequest(text:String):Boolean {
@@ -2121,7 +2127,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerQueue.clear()
   super.onPause()
  }
- override fun onStop(){kokoroVoice?.stop();stopNeural();stopWake();stopAirTouch();super.onStop()}
+ override fun onStop(){stopAllSpeech();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
   agentCancelled=true;invalidatePreview();ocrText=null;visualObservation.clear()
   conversationHandler.removeCallbacks(conversationTick);triggerHandler.removeCallbacks(triggerTick)

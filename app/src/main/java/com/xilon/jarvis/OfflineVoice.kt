@@ -5,24 +5,26 @@ import java.util.Locale
 
 class OfflineVoice(context: Context) : AutoCloseable {
  var onSpeaking:(Boolean)->Unit={}
+ var onFailure:(String)->Unit={}
  private val main=android.os.Handler(android.os.Looper.getMainLooper())
  private var generation=0L
- private var ready=false
- private var closed=false
+ @Volatile private var ready=false
+ @Volatile private var closed=false
  private val tts=TextToSpeech(context.applicationContext) { status -> ready=!closed && status==TextToSpeech.SUCCESS }
  fun speak(text:String):String? {
   if(!ready || closed) return "Motorul vocal nu este disponibil."
   val voice=tts.voices?.filter { !it.isNetworkConnectionRequired && it.locale.language=="ro" && !it.features.orEmpty().contains("notInstalled") }?.maxByOrNull { it.quality }
    ?: return "Instalează o voce română offline în configurarea Android."
   if(tts.setVoice(voice)!=TextToSpeech.SUCCESS) return "Vocea nu poate fi activată."
-  val chunks=com.jarvis.assistant.voice.SpeechChunks.split(text)
+  val chunks=com.jarvis.assistant.voice.SpeechChunks.split(text,first=180,max=350)
   if(chunks.isEmpty())return null
   val id=++generation
   tts.setOnUtteranceProgressListener(object:android.speech.tts.UtteranceProgressListener(){
    private fun publish(value:Boolean){main.post{if(!closed && generation==id)onSpeaking(value)}}
    override fun onStart(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)publish(true)}
    override fun onDone(utteranceId:String?){if(utteranceId=="xilon-$id-${chunks.lastIndex}")publish(false)}
-   override fun onError(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)publish(false)}
+   override fun onError(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)main.post{if(!closed && generation==id){stop();onFailure("Sinteza vocală a eșuat.")}}}
+   override fun onStop(utteranceId:String?,interrupted:Boolean){if(utteranceId?.startsWith("xilon-$id-")==true)publish(false)}
   })
   onSpeaking(true)
   for((i,chunk) in chunks.withIndex()){
