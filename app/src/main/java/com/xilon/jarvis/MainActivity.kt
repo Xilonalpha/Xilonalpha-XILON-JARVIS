@@ -73,7 +73,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(role=="user" || role=="assistant") history.add(role to item.getString("text"))
    }
   } catch(e:org.json.JSONException){ history.clear() }
-  val bg=android.graphics.Color.rgb(7,14,25)
+  val bg=android.graphics.Color.rgb(10,16,27)
   val cyan=android.graphics.Color.rgb(101,220,255)
   fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(bg)}
@@ -121,16 +121,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val visible=if(root.height<dp(540))android.view.View.GONE else android.view.View.VISIBLE
    if(corePanel.visibility!=visible)corePanel.visibility=visible
   }
+  fun rounded(color:Int,radius:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=dp(radius).toFloat()}
   val input = EditText(this).apply { hint = "Scrie o comandă"; maxLines = 4;setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY) }
   voiceInput=input
-  chat.addView(input)
+  val composer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL;background=rounded(0xff142437.toInt(),18);setPadding(dp(4),dp(4),dp(4),dp(4))}
+  input.background=null
+  composer.addView(Button(this).apply{text="＋";contentDescription="Importă document";setTextColor(cyan);background=null;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(44),dp(48)))
+  composer.addView(input,LinearLayout.LayoutParams(0,-2,1f))
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  chat.addView(actions)
-  actions.addView(Button(this).apply { text="Microfon"; setOnClickListener { startMicrophone() } })
+  composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
+  chat.addView(composer)
+  actions.addView(Button(this).apply { text="🎙";contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } })
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  actions.addView(Button(this).apply { text = "Trimite"; setOnClickListener {
+  actions.addView(Button(this).apply { text = "➤";contentDescription="Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
@@ -208,14 +213,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  actions.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
+  actions.addView(Button(this).apply { text="■";contentDescription="Oprește"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
-  for(i in 0 until actions.childCount){actions.getChildAt(i).layoutParams=LinearLayout.LayoutParams(0,-2,1f)}
+  for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   val aiControls=setOf("Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
@@ -229,8 +234,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }
   for(page in listOf("Chat","AI","Agenți","Setări")){
-   nav.addView(Button(this).apply{text=page;isAllCaps=false;setTextColor(cyan);setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
+   nav.addView(Button(this).apply{text=when(page){"Chat"->"◯\nChat";"AI"->"◇\nAI";"Agenți"->"▣\nAgenți";else->"⚙\nSetări"};isAllCaps=false;setTextColor(cyan);background=null;setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
   }
+  root.addView(android.view.View(this).apply{setBackgroundColor(0xff284357.toInt())},LinearLayout.LayoutParams(-1,dp(1)))
   root.addView(nav)
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy)startMicrophone()}
   cursor.visibility=android.view.View.GONE
