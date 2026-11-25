@@ -73,29 +73,53 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(role=="user" || role=="assistant") history.add(role to item.getString("text"))
    }
   } catch(e:org.json.JSONException){ history.clear() }
-  val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,48,24,24) }
-  root.addView(TextView(this).apply { text = "XILON JARVIS"; textSize = 24f })
+  val bg=android.graphics.Color.rgb(7,14,25)
+  val cyan=android.graphics.Color.rgb(101,220,255)
+  fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
+  val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(bg)}
+  val settings=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(8),dp(12),dp(8))}
+  val settingsScroll=ScrollView(this).apply{addView(settings);visibility=android.view.View.GONE}
+  val chat=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+  val header=LinearLayout(this).apply{gravity=android.view.Gravity.CENTER_VERTICAL}
+  val title=TextView(this).apply{text="XILON • OMEGA";textSize=22f;setTextColor(cyan)}
+  header.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+  header.addView(Button(this).apply{text="Setări";setOnClickListener{
+   val open=settingsScroll.visibility!=android.view.View.VISIBLE
+   settingsScroll.visibility=if(open)android.view.View.VISIBLE else android.view.View.GONE
+   chat.visibility=if(open)android.view.View.GONE else android.view.View.VISIBLE
+   text=if(open)"Chat" else "Setări"
+  }})
+  root.addView(header)
+  androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root){v,insets->
+   val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.ime())
+   v.setPadding(bars.left+dp(12),bars.top+dp(8),bars.right+dp(12),bars.bottom+dp(8));insets
+  }
   modelStatus = TextView(this).apply { text = "Selectează un model GGUF pentru inferență locală." }
+  modelStatus.setTextColor(cyan)
   root.addView(modelStatus)
-  root.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
-  root.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
-  root.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;kokoroVoice?.stop();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
-  root.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;runCatching{v.speak("Hello. This is Xilon Jarvis.")}.onFailure{append("Kokoro: "+it.message)}}} })
-  root.addView(Button(this).apply { text = "Selectează GGUF"; setOnClickListener {
+  root.addView(chat,LinearLayout.LayoutParams(-1,0,1f))
+  root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
+  settings.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
+  settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
+  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;kokoroVoice?.stop();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
+  settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;runCatching{v.speak("Hello. This is Xilon Jarvis.")}.onFailure{append("Kokoro: "+it.message)}}} })
+  settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
-  root.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
-  transcript = TextView(this).apply { textSize = 16f; setTextIsSelectable(true) }
+  settings.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
+  transcript = TextView(this).apply { textSize = 16f; setTextColor(android.graphics.Color.rgb(220,235,247)); setTextIsSelectable(true);setPadding(dp(8),dp(12),dp(8),dp(12)) }
   scroll = ScrollView(this).apply { addView(transcript) }
-  root.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
-  val input = EditText(this).apply { hint = "Scrie o comandă"; maxLines = 4 }
+  chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
+  val input = EditText(this).apply { hint = "Scrie o comandă"; maxLines = 4;setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY) }
   voiceInput=input
-  root.addView(input)
-  root.addView(Button(this).apply { text="Microfon offline"; setOnClickListener { startMicrophone() } })
-  root.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
+  chat.addView(input)
+  val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  chat.addView(actions)
+  actions.addView(Button(this).apply { text="Microfon"; setOnClickListener { startMicrophone() } })
+  settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  root.addView(Button(this).apply { text = "Trimite"; setOnClickListener {
+  actions.addView(Button(this).apply { text = "Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
@@ -173,13 +197,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  root.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
-  root.addView(Button(this).apply{text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
-  root.addView(Button(this).apply{text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
-  root.addView(Button(this).apply{text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
-  root.addView(Button(this).apply{text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
-  root.addView(Button(this).apply{text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
-  root.addView(Button(this).apply{text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
+  actions.addView(Button(this).apply { text="STOP"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
+  settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
+  settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
+  settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
+  settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
+  settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
+  settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
+  for(i in 0 until actions.childCount){actions.getChildAt(i).layoutParams=LinearLayout.LayoutParams(0,-2,1f)}
+  for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy)startMicrophone()}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
