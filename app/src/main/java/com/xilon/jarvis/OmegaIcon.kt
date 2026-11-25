@@ -13,6 +13,9 @@ class OmegaIcon(private val kind:String,private val size:Int,private val tint:In
   fun line(a:Float,b:Float,x:Float,y:Float)=c.drawLine(a,b,x,y,p)
   fun path(vararg xy:Float){val q=Path();q.moveTo(xy[0],xy[1]);for(i in 2 until xy.size step 2)q.lineTo(xy[i],xy[i+1]);c.drawPath(q,p)}
   when(kind){
+   "eye"->{val q=Path();q.moveTo(2f,12f);q.quadTo(12f,-2f,22f,12f);q.quadTo(12f,26f,2f,12f);c.drawPath(q,p);c.drawCircle(12f,12f,3f,p)}
+   "record"->{c.drawCircle(12f,12f,9f,p);c.drawCircle(12f,12f,4f,p)}
+   "hand"->{path(7f,12f,7f,5f,10f,5f,10f,12f,10f,2f,13f,2f,13f,12f,13f,5f,16f,5f,16f,13f,19f,9f,21f,11f,18f,20f,9f,22f,3f,14f,5f,12f,7f,15f)}
    "mic"->{c.drawRoundRect(9f,2f,15f,15f,3f,3f,p);c.drawArc(5f,5f,19f,19f,0f,180f,false,p);line(12f,19f,12f,22f);line(8f,22f,16f,22f)}
    "send"->{path(3f,3f,22f,12f,3f,21f,7f,12f,3f,3f);line(7f,12f,22f,12f)}
    "stop"->c.drawRoundRect(5f,5f,19f,19f,2f,2f,p)
