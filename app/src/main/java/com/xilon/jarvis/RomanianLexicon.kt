@@ -48,6 +48,7 @@ object RomanianLexicon {
    corpus?.words?.close()
    corpus = null
    synonymCache.clear()
+   morphologyCache.clear()
    corpusAssets = context.applicationContext.assets
    indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-v3.db")
    indexState = "idle"
@@ -97,6 +98,16 @@ object RomanianLexicon {
  @Volatile private var corpusAssets: android.content.res.AssetManager? = null
  private data class Rule(val prefix: Boolean, val flag: String, val strip: String, val add: String, val condition: Regex, val cross: Boolean, val continuation: String)
  private class Corpus(val words: android.database.sqlite.SQLiteDatabase, val rules: List<Rule>) {
+  private val prefixes = rules.filter { it.prefix }.groupBy { it.add }
+  private val suffixes = rules.filter { !it.prefix }.groupBy { it.add }
+  fun matchingRules(form: String): List<Rule> {
+   val result = ArrayList<Rule>()
+   for (length in 0..form.length) {
+    prefixes[form.take(length)]?.let { result.addAll(it) }
+    suffixes[form.takeLast(length)]?.let { result.addAll(it) }
+   }
+   return result
+  }
   fun flags(word: String): String? = words.rawQuery("SELECT group_concat(flags, '') FROM lex WHERE word=?", arrayOf(word)).use { cursor ->
    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
   }
@@ -211,16 +222,19 @@ object RomanianLexicon {
   val candidates = possible.filter { dictionaryContains(it) }
   return candidates.singleOrNull()
  }
+ private val morphologyCache = object : LinkedHashMap<String,List<String>>(256,0.75f,true) {
+  override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String,List<String>>?): Boolean = size > 256
+ }
  private val synonymCache = object : LinkedHashMap<String, List<String>>(64, 0.75f, true) {
   override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean = size > 64
  }
  fun synonyms(word: String): List<String> {
-  if (indexState != "ready") return emptyList()
+  if (indexState != "ready") return corpusSynonyms(word)
   val key = normalize(word)
   if (key.isBlank() || key.length > 80) return emptyList()
   return synchronized(this) {
    synonymCache[key]?.let { return@synchronized it }
-   val c = corpus ?: return@synchronized emptyList()
+   val c = corpus ?: return@synchronized corpusSynonyms(word)
    val result = linkedSetOf<String>()
    val keys = (listOf(key) + morphologicalRoots(word).map { normalize(it) }).distinct().take(12)
    for (root in keys) {
@@ -237,6 +251,7 @@ object RomanianLexicon {
   return synchronized(this) {
    val c = corpus ?: return@synchronized emptyList()
    val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
+   morphologyCache[w]?.let { return@synchronized it }
    val result = linkedSetOf<String>()
    if (c.flags(w) != null) result.add(w)
    fun reverse(rule: Rule, form: String): String? {
@@ -246,10 +261,10 @@ object RomanianLexicon {
    }
    val flagCache = HashMap<String,String?>()
    fun flags(stem: String): String? = if (flagCache.containsKey(stem)) flagCache[stem] else c.flags(stem).also { flagCache[stem] = it }
-   for (outer in c.rules) {
+   for (outer in c.matchingRules(w)) {
     val intermediate = reverse(outer,w) ?: continue
     if (flags(intermediate)?.contains(outer.flag) == true) result.add(intermediate)
-    for (inner in c.rules) {
+    for (inner in c.matchingRules(intermediate)) {
      val cross = inner.prefix != outer.prefix && inner.cross && outer.cross
      val continuation = inner.continuation.contains(outer.flag)
      if (!cross && !continuation) continue
@@ -260,7 +275,7 @@ object RomanianLexicon {
     }
     if (result.size >= 24) break
    }
-   result.toList()
+   result.toList().also { morphologyCache[w] = it }
   }
  }
  // Synonyms are suggestions only: never silently execute a different action.
@@ -470,6 +485,7 @@ object RomanianLexicon {
      synchronized(this) {
       definitionsDb?.close()
       definitionsDb = opened
+      synonymCache.clear()
       definitionsState = "ready"
      }
     }
@@ -527,7 +543,7 @@ object RomanianLexicon {
  fun compoundPlan(text: String): List<PlannedAction>? {
   val parts = split(text)
   if (parts.size !in 2..20 || parts.any { negated(it) }) return null
-  return parts.map { NaturalToolCommands.parse(it) ?: return null }
+  return parts.map { parse(it) ?: NaturalToolCommands.parse(it) ?: return null }
  }
  fun translateKnown(text: String): String? = entries[normalize(text)]?.english ?: glossary[normalize(text)]
 }
