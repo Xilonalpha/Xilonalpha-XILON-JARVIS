@@ -334,9 +334,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val elapsed=(android.os.SystemClock.elapsedRealtimeNanos()-start)/1000000L
      check(!model.isCancelled()){"Test anulat"}
      check(output.isNotBlank()){"Răspuns gol"}
-     val record=org.json.JSONObject().put("elapsed_ms",elapsed).put("characters",output.length).put("threads",2).put("context",512).put("max_tokens",64).put("timestamp",System.currentTimeMillis())
+     val record=org.json.JSONObject().put("elapsed_ms",elapsed).put("characters",output.length).put("tokens",model.generatedTokens).put("first_token_ms",model.firstTokenNanos/1000000).put("threads",2).put("context",512).put("max_tokens",64).put("timestamp",System.currentTimeMillis())
      if(selected!=null)check(getSharedPreferences("model_benchmarks",MODE_PRIVATE).edit().putString(selected,record.toString()).commit()){"Rezultat nesalvat"}
-     "Durată: "+elapsed+" ms\nCaractere generate: "+output.length+"\nFire CPU: 2\nContext: 512\nLimită tokeni: 64\n\nRăspuns:\n"+output
+     "Durată: "+elapsed+" ms\nTokeni generați: "+model.generatedTokens+"\nPrimul token: "+model.firstTokenNanos/1000000+" ms\nTokeni/secundă (total): "+String.format(java.util.Locale.ROOT,"%.2f",model.generatedTokens*1000.0/maxOf(1L,elapsed))+"\nCaractere generate: "+output.length+"\nFire CPU: 2\nContext: 512\nLimită tokeni: 64\n\nRăspuns:\n"+output
     }catch(e:Exception){"Benchmark nefinalizat: "+e.message}catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}
     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text="Benchmark încheiat.";report("Rezultat benchmark"){result}}}
    }
