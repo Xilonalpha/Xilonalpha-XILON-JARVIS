@@ -744,7 +744,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         busy=true;refreshOmegaStatus()
         worker.execute{
          val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,true)}}.fold(
-          {it.status.toString()+" / "+it.verified+"\n"+it.message},
+          {it.status.toString()+" / "+it.verified+"\n"+it.message+(it.detail?.let{d->"\n"+d}?:"")},
           {"Execuție eșuată: "+it.javaClass.simpleName})
          runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append("JARVIS: "+result)}}
         }
