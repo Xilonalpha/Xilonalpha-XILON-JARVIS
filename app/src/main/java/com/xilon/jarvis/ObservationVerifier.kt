@@ -12,6 +12,9 @@ object ObservationVerifier {
    "ora" -> java.text.DateFormat.getTimeInstance().apply{isLenient=false}.let{f->val p=java.text.ParsePosition(0);f.parse(answer,p)!=null && p.index==answer.length}
    "profil dispozitiv" -> answer.startsWith("Profile(") && answer.contains("thermalStatus=") && answer.contains("totalRamGb=")
    "lista aplicații" -> answer=="Nicio aplicație vizibilă." || answer.lines().all{Regex("""[^\n]+ \([A-Za-z0-9_.]+\)""").matches(it)}
+   "volum" -> Regex("""Volum multimedia: (\d+)/(\d+)""").matchEntire(answer)?.let{val a=it.groupValues[1].toIntOrNull();val b=it.groupValues[2].toIntOrNull();a!=null&&b!=null&&a in 0..b}==true
+   "rețea" -> answer in setOf("Fără conexiune activă","Conexiune validată","Conexiune nevalidată")
+   "încărcare" -> answer in setOf("Se încarcă","Încărcată","Nu se încarcă","Se descarcă")
    else -> false
   }
  }
