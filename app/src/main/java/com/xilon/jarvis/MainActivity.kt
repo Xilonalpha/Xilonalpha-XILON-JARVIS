@@ -169,6 +169,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
+  settings.addView(Button(this).apply { text="Vision: importă proiector GGUF";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},191)} })
+  settings.addView(Button(this).apply { text="Vision: întreabă despre imagine (VLM)";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="image/*";addCategory(Intent.CATEGORY_OPENABLE)},192)} })
   settings.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
   transcript = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(8),dp(12),dp(8),dp(12)) }
   scroll = ScrollView(this).apply { addView(transcript) }
@@ -1855,6 +1857,54 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(requestCode==190){super.onActivityResult(requestCode,resultCode,data);val uri=data?.data;if(resultCode==RESULT_OK && uri!=null && !busy){stopAirTouch();stopLiveVision();busy=true;worker.execute{val message=runCatching{LocalPose.install(this,uri);"Model poziție corporală instalat și validat."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=message}}}};return}
 
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==191 || requestCode==192){
+   if(resultCode!=RESULT_OK || busy)return
+   val uri=data?.data?:return
+   val model=nativeModel ?: run{append("Încarcă întâi modelul GGUF multimodal.");return}
+   if(requestCode==191){
+    busy=true
+    worker.execute{
+     val temp=java.io.File(filesDir,"vision-projector-"+java.util.UUID.randomUUID()+".gguf")
+     val result=runCatching{
+      contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->
+       val buf=ByteArray(65536);var total=0L
+       while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=2L*1024*1024*1024){"Proiector prea mare"};dst.write(buf,0,n)}
+      }}?:error("Fișier inaccesibil")
+      GgufHeader.inspect(temp)
+      check(model.supportsVisionProjector(temp.absolutePath)){"Proiector incompatibil sau VLM dezactivat în APK"}
+      val prefs=getSharedPreferences("jarvis_vlm",MODE_PRIVATE)
+      val old=prefs.getString("projector",null)
+      check(prefs.edit().putString("projector",temp.name).commit()){"Salvare configurare eșuată"}
+      old?.takeIf{it.startsWith("vision-projector-") && it!=temp.name}?.let{java.io.File(filesDir,it).delete()}
+      "Proiector VLM validat pentru modelul curent."
+     }.getOrElse{temp.delete();"Import VLM eșuat: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }
+   }else{
+    val name=getSharedPreferences("jarvis_vlm",MODE_PRIVATE).getString("projector",null)
+    val projector=name?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
+    if(projector==null){append("Importă întâi proiectorul VLM.");return}
+    val question=EditText(this).apply{setText("Descrie imaginea în limba română.")}
+    android.app.AlertDialog.Builder(this).setTitle("Întrebare despre imagine").setView(question).setNegativeButton("Anulează",null).setPositiveButton("Analizează"){_,_->
+     if(!busy && !isDestroyed){
+      val prompt=question.text.toString();busy=true;agentCancelled=false;model.resetCancellation()
+      worker.execute{
+       val result=runCatching{
+        val bounds=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+        contentResolver.openInputStream(uri)?.use{android.graphics.BitmapFactory.decodeStream(it,null,bounds)}
+        require(bounds.outWidth>0 && bounds.outHeight>0){"Imagine invalidă"}
+        var sample=1
+        while(maxOf(bounds.outWidth,bounds.outHeight)/sample>1024)sample*=2
+        val bitmap=contentResolver.openInputStream(uri)?.use{android.graphics.BitmapFactory.decodeStream(it,null,android.graphics.BitmapFactory.Options().apply{inSampleSize=sample})}?:error("Imagine inaccesibilă")
+        try{model.describeImage(projector.absolutePath,bitmap,prompt)}finally{bitmap.recycle()}
+       }
+       runOnUiThread{if(!isDestroyed){busy=false;if(!agentCancelled && !model.isCancelled())append(result.fold({"VLM (interpretare AI): "+it},{"VLM: "+it.message}))}}
+      }
+     }
+    }.show()
+   }
+   return
+  }
   if(requestCode==57){
    if(resultCode!=RESULT_OK||busy)return
    @Suppress("DEPRECATION")
