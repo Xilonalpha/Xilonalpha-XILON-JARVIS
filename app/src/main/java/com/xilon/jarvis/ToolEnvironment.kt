@@ -9,6 +9,7 @@ object ToolEnvironment {
  private set
  fun initialize(ctx:Context) {
   context=ctx.applicationContext
+  runCatching { RomanianLexicon.initialize(context) }.onFailure { android.util.Log.e("RomanianLexicon", "Lexicon load failed", it) }
   ToolRegistry.registerAll(listOf(ControlBrightnessTool(),ControlVolumeTool(),ControlFlashlightTool(),ControlWifiTool(),ControlBluetoothTool(),OpenUrlTool(),YoutubeSearchTool(),MapsNavigateTool(),SetAlarmTool(),SetTimerTool(),MediaPlayPauseTool(),ToggleDndTool(),OpenAppTool(),LaunchIntentTool(),ShareContentTool(),CallContactTool(),SendSmsTool(),WhatsAppMessageTool(),TelegramMessageTool(),SendEmailTool(),GetLocationTool(),ReadCalendarTool(),FindFileTool(),OpenFileTool(),ShareFileTool(),ListAppsTool(),ReadScreenTool(),FindElementTool(),PressBackTool(),PressHomeTool(),PressRecentsTool(),PressNotificationsTool(),WaitTool(),WaitForChangeTool(),SwipeTool(),ScrollTool(),CloseAppTool(),TakeScreenshotTool(),CreateCalendarEventTool(),TapTool(),DoubleTapTool(),LongPressTool(),TypeTextTool(),ClearTextTool(),CopyTextTool(),PasteTool(),ReadNotificationsTool()))
  }
  fun validate(name:String,args:JsonObject):ToolResult? {
