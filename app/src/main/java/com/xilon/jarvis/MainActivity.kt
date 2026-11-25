@@ -58,7 +58,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
  @Volatile private var agentCancelled=false
+ private var composerUpdate: (() -> Unit)? = null
  private var busy = false
+  set(value){field=value;runOnUiThread{if(!isDestroyed)composerUpdate?.invoke()}}
   set(value){field=value;if(::omegaCore.isInitialized)omegaCore.active=value;refreshOmegaStatus()}
  private var ocrText:String?=null
  private var ocrAt=0L
@@ -328,8 +330,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
-  val composerState=object:Runnable{override fun run(){if(isDestroyed)return;stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE;composer.postDelayed(this,200)}}
-  composer.post(composerState)
+  composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
+  composerUpdate?.invoke()
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
@@ -760,7 +762,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }
   val params=LinearLayout.LayoutParams(-2,-2).apply{gravity=if(user)android.view.Gravity.END else android.view.Gravity.START;bottomMargin=dp(10)}
-  transcript.addView(bubble,params)
+  val messageRow=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=if(user)android.view.Gravity.END else android.view.Gravity.START}
+  messageRow.addView(bubble,params)
+  if(!user){
+   val controls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+   fun action(label:String,run:()->Unit)=Button(this).apply{text=label;isAllCaps=false;textSize=12f;setTextColor(0xff69d4f2.toInt());background=null;minWidth=0;minimumWidth=0;setOnClickListener{run()}}
+   controls.addView(action("Copiază"){val clipboard=getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager;clipboard.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS",bubble.text));android.widget.Toast.makeText(this,"Text copiat",android.widget.Toast.LENGTH_SHORT).show()})
+   controls.addView(action("Ascultă"){voice.speak(bubble.text.toString().removePrefix("JARVIS:").trim())?.let{append(it)}})
+   messageRow.addView(controls)
+  }
+  transcript.addView(messageRow,LinearLayout.LayoutParams(-1,-2))
   while(transcript.childCount>150)transcript.removeViewAt(0)
   scroll.post{scroll.fullScroll(ScrollView.FOCUS_DOWN)}
   return bubble
