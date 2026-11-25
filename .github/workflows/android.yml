@@ -20,14 +20,14 @@ jobs:
         id: romanian-cache
         uses: actions/cache@v4
         with:
-          path: app/src/main/assets/ro_wiktionary
-          key: romanian-corpus-v2-${{ hashFiles('tools/import_romanian_wiktionary.py') }}
+          path: ${{ runner.temp }}/romanian-corpus
+          key: romanian-corpus-v3-${{ hashFiles('tools/import_romanian_wiktionary.py') }}
       - name: Prepare offline Romanian corpus
         if: steps.romanian-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          dest=app/src/main/assets/ro_wiktionary
+          dest="$RUNNER_TEMP/romanian-corpus"
           mkdir -p "$dest"
           source="$RUNNER_TEMP/romanian-wiktionary.jsonl"
           url='https://kaikki.org/dictionary/Romanian/kaikki.org-dictionary-Romanian.jsonl'
@@ -41,6 +41,12 @@ jobs:
           sha256sum "$source" | cut -d ' ' -f 1 > "$dest/source.sha256"
           cp tools/import_romanian_wiktionary.py "$dest/importer.py"
           printf '%s\n' 'English Wiktionary contributors via Kaikki/Wiktextract' 'https://kaikki.org/dictionary/Romanian/index.html' 'Derived lexical data: CC BY-SA 4.0' 'https://creativecommons.org/licenses/by-sa/4.0/' 'https://en.wiktionary.org/wiki/Wiktionary:Copyrights' 'Converted to JSONL; source links in each record.' > "$dest/ATTRIBUTION.txt"
+      - name: Stage cached corpus for APK
+        run: |
+          set -euo pipefail
+          dest=app/src/main/assets/ro_wiktionary
+          mkdir -p "$dest"
+          cp "$RUNNER_TEMP/romanian-corpus/"* "$dest/"
       - name: Validate packaged corpus
         run: |
           set -euo pipefail
@@ -65,9 +71,12 @@ jobs:
         run: |
           set -euo pipefail
           dest=app/src/main/assets/ro_wiktionary
+          cp "$dest/source.sha256" "$dest/upstream.sha256"
+          sha256sum "$dest/lexicon.jsonl" | cut -d ' ' -f 1 > "$dest/source.sha256"
           gzip -n -6 "$dest/lexicon.jsonl"
           gzip -t "$dest/lexicon.jsonl.gz"
           ls -lh "$dest/lexicon.jsonl.gz"
+          test "$(gzip -dc "$dest/lexicon.jsonl.gz" | sha256sum | cut -d ' ' -f 1)" = "$(cat "$dest/source.sha256")"
       - run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
