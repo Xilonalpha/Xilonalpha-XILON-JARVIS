@@ -27,4 +27,10 @@ object SkillRunner {
     }
 
 
+
+    suspend fun verifyChanged(obs: ScreenObservation?): Boolean {
+        delay(420)
+        val after = LocalScreen.observe() ?: return false
+        return obs != null && after.packageName == obs.packageName && after.fingerprint() != obs.fingerprint()
+    }
 }
