@@ -15,9 +15,9 @@ class LocalScreen:AccessibilityService(){
   fun resolve(target:ElementTarget):ScreenElement? { val svc=active?:return null;val obs=svc.structuredScreen()?:return null;if(target.pkg!=null&&target.pkg!=obs.packageName)return null;return ElementResolver.resolve(obs,target,svc.resources.displayMetrics.widthPixels,svc.resources.displayMetrics.heightPixels) }
  }
  override fun onServiceConnected(){active=this}
- override fun onAccessibilityEvent(event:AccessibilityEvent?){}
+ override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
  override fun onInterrupt(){}
- override fun onDestroy(){if(active===this)active=null;super.onDestroy()}
+ override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
  private fun clickExact(target:ElementTarget):Boolean{
   if(target.pkg.isNullOrBlank()||!target.hasNode)return false
   val root=rootInActiveWindow?:return false
