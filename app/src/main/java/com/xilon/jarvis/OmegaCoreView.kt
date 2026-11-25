@@ -6,18 +6,22 @@ import kotlin.math.*
 class OmegaCoreView(context:Context):View(context){
  var active=false
   set(value){field=value;invalidate()}
+ var listening=false
+  set(value){field=value;invalidate()}
+ var level=0f
+  set(value){field=value.coerceIn(0f,1f);invalidate()}
  private var phase=0f
  private var lastFrame=0L
  private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
  override fun onDraw(canvas:Canvas){
   super.onDraw(canvas)
-  val radius=min(width,height)*0.44f
+  val radius=min(width,height)*0.44f*(if(listening)0.94f+level*0.06f else 1f)
   if(radius<=0)return
   canvas.save();canvas.translate(width/2f,height/2f);canvas.scale(radius/100,radius/100)
   val now=android.os.SystemClock.uptimeMillis()
   val delta=if(lastFrame==0L)0L else (now-lastFrame).coerceIn(0L,100L)
   lastFrame=now
-  phase=(phase+delta*(if(active)0.085f else 0.015f))%360f
+  phase=(phase+delta*(if(listening)0.025f+level*0.09f else if(active)0.085f else 0.015f))%360f
   paint.style=Paint.Style.FILL
   paint.shader=RadialGradient(0f,0f,100f,intArrayOf(if(active)0xdd30cfff.toInt() else 0x9930CFFF.toInt(),0x0030CFFF),null,Shader.TileMode.CLAMP)
   canvas.drawCircle(0f,0f,100f,paint);paint.shader=null
@@ -34,6 +38,6 @@ class OmegaCoreView(context:Context):View(context){
   paint.alpha=255;paint.strokeWidth=2.5f;paint.color=0xffa6f4ff.toInt()
   val path=Path().apply{moveTo(-32f,0f);lineTo(-18f,0f);lineTo(-9f,-23f);lineTo(0f,25f);lineTo(11f,-15f);lineTo(19f,0f);lineTo(32f,0f)}
   canvas.drawPath(path,paint);canvas.restore()
-  if(isShown && windowVisibility==VISIBLE)postInvalidateDelayed(if(active)32 else 80)
+  if(isShown && windowVisibility==VISIBLE)postInvalidateDelayed(if(active || listening)32 else 80)
  }
 }
