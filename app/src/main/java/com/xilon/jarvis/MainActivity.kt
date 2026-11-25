@@ -465,9 +465,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(busy)return@setOnClickListener
    val enabled=runCatching{Class.forName("com.xilon.jarvis.KokoroVoice")}.isSuccess
    val entry=ModelCatalog.kokoro;val downloads=ModelDownloads(this@MainActivity);val uri=downloads.uri(entry)
-   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Kokoro TTS • engleză").setMessage(downloads.status(entry)+"\n"+(if(enabled)"Motor inclus în APK." else "Necesită profilul enableSherpa=true.")+"\n"+(if(java.io.File(filesDir,"kokoro").isDirectory)"Director instalat." else "Neinstalat.")+"\nRezervă necesară: 1 GiB. Integritate criptografică neverificată.")
+   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Kokoro TTS • engleză").setMessage(downloads.status(entry)+"\n"+(if(enabled)"Motor inclus în APK." else "Necesită profilul enableSherpa=true.")+"\n"+(if(java.io.File(filesDir,"kokoro").isDirectory)"Director instalat." else "Neinstalat.")+"\nRezervă necesară: 1 GiB. Instalarea din catalog necesită SHA-256 publicat de GitHub.")
    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
-    val result=runCatching{KokoroArchive.install(this,uri);"Pachet extras și instalat; sinteza vocală rămâne de testat."}.getOrElse{"Instalare eșuată: "+it.message}
+    val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm);KokoroArchive.install(this,uri);"Pachet extras și instalat; sinteza vocală rămâne de testat."}.getOrElse{"Instalare eșuată: "+it.message}
     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
    }}}
    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy)if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
