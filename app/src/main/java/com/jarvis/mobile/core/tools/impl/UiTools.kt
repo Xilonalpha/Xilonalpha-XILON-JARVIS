@@ -199,3 +199,89 @@ class ScrollTool : Tool(
     }
 }
 
+
+class TapTool : Tool(
+    ToolSpec(
+        "tap", "Tap an on-screen element. Pass elementIdx from read_screen, or the visible text of the target. As a last resort pass exact screen coordinates x/y (only for targets you can see in the screen block).",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index from the last screen observation"),
+            com.jarvis.mobile.core.tools.ParamSpec("text", "string", false, "visible text of the target"),
+            com.jarvis.mobile.core.tools.ParamSpec("viewId", "string", false, "view id resource name"),
+            com.jarvis.mobile.core.tools.ParamSpec("x", "int", false, "last-resort: exact x coordinate of a visible target"),
+            com.jarvis.mobile.core.tools.ParamSpec("y", "int", false, "last-resort: exact y coordinate of a visible target"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        val fresh = T.freshObserve(0) ?: return ToolResult.fail("No screen")
+        val planned = ctx.observation ?: return ToolResult.fail("No initial observation")
+        if(fresh.packageName != planned.packageName || fresh.fingerprint()!=planned.fingerprint()) return ToolResult.fail("Screen changed; reobserve")
+        val idx = T.int(args,"elementIdx")
+        val label = T.str(args,"text")
+        val id = T.str(args,"viewId")
+        if(idx==null && label==null && id==null) return ToolResult.fail("Specify a visible element")
+        val el = fresh.elements.filter { e -> (idx==null || e.idx==idx) && (label==null || e.text==label || e.desc==label) && (id==null || e.viewId==id) && !e.isPassword && !e.editable }.singleOrNull() ?: return ToolResult.fail("Target missing or ambiguous")
+        val ok = svc.elementGesture(el.centerX,el.centerY,"tap",fresh.packageName,fresh.fingerprint())
+        return if(ok) ToolResult.ok("Gesture dispatched.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
+    }
+}
+
+class DoubleTapTool : Tool(
+    ToolSpec(
+        "double_tap", "Double-tap a point on screen. This is the LIKE gesture in Instagram/YouTube/Facebook feeds and reels.",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index from read_screen (e.g. the video/image element)"),
+            com.jarvis.mobile.core.tools.ParamSpec("text", "string", false, "visible text of the target"),
+            com.jarvis.mobile.core.tools.ParamSpec("x", "int", false, "exact x of a visible target (e.g. center of the video)"),
+            com.jarvis.mobile.core.tools.ParamSpec("y", "int", false, "exact y of a visible target"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        val fresh = T.freshObserve(0) ?: return ToolResult.fail("No screen")
+        val planned = ctx.observation ?: return ToolResult.fail("No initial observation")
+        if(fresh.packageName != planned.packageName || fresh.fingerprint()!=planned.fingerprint()) return ToolResult.fail("Screen changed; reobserve")
+        val idx = T.int(args,"elementIdx")
+        val label = T.str(args,"text")
+        val id = T.str(args,"viewId")
+        if(idx==null && label==null && id==null) return ToolResult.fail("Specify a visible element")
+        val el = fresh.elements.filter { e -> (idx==null || e.idx==idx) && (label==null || e.text==label || e.desc==label) && (id==null || e.viewId==id) && !e.isPassword && !e.editable }.singleOrNull() ?: return ToolResult.fail("Target missing or ambiguous")
+        val ok = svc.elementGesture(el.centerX,el.centerY,"double",fresh.packageName,fresh.fingerprint())
+        return if(ok) ToolResult.ok("Gesture dispatched.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
+    }
+}
+
+class LongPressTool : Tool(
+    ToolSpec(
+        "long_press", "Long-press an on-screen element.",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("elementIdx", "int", false, "index from read_screen"),
+            com.jarvis.mobile.core.tools.ParamSpec("text", "string", false, "visible text of the target"),
+            com.jarvis.mobile.core.tools.ParamSpec("x", "int", false, "x coordinate of a visible target"),
+            com.jarvis.mobile.core.tools.ParamSpec("y", "int", false, "y coordinate of a visible target"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility disconnected")
+        val fresh = T.freshObserve(0) ?: return ToolResult.fail("No screen")
+        val planned = ctx.observation ?: return ToolResult.fail("No initial observation")
+        if(fresh.packageName != planned.packageName || fresh.fingerprint()!=planned.fingerprint()) return ToolResult.fail("Screen changed; reobserve")
+        val idx = T.int(args,"elementIdx")
+        val label = T.str(args,"text")
+        val id = T.str(args,"viewId")
+        if(idx==null && label==null && id==null) return ToolResult.fail("Specify a visible element")
+        val el = fresh.elements.filter { e -> (idx==null || e.idx==idx) && (label==null || e.text==label || e.desc==label) && (id==null || e.viewId==id) && !e.isPassword && !e.editable }.singleOrNull() ?: return ToolResult.fail("Target missing or ambiguous")
+        val ok = svc.elementGesture(el.centerX,el.centerY,"long",fresh.packageName,fresh.fingerprint())
+        return if(ok) ToolResult.ok("Gesture dispatched.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
+    }
+}
+
