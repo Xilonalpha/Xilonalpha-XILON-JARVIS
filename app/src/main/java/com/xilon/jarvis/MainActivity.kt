@@ -377,12 +377,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   settings.addView(Button(this).apply{text="Catalog OCR";setOnClickListener{
    if(busy)return@setOnClickListener
-   val languages=listOf("ron" to "Română • 2,38 MB","eng" to "Engleză • 4,11 MB")
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hugging Face • OCR").setItems(languages.map{(lang,label)->label+if(java.io.File(filesDir,"tesseract/tessdata/$lang.traineddata").isFile)" • fișier instalat" else " • lipsește"}.toTypedArray()){_,index->
-    val lang=languages[index].first
-    android.app.AlertDialog.Builder(this@MainActivity).setTitle(languages[index].second).setMessage("Tesseract LSTM offline. Descarcă fișierul, apoi importă-l.")
-     .setPositiveButton("Descarcă"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/lm-kit/tessdata-fast/resolve/83ff76b97461395f257255720bf7f3957606dbb5/$lang.traineddata?download=true")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
-     .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},if(lang=="ron")50 else 51)}.setNegativeButton("Anulează",null).show()
+   val downloads=ModelDownloads(this@MainActivity)
+   val entries=ModelCatalog.ocr
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hugging Face • OCR").setItems(entries.map{it.name+" • "+downloads.status(it)}.toTypedArray()){_,index->
+    val entry=entries[index];val lang=entry.file.substringBefore(".");val uri=downloads.uri(entry)
+    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(downloads.status(entry)+"\n"+if(java.io.File(filesDir,"tesseract/tessdata/"+entry.file).isFile)"Fișier instalat" else "Fișier neinstalat")
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{LocalOcr.install(this,uri,lang);"Date OCR instalate; validarea are loc la recunoaștere."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message})}
+    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+    dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Catalog voce Sherpa";setOnClickListener{
