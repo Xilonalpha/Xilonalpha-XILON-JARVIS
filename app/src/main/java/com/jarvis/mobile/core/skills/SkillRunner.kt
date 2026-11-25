@@ -24,7 +24,7 @@ object SkillRunner {
                     (target.text == null || candidate.text == target.text) &&
                     (target.desc == null || candidate.desc == target.desc)
                 }.singleOrNull()
-                if (el != null && el.interactive && !el.isPassword) return obs to el
+                if (el != null && el.clickable && !el.isPassword) return obs to el
             }
             if (android.os.SystemClock.elapsedRealtime() >= deadline) return null
             delay(POLL_MS)
@@ -34,9 +34,14 @@ object SkillRunner {
 
 
     suspend fun verifyChanged(obs: ScreenObservation?): Boolean {
-        delay(420)
-        val after = LocalScreen.observe() ?: return false
-        return obs != null && after.packageName == obs.packageName && after.fingerprint() != obs.fingerprint()
+        if(obs==null)return false
+        val deadline=android.os.SystemClock.elapsedRealtime()+2500L
+        do {
+            delay(150)
+            val after=LocalScreen.observe()
+            if(after!=null && after.packageName==obs.packageName && after.fingerprint()!=obs.fingerprint())return true
+        }while(android.os.SystemClock.elapsedRealtime()<deadline)
+        return false
     }
 
  data class ActionOutcome(val ok:Boolean,val message:String,val verified:Boolean)
@@ -46,6 +51,7 @@ object SkillRunner {
   if(!el.clickable)return ActionOutcome(false,"Elementul nu este clicabil",false)
   val exact=ElementTarget(text=el.text,desc=el.desc,viewId=el.viewId,pkg=found.first.packageName)
   if(!exact.hasNode||!confirm(exact))return ActionOutcome(false,"Acțiune neautorizată",false)
+  kotlinx.coroutines.currentCoroutineContext().ensureActive()
   val before=LocalScreen.observe()?:return ActionOutcome(false,"Ecran indisponibil",false)
   if(before.packageName!=exact.pkg||!LocalScreen.clickConfirmed(exact))return ActionOutcome(false,"Țintă schimbată, ambiguă sau inaccesibilă",false)
   val changed=verifyChanged(before)
