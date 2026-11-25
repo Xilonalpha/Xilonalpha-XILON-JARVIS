@@ -137,6 +137,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
   composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer)
   actions.addView(Button(this).apply { text="🎙";contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } })
+  settings.addView(Button(this).apply { text="Înregistrează demonstrație";setOnClickListener{
+   if(!busy){
+    val field=EditText(this@MainActivity).apply{hint="Pachet Android (ex. com.example.app)";setSingleLine(true)}
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație locală").setMessage("Înregistrează numai identificatorii butoanelor din aplicația aleasă, timp de 60 secunde. Revino aici pentru oprire.").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Pornește"){_,_->
+     val pkg=field.text.toString().trim()
+     if(!pkg.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))||pkg==packageName){append("Pachet invalid.");return@setPositiveButton}
+     if(LocalScreen.observe()==null){append("Activează serviciul de accesibilitate.");return@setPositiveButton}
+     com.jarvis.mobile.core.skills.SkillRecorder.start(pkg)
+     append("Înregistrare pornită pentru "+pkg+". Revino în maximum 60 secunde.")
+    }.show()
+   }
+  } })
+  settings.addView(Button(this).apply { text="Oprește și inspectează demonstrația";setOnClickListener{
+   val steps=com.jarvis.mobile.core.skills.SkillRecorder.stop()
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație: "+steps.size+" acțiuni").setMessage(steps.mapIndexed{index,target->"${index+1}. ${target.pkg}: ${target.viewId}"}.joinToString("\n").ifBlank{"Nicio apăsare capturată."}).setPositiveButton("Închide",null).show()
+  } })
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
@@ -725,6 +741,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onStop(){kokoroVoice?.stop();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  com.jarvis.mobile.core.skills.SkillRecorder.stop()
   screenHandler.removeCallbacksAndMessages(null);observedScreen=null
   stopWake()
   stopAirTouch()
