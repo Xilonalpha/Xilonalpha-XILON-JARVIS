@@ -315,7 +315,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      append("Dicționar local: "+RomanianLexicon.dictionaryStatus()+"\nCorpus Wiktionary: "+RomanianLexicon.definitionsStatus())
      return@setOnClickListener
     }
-    val languagePrefix=listOf("analizeaza limba ","corecteaza textul ","sinonime pentru ","analizeaza gramatical ","definitii pentru ").firstOrNull{normalizedRomanian.startsWith(it)}
+    val languagePrefix=listOf("analizeaza limba ","corecteaza textul ","sinonime pentru ", "analizeaza gramatical ","analizeaza propozitia ","analizeaza comanda ","definitii pentru ").firstOrNull{normalizedRomanian.startsWith(it)}
     if(languagePrefix!=null){
      val term=q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""}
      if(term.isBlank()){append("Introdu textul de analizat.");return@setOnClickListener}
@@ -326,6 +326,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
         RomanianLexicon.synonyms(term).joinToString(", ").ifBlank{"Nu am găsit sinonime în corpusul local."}
        }else if(languagePrefix=="definitii pentru "){
         RomanianLexicon.englishDefinitions(term).joinToString("\n").ifBlank{"Nu există definiții locale disponibile. Corpus: "+RomanianLexicon.definitionsStatus()}
+       }else if(languagePrefix=="analizeaza propozitia " || languagePrefix=="analizeaza comanda "){
+        RomanianLexicon.analyzeClauses(term).mapIndexed { i, clause ->
+         "${i+1}. ${clause.text}\n"+ (if(clause.negated) "Negație detectată" else if(clause.recognized) "Comandă lexicală recunoscută" else "Intenție neconfirmată") + if(clause.grammar.isEmpty()) "" else "\n"+clause.grammar.joinToString("\n")
+        }.joinToString("\n\n")+"\nAnaliză fără executare."
        }else if(languagePrefix=="analizeaza gramatical "){
         RomanianLexicon.grammarReport(term).joinToString("\n").ifBlank{"Nu există analize gramaticale disponibile. Corpus: "+RomanianLexicon.definitionsStatus()}
        }else{
@@ -358,6 +362,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        if(term.isBlank()) "Introdu textul de tradus."
        else if(translation!=null && !translation.startsWith("Potriviri lexicale RO: ")) translation
        else if(model!=null && term.length<=1200) {
+        model.resetCancellation()
         val info=android.app.ActivityManager.MemoryInfo()
         getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
         val context=if(info.lowMemory || info.availMem<768L*1048576) 512 else if(info.availMem<2048L*1048576) 1024 else 2048
@@ -383,12 +388,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
      append("Comandă cu negație: nu execut acțiuni.")
      return@setOnClickListener
     }
-    val offlinePlan=if(RegistryIntent.compound(q))RomanianLexicon.compoundPlan(q) else null
+    val lexicalCompound=RomanianLexicon.split(q).size>1
+    val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(q) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
-    val lexicalTool=RomanianLexicon.parse(q)
+    val lexicalTool=if(lexicalCompound) null else RomanianLexicon.parse(q)
     if(lexicalTool!=null){executeRequestedTool(lexicalTool.tool,lexicalTool.args);return@setOnClickListener}
     val naturalTool=NaturalToolCommands.parse(q)
-    if(naturalTool!=null && !RegistryIntent.compound(q)){
+    if(naturalTool!=null && !lexicalCompound && !RegistryIntent.compound(q)){
      executeRequestedTool(naturalTool.tool,naturalTool.args)
      return@setOnClickListener
     }
