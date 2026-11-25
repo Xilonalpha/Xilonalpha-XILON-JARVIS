@@ -51,12 +51,15 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(!cancel){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  auto progress=e->GetMethodID(e->GetObjectClass(self),"publishProgress","([B)V");
  if(!progress){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ auto tokenEvent=e->GetMethodID(e->GetObjectClass(self),"publishToken","()V");
+ if(!tokenEvent){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  for(int i=0;i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   if(llama_decode(ctx,batch)!=0){ok=false;break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
   char piece[1024];int len=llama_token_to_piece(v,t,piece,sizeof(piece),0,false);
   if(len<0){ok=false;break;}out.append(piece,len);
+  e->CallVoidMethod(self,tokenEvent);if(e->ExceptionCheck()){ok=false;break;}
   auto partial=e->NewByteArray(out.size());
   if(!partial){ok=false;break;}
   e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
