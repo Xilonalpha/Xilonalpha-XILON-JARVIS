@@ -2,6 +2,8 @@
 #include <llama.h>
 #ifdef XILON_VLM
 #include <mtmd.h>
+#include <mtmd-helper.h>
+#include <memory>
 #endif
 #include <vector>
 #include <string>
@@ -212,5 +214,68 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_xilon_jarvis_NativeModel_probeVis
  const bool supported=mtmd_support_vision(vision);mtmd_free(vision);return supported?JNI_TRUE:JNI_FALSE;
 #else
  return JNI_FALSE;
+#endif
+}
+
+// Single-image inference; uses a separate context to avoid contaminating text history.
+extern "C" JNIEXPORT jbyteArray JNICALL Java_com_xilon_jarvis_NativeModel_inferImage(JNIEnv* e,jobject self,jlong h,jstring projector,jbyteArray rgb,jint width,jint height,jbyteArray question,jint context,jint limit){
+#ifdef XILON_VLM
+ auto* state=reinterpret_cast<ModelState*>(h);
+ if(!state || !projector || !rgb || !question || width<1 || height<1 || width>1024 || height>1024 || e->GetArrayLength(rgb)!=width*height*3){fail(e,"Invalid image input");return nullptr;}
+ if(state->context){llama_free(state->context);state->context=nullptr;}
+ const char* path=e->GetStringUTFChars(projector,nullptr);if(!path)return nullptr;
+ auto mp=mtmd_context_params_default();mp.use_gpu=false;mp.warmup=false;mp.n_threads=2;
+ std::unique_ptr<mtmd_context,decltype(&mtmd_free)> vision(mtmd_init_from_file(path,state->model,mp),mtmd_free);
+ e->ReleaseStringUTFChars(projector,path);
+ if(!vision || !mtmd_support_vision(vision.get())){fail(e,"Incompatible vision projector");return nullptr;}
+ std::vector<unsigned char> pixels(width*height*3);
+ e->GetByteArrayRegion(rgb,0,pixels.size(),reinterpret_cast<jbyte*>(pixels.data()));
+ std::unique_ptr<mtmd_bitmap,decltype(&mtmd_bitmap_free)> bitmap(mtmd_bitmap_init(width,height,pixels.data()),mtmd_bitmap_free);
+ if(!bitmap){fail(e,"Image allocation failed");return nullptr;}
+ std::string body(e->GetArrayLength(question),'\0');
+ e->GetByteArrayRegion(question,0,body.size(),reinterpret_cast<jbyte*>(body.data()));
+ body=std::string(mtmd_get_marker(vision.get()))+"\n"+body;
+ llama_chat_message msg{"user",body.c_str()};
+ const char* tmpl=llama_model_chat_template(state->model,nullptr);
+ if(!tmpl){fail(e,"Vision model requires chat template");return nullptr;}
+ int length=llama_chat_apply_template(tmpl,&msg,1,true,nullptr,0);
+ if(length<=0){fail(e,"Vision chat template failed");return nullptr;}
+ std::vector<char> prompt(length+1);
+ int written=llama_chat_apply_template(tmpl,&msg,1,true,prompt.data(),prompt.size());
+ if(written<=0 || written>length){fail(e,"Vision prompt failed");return nullptr;}
+ mtmd_input_text input{prompt.data(),static_cast<size_t>(written),true,true};
+ const mtmd_bitmap* images[]={bitmap.get()};
+ std::unique_ptr<mtmd_input_chunks,decltype(&mtmd_input_chunks_free)> chunks(mtmd_input_chunks_init(),mtmd_input_chunks_free);
+ if(!chunks || mtmd_tokenize(vision.get(),chunks.get(),&input,images,1)!=0){fail(e,"Vision tokenization failed");return nullptr;}
+ auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=256;cp.n_ubatch=128;cp.n_threads=2;cp.n_threads_batch=2;
+ std::unique_ptr<llama_context,decltype(&llama_free)> ctx(llama_init_from_model(state->model,cp),llama_free);
+ if(!ctx || mtmd_helper_get_n_tokens(chunks.get())+limit>llama_n_ctx(ctx.get())){fail(e,"Insufficient vision context");return nullptr;}
+ auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");if(!cancel)return nullptr;
+ llama_pos pos=0;
+ if(e->CallBooleanMethod(self,cancel)){return e->NewByteArray(0);}
+ if(mtmd_helper_eval_chunks(vision.get(),ctx.get(),chunks.get(),0,0,llama_n_batch(ctx.get()),true,&pos)!=0){fail(e,"Vision embedding evaluation failed");return nullptr;}
+ auto* vocab=llama_model_get_vocab(state->model);
+ std::unique_ptr<llama_sampler,decltype(&llama_sampler_free)> sampler(llama_sampler_init_greedy(),llama_sampler_free);
+ std::unique_ptr<llama_batch_ext,decltype(&llama_batch_ext_free)> batch(llama_batch_ext_init(ctx.get()),llama_batch_ext_free);
+ if(!sampler || !batch){fail(e,"Vision generation allocation failed");return nullptr;}
+ std::string output;
+ for(int i=0;i<limit;i++){
+  if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck())break;
+  auto token=llama_sampler_sample(sampler.get(),ctx.get(),-1);
+  if(llama_vocab_is_eog(vocab,token))break;
+  std::vector<char> piece(128);int n=llama_token_to_piece(vocab,token,piece.data(),piece.size(),0,false);
+  if(n<0){piece.resize(-n);n=llama_token_to_piece(vocab,token,piece.data(),piece.size(),0,false);}
+  if(n<0){fail(e,"Vision token conversion failed");return nullptr;}
+  output.append(piece.data(),n);
+  if(i+1==limit)break;
+  llama_batch_ext_clear(batch.get());
+  int idx=llama_batch_ext_add_token(batch.get(),0,token);
+  if(idx<0 || !llama_batch_ext_set_pos(batch.get(),idx,&pos) || !llama_batch_ext_set_output_logits(batch.get(),idx,true) || llama_process(ctx.get(),LLAMA_PROCESS_TYPE_DECODE,batch.get())!=0){fail(e,"Vision generation failed");return nullptr;}
+  ++pos;
+ }
+ if(e->ExceptionCheck())return nullptr;
+ auto bytes=e->NewByteArray(output.size());if(bytes)e->SetByteArrayRegion(bytes,0,output.size(),reinterpret_cast<const jbyte*>(output.data()));return bytes;
+#else
+ fail(e,"VLM backend not enabled in this APK");return nullptr;
 #endif
 }
