@@ -228,7 +228,7 @@ object RomanianLexicon {
      while (cursor.moveToNext() && result.size < 64) result.add(cursor.getString(0))
     }
    }
-   result.toList().also { synonymCache[key] = it }
+   (result.toList() + corpusSynonyms(word)).distinct().take(64).also { synonymCache[key] = it }
   }
  }
  // Reverse the imported affix rules; return only stems licensed by dictionary flags.
@@ -264,13 +264,27 @@ object RomanianLexicon {
   }
  }
  // Synonyms are suggestions only: never silently execute a different action.
+ fun corpusSynonyms(word: String): List<String> {
+  if (definitionsState != "ready" || word.isBlank() || word.length > 160) return emptyList()
+  return synchronized(this) {
+   val db = definitionsDb ?: return@synchronized emptyList()
+   val keys = (listOf(normalize(word)) + grammarMatches(word).map { normalize(it.lemma) }).distinct().take(12)
+   val result = linkedSetOf<String>()
+   for (key in keys) {
+    db.rawQuery("SELECT term FROM relations WHERE key=? ORDER BY term LIMIT 32",arrayOf(key)).use { cursor ->
+     while (cursor.moveToNext() && result.size < 32) result.add(cursor.getString(0))
+    }
+   }
+   result.toList()
+  }
+ }
  fun suggestedPhrases(text: String): List<String> {
   if (negated(text) || split(text).size != 1) return emptyList()
   val cleaned = normalize(canonicalCommand(text))
   if (entries.containsKey(cleaned)) return emptyList()
   val first = cleaned.substringBefore(' ')
   val tail = cleaned.removePrefix(first)
-  return synonyms(first).map { normalize(it) + tail }
+  return (synonyms(first) + corpusSynonyms(first)).map { normalize(it) + tail }
    .filter { entries.containsKey(it) }.distinct().take(8)
  }
  // Only suggest corrections to complete registered phrases; preserve arbitrary payloads.
@@ -365,13 +379,15 @@ object RomanianLexicon {
     val input = context.assets.open("ro_wiktionary/lexicon.jsonl")
     input.bufferedReader(Charsets.UTF_8).useLines { lines ->
      val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
-      java.io.File(context.noBackupFilesDir,"romanian-definitions-v3.db"),null)
+      java.io.File(context.noBackupFilesDir,"romanian-definitions-v4.db"),null)
      db = opened
-     if (opened.version != 3) {
+     if (opened.version != 4) {
       opened.beginTransaction()
       try {
        opened.execSQL("CREATE TABLE IF NOT EXISTS definitions(key TEXT, lemma TEXT, gloss TEXT, PRIMARY KEY(key,lemma,gloss))")
        opened.execSQL("CREATE TABLE IF NOT EXISTS grammar(key TEXT NOT NULL, lemma TEXT NOT NULL, pos TEXT NOT NULL, tags TEXT NOT NULL, PRIMARY KEY(key,lemma,pos,tags))")
+       opened.execSQL("CREATE TABLE IF NOT EXISTS relations(key TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY(key,term))")
+       val relationInsert = opened.compileStatement("INSERT OR IGNORE INTO relations VALUES (?,?)")
        val grammatical = opened.compileStatement("INSERT OR IGNORE INTO grammar VALUES (?,?,?,?)")
        val insert = opened.compileStatement("INSERT OR IGNORE INTO definitions VALUES (?,?,?)")
        var count = 0
@@ -394,6 +410,11 @@ object RomanianLexicon {
          }
          for (item in (row["senses"] as? JsonArray).orEmpty()) {
           val sense = item as? JsonObject ?: continue
+          for (synonym in (sense["synonyms"] as? JsonArray).orEmpty()) {
+           val term = (synonym as? JsonPrimitive)?.contentOrNull ?: continue
+           if (term.isBlank() || normalize(term) == normalize(lemma)) continue
+           relationInsert.bindString(1,normalize(lemma)); relationInsert.bindString(2,term); relationInsert.executeInsert()
+          }
           for (relation in listOf("form_of","alt_of")) {
            for (link in (sense[relation] as? JsonArray).orEmpty()) {
             val root = ((link as? JsonObject)?.get("word") as? JsonPrimitive)?.contentOrNull ?: continue
@@ -411,10 +432,10 @@ object RomanianLexicon {
          }
          count++
         }
-       } finally { insert.close(); grammatical.close() }
+       } finally { insert.close(); grammatical.close(); relationInsert.close() }
        check(count >= 10000)
        opened.execSQL("CREATE INDEX IF NOT EXISTS definitions_gloss ON definitions(gloss COLLATE NOCASE,lemma)")
-       opened.version = 3
+       opened.version = 4
        opened.setTransactionSuccessful()
       } finally { opened.endTransaction() }
      }
