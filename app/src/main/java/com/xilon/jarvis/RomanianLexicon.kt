@@ -64,8 +64,9 @@ object RomanianLexicon {
  // Read-only analysis, suitable for a conversation UI; never dispatches tools.
  fun review(text: String): LanguageReview {
   val blocked = negated(text) || split(text).any { negated(it) }
+  val lexical = if (blocked) emptyList() else sentenceSuggestions(text)
   return LanguageReview(text, normalize(text), blocked,
-   if (blocked) emptyList() else spellingSuggestions(text),
+   if (blocked) emptyList() else (spellingSuggestions(text) + lexical).distinct().take(12),
    if (blocked) emptyList() else suggestedPhrases(text),
    translateKnown(text) ?: translateReverse(text), dictionaryStatus())
  }
@@ -259,6 +260,26 @@ object RomanianLexicon {
  fun parse(text: String): PlannedAction? {
   if (negated(text) || split(text).any { negated(it) }) return null
   return entries[normalize(clean(text))]?.action ?: entries[normalize(canonicalCommand(text))]?.action
+ }
+ // Return alternatives per word, never rewrite or execute the original sentence.
+ fun sentenceSuggestions(text: String): List<String> {
+  if (indexState != "ready" || text.length > 500) return emptyList()
+  val tokens = Regex("[\\p{L}\\p{M}]+").findAll(text)
+   .map { it.value }.filter { it.length in 3..40 }.distinct().take(24)
+  val result = ArrayList<String>()
+  for (token in tokens) {
+   if (result.size >= 8) break
+   val exact = token.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
+   if (dictionaryContains(token)) {
+    if (exact != normalize(exact)) continue
+    val accents = dictionarySuggestions(token).filter { normalize(it) == exact && it != exact }
+    if (accents.isNotEmpty()) result.add(token + " → " + accents.take(4).joinToString(" / "))
+   } else {
+    val options = dictionarySuggestions(token).filter { it != exact }.take(4)
+    if (options.isNotEmpty()) result.add(token + " → " + options.joinToString(" / "))
+   }
+  }
+  return result
  }
  fun dictionarySuggestions(word: String): List<String> {
   if (indexState != "ready" || word.length !in 3..40 || !word.all(Char::isLetter)) return emptyList()
