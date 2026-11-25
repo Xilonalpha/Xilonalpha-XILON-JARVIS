@@ -15,12 +15,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun startNeural(fallback:Boolean=false){
   if(busy || wake!=null)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
-  val engine=try{NeuralSpeechFactory.create(this)}catch(e:Exception){append("Sherpa indisponibil: "+e.message);return}catch(e:LinkageError){append("Sherpa nativ indisponibil: "+e.message);return}
+  val engine=try{NeuralSpeechFactory.create(this)}catch(e:Exception){modelStatus.text="Sherpa indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}catch(e:LinkageError){modelStatus.text="Sherpa nativ indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}
   if(engine==null){if(fallback)startAndroidMicrophone() else modelStatus.text="Motor Sherpa indisponibil.";return}
   listening.close();voice.stop();kokoroVoice?.stop();busy=true;neuralCancelled=false;neural=engine;omegaCore.listening=true;refreshOmegaStatus()
   worker.execute{
    val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{runCatching{engine.close()};neural=null}
-   runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled)result.fold({if(it.isBlank())modelStatus.text="Nicio comandă detectată." else {voiceInput.setText(it);voiceInput.setSelection(voiceInput.text.length)}},{modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
+   runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled)result.fold({if(it.isBlank())modelStatus.text="Nicio comandă detectată." else {acceptVoice(it)}},{modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
   }
  }
  private var wake:WakeController?=null
@@ -30,7 +30,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
   listening.close();voice.stop()
   lateinit var controller:WakeController
-  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone()}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){append(message);if(message=="Ascultare oprită.")wake=null}}})
+  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone()}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
   wake=controller;controller.start()
  }
  private var airTouch:AirTouchController?=null
@@ -52,6 +52,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var englishNeuralVoice=false
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
+ private lateinit var sendControl: android.view.View
+ private var autoVoiceSend=false
+ private fun acceptVoice(text:String){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length);if(autoVoiceSend&&text.isNotBlank()&&::sendControl.isInitialized&&!busy)sendControl.performClick()}
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
  private var busy = false
@@ -180,7 +183,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  actions.addView(Button(this).apply { text = "";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("send",dp(24),cyan),null,null,null);contentDescription="Trimite"; setOnClickListener {
+  actions.addView(Button(this).apply { sendControl=this; text = "";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("send",dp(24),cyan),null,null,null);contentDescription="Trimite"; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
@@ -274,6 +277,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   } })
   actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("stop",dp(22),cyan),null,null,null);contentDescription="Oprește"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(40),dp(48)))
+  settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
@@ -658,7 +662,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   voice.stop();kokoroVoice?.stop()
-  listening.listen({ text -> if(!isDestroyed){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)} },{ error -> if(!isDestroyed) modelStatus.text=error })
+  listening.listen({ text -> if(!isDestroyed){acceptVoice(text)} },{ error -> if(!isDestroyed) modelStatus.text=error })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
