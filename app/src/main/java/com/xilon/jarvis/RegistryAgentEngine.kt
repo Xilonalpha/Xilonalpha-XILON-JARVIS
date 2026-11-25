@@ -17,6 +17,8 @@ object RegistryAgentEngine {
   for((index,action) in plan.withIndex()){
    coroutineContext.ensureActive()
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
+   val currentInvalid=ToolEnvironment.validate(action.tool,action.args)
+   if(currentInvalid!=null)return Outcome("INVALID_PLAN",steps.toList(),plan.drop(index),currentInvalid.message)
    if(!confirm(action))return Outcome("STOPPED",steps.toList(),plan.drop(index))
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
    val result=try { kotlinx.coroutines.withTimeoutOrNull(45000L){ToolEnvironment.execute(action.tool,action.args,false)} ?: return Outcome("EXECUTION_UNKNOWN",steps.toList(),plan.drop(index+1),"Timp depășit; efectul acțiunii este necunoscut. Nu relua automat.") }
