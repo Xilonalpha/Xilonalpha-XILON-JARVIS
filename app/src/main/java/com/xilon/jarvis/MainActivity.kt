@@ -236,7 +236,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
    android.app.AlertDialog.Builder(this@MainActivity).setTitle(title).setMessage(runCatching{body()}.getOrElse{"Eroare: "+it.message}).setPositiveButton("Închide",null).show()
   }
   settings.addView(Button(this).apply{text="Jurnal execuții";setOnClickListener{report("Jurnal execuții"){TaskJournal(this@MainActivity).summary()}}})
-  settings.addView(Button(this).apply{text="Abilități salvate";setOnClickListener{report("Abilități salvate"){val store=SkillStore(this@MainActivity);store.names().joinToString("\n\n"){name->name+": "+store.load(name).orEmpty().joinToString(" → ")}.ifBlank{"Nicio abilitate salvată."}}}})
+  settings.addView(Button(this).apply{text="Abilități salvate";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val store=SkillStore(this@MainActivity)
+   val names=store.names()
+   if(names.isEmpty()){report("Abilități salvate"){"Nicio abilitate salvată."};return@setOnClickListener}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Alege abilitatea").setItems(names.toTypedArray()){_,index->
+    val name=names[index]
+    val steps=runCatching{store.load(name)}.getOrNull()
+    if(steps.isNullOrEmpty()){report("Abilitate"){"Pași indisponibili sau invalizi."}}
+    else android.app.AlertDialog.Builder(this@MainActivity).setTitle(name).setMessage(steps.joinToString(" → "))
+     .setPositiveButton("Execută"){_,_->if(!busy){val result=runCatching{runTracked(steps)}.getOrElse{"Execuție eșuată: "+it.message};append(result);report("Rezultat"){result}}}
+     .setNeutralButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ștergi abilitatea?").setMessage(name).setPositiveButton("Șterge"){_,_->report("Abilitate"){if(store.delete(name))"Abilitate ștearsă." else "Abilitate negăsită."}}.setNegativeButton("Anulează",null).show()}
+     .setNegativeButton("Anulează",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{it.summary()}}}})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
