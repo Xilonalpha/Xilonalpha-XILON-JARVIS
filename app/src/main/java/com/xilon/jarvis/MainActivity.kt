@@ -282,6 +282,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }.show()
      return@setOnClickListener
     }
+    if(q.trim().lowercase(java.util.Locale.ROOT).trimEnd('?','.') in setOf("analizează clipboardul","analizeaza clipboardul","analyze clipboard","verifică clipboardul","verifica clipboardul")){
+     val result=if(!hasWindowFocus()) "Clipboard indisponibil: aplicația nu are focus." else runCatching{
+      val clip=com.openjarvis.intelligence.ClipboardIntelligence(this@MainActivity)
+      when(clip.analyze()){
+       is com.openjarvis.intelligence.ClipboardIntelligence.ClipboardContent.Url -> "Clipboard: link web."
+       is com.openjarvis.intelligence.ClipboardIntelligence.ClipboardContent.Email -> "Clipboard: posibilă adresă de e-mail."
+       is com.openjarvis.intelligence.ClipboardIntelligence.ClipboardContent.PhoneNumber -> "Clipboard: secvență numerică."
+       is com.openjarvis.intelligence.ClipboardIntelligence.ClipboardContent.LongText -> "Clipboard: text lung."
+       is com.openjarvis.intelligence.ClipboardIntelligence.ClipboardContent.ShortText -> "Clipboard: text scurt."
+       else -> "Clipboard gol sau inaccesibil."
+      }
+     }.getOrElse{"Clipboard indisponibil."}
+     append(result)
+     return@setOnClickListener
+    }
     val memoryCommand=com.jarvis.assistant.router.MemoryIntentParser.parse(q)
     if(memoryCommand is com.jarvis.assistant.router.MemoryIntent.Remember || memoryCommand is com.jarvis.assistant.router.MemoryIntent.ListAll){
      busy=true
