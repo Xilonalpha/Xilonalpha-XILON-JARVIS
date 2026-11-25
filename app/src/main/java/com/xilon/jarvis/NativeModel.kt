@@ -15,9 +15,9 @@ class NativeModel : AutoCloseable {
  fun publishToken(){if(generatedTokens==0)firstTokenNanos=android.os.SystemClock.elapsedRealtimeNanos()-startNanos;generatedTokens++}
  private var handle = 0L
  @Synchronized fun load(path: String) { close(); handle = openModel(path); check(handle != 0L) { "Model loading failed" } }
- @Synchronized fun generate(prompt: String, threads: Int = 2, context: Int = 1024, maxTokens: Int = 128, history: List<Pair<String,String>> = emptyList()): String { check(handle != 0L); generatedTokens=0;firstTokenNanos=0;startNanos=android.os.SystemClock.elapsedRealtimeNanos(); return infer(handle,(history + ("user" to prompt)).map { it.first }.toTypedArray(),(history + ("user" to prompt)).map { it.second.toByteArray(Charsets.UTF_8) }.toTypedArray(),threads.coerceIn(1,8),context.coerceIn(512,4096),maxTokens.coerceIn(32,512)) }
+ @Synchronized fun generate(prompt: String, threads: Int = 2, context: Int = 1024, maxTokens: Int = 128, history: List<Pair<String,String>> = emptyList(), grammar:String = ""): String { check(handle != 0L); generatedTokens=0;firstTokenNanos=0;startNanos=android.os.SystemClock.elapsedRealtimeNanos(); return infer(handle,(history + ("user" to prompt)).map { it.first }.toTypedArray(),(history + ("user" to prompt)).map { it.second.toByteArray(Charsets.UTF_8) }.toTypedArray(),threads.coerceIn(1,8),context.coerceIn(512,4096),maxTokens.coerceIn(32,512),grammar) }
  @Synchronized override fun close() { if(handle != 0L) { freeModel(handle); handle=0 } }
  private external fun openModel(path:String):Long
- private external fun infer(handle:Long,roles:Array<String>,messages:Array<ByteArray>,threads:Int,context:Int,maxTokens:Int):String
+ private external fun infer(handle:Long,roles:Array<String>,messages:Array<ByteArray>,threads:Int,context:Int,maxTokens:Int,grammar:String):String
  private external fun freeModel(handle:Long)
 }
