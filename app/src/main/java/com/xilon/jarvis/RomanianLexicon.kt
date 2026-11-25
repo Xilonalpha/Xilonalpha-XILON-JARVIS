@@ -279,13 +279,34 @@ object RomanianLexicon {
   }
  }
  fun suggestedPhrases(text: String): List<String> {
-  if (negated(text) || split(text).size != 1) return emptyList()
-  val cleaned = normalize(canonicalCommand(text))
+  if (text.length > 160 || negated(text) || split(text).size != 1) return emptyList()
+  val cleaned = normalize(clean(text))
   if (entries.containsKey(cleaned)) return emptyList()
-  val first = cleaned.substringBefore(' ')
-  val tail = cleaned.removePrefix(first)
-  return (synonyms(first) + corpusSynonyms(first)).map { normalize(it) + tail }
-   .filter { entries.containsKey(it) }.distinct().take(8)
+  val tokens = cleaned.split(' ')
+  if (tokens.size !in 2..12 || tokens.any { it.isBlank() || !it.all(Char::isLetter) }) return emptyList()
+  // Corpus alternatives are evidence for clarification, never executable actions.
+  fun roots(word: String): Set<String> = (listOf(word) +
+   grammarMatches(word).map { normalize(it.lemma) } +
+   morphologicalRoots(word).map { normalize(it) }).toSet()
+  val inputRoots = tokens.map { roots(it) }
+  val first = tokens.first()
+  val related = (synonyms(first) + corpusSynonyms(first)).map { normalize(it) }.toSet()
+  val candidates = ArrayList<Pair<String,Int>>()
+  for (phrase in entries.keys) {
+   val parts = phrase.split(' ')
+   if (parts.size != tokens.size) continue
+   val differences = tokens.indices.filter { tokens[it] != parts[it] }
+   if (differences.size !in 1..2) continue
+   var score = 0
+   var valid = true
+   for (i in differences) {
+    if (inputRoots[i].intersect(roots(parts[i])).isNotEmpty()) score += 2
+    else if (i == 0 && parts[i] in related) score += 1
+    else { valid = false; break }
+   }
+   if (valid) candidates.add(phrase to score)
+  }
+  return candidates.sortedWith(compareByDescending<Pair<String,Int>> { it.second }.thenBy { it.first }).map { it.first }.distinct().take(8)
  }
  // Only suggest corrections to complete registered phrases; preserve arbitrary payloads.
  fun spellingSuggestions(text: String): List<String> {
