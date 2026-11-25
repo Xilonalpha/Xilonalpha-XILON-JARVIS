@@ -282,6 +282,24 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }.show()
      return@setOnClickListener
     }
+    val memoryCommand=com.jarvis.assistant.router.MemoryIntentParser.parse(q)
+    if(memoryCommand is com.jarvis.assistant.router.MemoryIntent.Remember || memoryCommand is com.jarvis.assistant.router.MemoryIntent.ListAll){
+     busy=true
+     worker.execute{
+      val result=runCatching{
+       val store=com.jarvis.assistant.memory.MemoryStore.get(this@MainActivity)
+       when(memoryCommand){
+        is com.jarvis.assistant.router.MemoryIntent.Remember -> {
+         if(com.jarvis.assistant.memory.SensitiveFilter.isSensitive(memoryCommand.text)) "Informația sensibilă nu a fost memorată."
+         else if(store.addFact(memoryCommand.text,memoryCommand.style)>=0) "Am salvat nota local." else "Nota nu a fost salvată."
+        }
+        else -> store.all().filter{it.kind==com.jarvis.assistant.memory.MemoryStore.Kind.FACT}.joinToString("\n"){it.title}.ifBlank{"Nu există note salvate."}
+       }
+      }.getOrElse{"Eroare memorie: "+it.javaClass.simpleName}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }
+     return@setOnClickListener
+    }
     val naturalTool=NaturalToolCommands.parse(q)
     if(naturalTool!=null && !RegistryIntent.compound(q)){
      confirmTool(naturalTool.tool,naturalTool.args)
