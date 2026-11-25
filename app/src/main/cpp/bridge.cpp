@@ -4,6 +4,7 @@
 #include <string>
 #include <mutex>
 #include <chrono>
+#include <algorithm>
 struct AbortState { JavaVM* vm; jobject owner; jmethodID method; };
 static bool abortDecode(void* data){
  auto* state=static_cast<AbortState*>(data);
@@ -61,7 +62,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  std::vector<llama_token> tokens(input.size()+16);
  int n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,tmpl!=nullptr);
  if(n<=0 || n>context-maxTokens){fail(e,"Prompt exceeds supported token budget");return nullptr;}
- auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_threads=threads;cp.n_threads_batch=threads;
+ auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_ubatch=std::min<int>(context,256);cp.n_threads=threads;cp.n_threads_batch=threads;
  auto* ctx=llama_init_from_model(m,cp);if(!ctx){fail(e,"Context allocation failed");return nullptr;}
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler){llama_free(ctx);fail(e,"Sampler allocation failed");return nullptr;}
@@ -95,6 +96,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(!owner){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  AbortState abortState{vm,owner,cancel};
  llama_set_abort_callback(ctx,abortDecode,&abortState);
+ size_t publishedBytes=0;
  auto lastProgress=std::chrono::steady_clock::now();
  for(int i=0;i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
@@ -112,8 +114,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
   e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);
   if(e->ExceptionCheck()){ok=false;break;}
+  publishedBytes=out.size();
   }
   tokens[0]=t;batch=llama_batch_get_one(tokens.data(),1);
+ }
+ if(ok && !e->ExceptionCheck() && publishedBytes!=out.size()){
+  auto partial=e->NewByteArray(out.size());
+  if(partial){e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));if(!e->ExceptionCheck())e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);}
  }
  llama_sampler_free(sampler);llama_free(ctx);e->DeleteGlobalRef(owner);
  if(e->ExceptionCheck())return nullptr;
