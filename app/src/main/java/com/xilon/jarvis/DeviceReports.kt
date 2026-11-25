@@ -51,6 +51,18 @@ internal object DeviceReports {
     val info=manager.getPackageInfo(context.packageName,0)
     return "Versiune: "+info.versionName+"\nAndroid SDK: "+android.os.Build.VERSION.SDK_INT+"\nABI: "+android.os.Build.SUPPORTED_ABIS.joinToString(", ")+"\nSpațiu disponibil: "+android.os.StatFs(context.filesDir.path).availableBytes/1048576+" MiB"
    }
+   "stare camere" -> {
+    val manager=context.getSystemService(android.hardware.camera2.CameraManager::class.java)
+    return manager.cameraIdList.joinToString("\n"){id->
+     val c=manager.getCameraCharacteristics(id)
+     val facing=when(c.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)){0->"frontală";1->"spate";2->"externă";else->"necunoscută"}
+     "Cameră "+id+": "+facing+"; bliț: "+(c.get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE)==true)
+    }.ifBlank{"Nicio cameră disponibilă."}
+   }
+   "stare stocare" -> {
+    val stats=android.os.StatFs(context.filesDir.absolutePath)
+    return "Volum aplicație: "+stats.totalBytes/1048576+" MiB total; "+stats.availableBytes/1048576+" MiB disponibil"
+   }
    else -> return null
   }
  }

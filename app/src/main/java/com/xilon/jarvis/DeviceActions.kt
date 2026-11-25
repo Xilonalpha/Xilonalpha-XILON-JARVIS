@@ -39,6 +39,10 @@ class DeviceActions(private val activity:Activity) {
    "deschide setări limbă" -> Intent(Settings.ACTION_LOCALE_SETTINGS)
    "deschide setări dată" -> Intent(Settings.ACTION_DATE_SETTINGS)
    "deschide setări locație" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+   "deschide setări aplicații" -> Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)
+   "deschide setări rețea" -> Intent(Settings.ACTION_WIRELESS_SETTINGS)
+   "deschide setări securitate" -> Intent(Settings.ACTION_SECURITY_SETTINGS)
+   "deschide setări tastatură" -> Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
    "deschide alarme" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
    else -> when {
     q.startsWith("alarmă ") -> {

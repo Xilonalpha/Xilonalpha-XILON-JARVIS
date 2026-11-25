@@ -41,6 +41,10 @@ class MediaActions(private val activity:Activity){
     "Volum multimedia: "+audio.getStreamVolume(stream)+"/"+audio.getStreamMaxVolume(stream)
    }.getOrElse{"Ajustare indisponibilă: "+it.javaClass.simpleName}
   }
+  if(q=="volum procent"){
+   val maximum=audio.getStreamMaxVolume(stream)
+   return if(maximum>0)"Volum multimedia: "+(audio.getStreamVolume(stream)*100/maximum)+"%" else "Volum indisponibil."
+  }
   if(q=="volum" || q.startsWith("volum ")){
    val max=audio.getStreamMaxVolume(stream)
    if(q!="volum"){
