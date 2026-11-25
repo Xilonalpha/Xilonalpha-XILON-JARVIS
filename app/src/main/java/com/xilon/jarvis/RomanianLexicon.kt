@@ -30,9 +30,32 @@ object RomanianLexicon {
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
+ private val conjugations = mapOf(
+  "deschizi" to "deschide", "deschideti" to "deschide", "deschida" to "deschide",
+  "pornesti" to "porneste", "porniti" to "porneste", "porneasca" to "porneste",
+  "opresti" to "opreste", "opriti" to "opreste", "opreasca" to "opreste",
+  "aprindeti" to "aprinde", "aprinzi" to "aprinde", "aprinda" to "aprinde",
+  "stingi" to "stinge", "stingeti" to "stinge", "stinga" to "stinge",
+  "setezi" to "seteaza", "setati" to "seteaza", "seteze" to "seteaza",
+  "cauti" to "cauta", "cautati" to "cauta", "caute" to "cauta",
+  "activezi" to "activeaza", "activati" to "activeaza",
+  "dezactivezi" to "dezactiveaza", "dezactivati" to "dezactiveaza",
+  "reglezi" to "regleaza", "reglati" to "regleaza",
+  "lansezi" to "lanseaza", "lansati" to "lanseaza"
+ )
+ private val typos = mapOf("deschde" to "deschide", "deshide" to "deschide",
+  "pornste" to "porneste", "oprestee" to "opreste", "setaza" to "seteaza",
+  "catu a" to "cauta", "actveaza" to "activeaza", "dezactveaza" to "dezactiveaza")
+ fun canonicalCommand(text: String): String {
+  val cleaned = clean(text)
+  val first = cleaned.substringBefore(' ')
+  val key = normalize(first)
+  val replacement = conjugations[key] ?: typos[key] ?: return cleaned
+  return replacement + cleaned.substring(first.length)
+ }
  fun parse(text: String): PlannedAction? {
   if (negated(text)) return null
-  return entries[normalize(clean(text))]?.action
+  return entries[normalize(canonicalCommand(text))]?.action
  }
  fun translateReverse(text: String): String? {
   val key = normalize(text)
