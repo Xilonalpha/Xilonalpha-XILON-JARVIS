@@ -34,22 +34,29 @@ class ModelDownloads(private val context:Context){
   return ModelMetadata.Reference(hash,bytes,revision,algorithm)
  }
  fun id(entry:ModelCatalog.Entry)=prefs.getLong(entry.file,-1)
- fun status(entry:ModelCatalog.Entry):String{
-  val id=id(entry);if(id<0)return "Nedescărcat"
-  return dm.query(DownloadManager.Query().setFilterById(id))?.use{c->
-   if(!c.moveToFirst())"Transfer indisponibil" else {
-    val state=c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-    val bytes=c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-    val total=c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-    when(state){
-     DownloadManager.STATUS_SUCCESSFUL->"Descărcat • integritate neverificată"
-     DownloadManager.STATUS_FAILED->"Eșuat • cod "+c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-     DownloadManager.STATUS_PAUSED->"În așteptare rețea"
-     else->if(total>0)"Transfer: "+(bytes*100/total)+"%" else "Transfer: "+bytes/1048576+" MiB"
-    }
-   }
-  } ?: "Transfer indisponibil"
+ data class Transfer(val state:Int,val bytes:Long,val total:Long,val reason:Int){
+  val percent:Int? get()=if(total>0)(bytes.toDouble()*100/total).toInt().coerceIn(0,100) else null
+  val label:String get()=when(state){
+   -1->"Nedescărcat"
+   -2->"Transfer indisponibil"
+   DownloadManager.STATUS_SUCCESSFUL->"Descărcat • integritate neverificată"
+   DownloadManager.STATUS_FAILED->"Eșuat • cod "+reason
+   DownloadManager.STATUS_PAUSED->"În așteptare rețea"
+   DownloadManager.STATUS_PENDING->"În coadă"
+   else->percent?.let{"Transfer: "+it+"%"}?:"Transfer: "+bytes/1048576+" MiB"
+  }
  }
+ fun transfer(entry:ModelCatalog.Entry):Transfer{
+  val id=id(entry);if(id<0)return Transfer(-1,0,-1,0)
+  return dm.query(DownloadManager.Query().setFilterById(id))?.use{c->
+   if(!c.moveToFirst())Transfer(-2,0,-1,0) else Transfer(
+    c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)),
+    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
+    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
+    c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)))
+  }?:Transfer(-2,0,-1,0)
+ }
+ fun status(entry:ModelCatalog.Entry)=transfer(entry).label
  fun cancel(entry:ModelCatalog.Entry){val id=id(entry);if(id>=0)dm.remove(id);prefs.edit().remove(entry.file).remove(entry.file+".sha").remove(entry.file+".bytes").remove(entry.file+".revision").remove(entry.file+".algorithm").apply()}
  fun uri(entry:ModelCatalog.Entry):Uri?=id(entry).takeIf{it>=0}?.let{dm.getUriForDownloadedFile(it)}
 }
