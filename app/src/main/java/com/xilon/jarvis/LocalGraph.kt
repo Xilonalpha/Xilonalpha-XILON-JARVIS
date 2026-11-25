@@ -25,7 +25,7 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
  }
  fun demonstrationSummary():String=readableDatabase.rawQuery("SELECT source,target,count FROM demo_edges ORDER BY count DESC,source,target LIMIT 50",null).use{c->buildList{while(c.moveToNext())add(c.getString(0)+" → "+c.getString(1)+" : "+c.getLong(2))}.joinToString("\n").ifBlank{"Nicio tranziție demonstrată."}}
  fun record(steps:List<String>){
-  require(steps.size in 1..6 && steps.all{ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))})
+  require(steps.size in 1..ToolCatalog.readOnly.size && steps.all{ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))})
   val db=writableDatabase
   db.beginTransaction()
   try{
