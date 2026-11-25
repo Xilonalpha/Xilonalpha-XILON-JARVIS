@@ -1951,6 +1951,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      } } ?: error("Fișier inaccesibil")
      if(reference!=null)ModelIntegrity.verify(target.inputStream(),reference.sha256,reference.bytes,reference.algorithm)
      if(size>0)require(target.length()==size){"Copiere incompletă"}
+     val header=GgufHeader.inspect(target)
+     require(header.tensors>0){"GGUF fără tensori"}
      verifiedCopy=true
      switched=true
      nativeModel?.close()
