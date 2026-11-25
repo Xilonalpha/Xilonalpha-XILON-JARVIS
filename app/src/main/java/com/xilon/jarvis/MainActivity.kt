@@ -43,6 +43,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var gestureReverse=false
  private var gestureRecent=false
  private var gestureDialog:android.app.AlertDialog?=null
+ private fun dispatchGestureBinding(key:String):Boolean{
+  val action=GestureBindings.resolve(getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString(key,null))
+  if(action=="Implicit")return false
+  if(action=="Dezactivat")return true
+  if(action=="Microfon"){startMicrophone();return true}
+  if(gestureDialog?.isShowing==true)return true
+  gestureDialog=android.app.AlertDialog.Builder(this).setTitle("Acțiune prin gest").setMessage(action).setNegativeButton("Anulează",null).setPositiveButton("Confirmă"){_,_->
+   if(conversationForeground && airTouch!=null && !busy){
+    val global=when(action){"Înapoi"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK;"Acasă"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME;"Recente"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS;else->null}
+    if(global!=null)modelStatus.text=if(LocalScreen.service()?.performGlobalAction(global)==true)"Navigare solicitată." else "Navigare indisponibilă."
+    else MediaActions(this).execute(action)?.let{modelStatus.text=it}
+   }
+  }.show()
+  return true
+ }
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
   stopLiveVision()
@@ -761,6 +776,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val slider=SeekBar(this@MainActivity).apply{max=40;progress=((prefs.getFloat("pinch_ratio",0.32f).coerceIn(0.15f,0.55f)-0.15f)*100).toInt()}
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Calibrare ciupire").setMessage("Spre dreapta: detectare mai sensibilă. Testează cu mâna după salvare.").setView(slider).setNegativeButton("Anulează",null).setNeutralButton("Implicit"){_,_->prefs.edit().putFloat("pinch_ratio",0.32f).apply()}.setPositiveButton("Salvează"){_,_->prefs.edit().putFloat("pinch_ratio",(15+slider.progress)/100f).apply()}.show()
   }})
+  settings.addView(Button(this).apply{text="Air Touch: acțiuni personalizate";setOnClickListener{
+   val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
+   val panel=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL}
+   val selectors=GestureBindings.keys.mapIndexed{index,key->
+    panel.addView(TextView(this@MainActivity).apply{text=GestureBindings.labels[index]})
+    Spinner(this@MainActivity).apply{
+     adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,GestureBindings.actions)
+     setSelection(GestureBindings.actions.indexOf(GestureBindings.resolve(prefs.getString(key,null))).coerceAtLeast(0))
+     panel.addView(this)
+    }
+   }
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Acțiuni gestuale").setView(panel).setNegativeButton("Anulează",null).setPositiveButton("Salvează"){_,_->
+    val editor=prefs.edit();GestureBindings.keys.forEachIndexed{index,key->editor.putString(key,GestureBindings.actions[selectors[index].selectedItemPosition])};editor.apply()
+   }.show()
+  }})
   settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
   settings.addView(android.widget.SeekBar(this).apply{max=55;progress=getPreferences(MODE_PRIVATE).getInt("air_smoothing",12).coerceIn(0,55);setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
    override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f;if(fromUser)getPreferences(MODE_PRIVATE).edit().putInt("air_smoothing",value).apply()}
@@ -1188,7 +1218,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   cursor.smoothing=(10+getPreferences(MODE_PRIVATE).getInt("air_smoothing",12).coerceIn(0,55))/100f
   cursor.onPointTap={x,y->
    if(conversationForeground && airTouch!=null && !busy){
-    if(!gestureSelect)startMicrophone()
+    if(dispatchGestureBinding("pinch"))Unit else if(!gestureSelect)startMicrophone()
     else {
      val location=IntArray(2);cursor.getLocationOnScreen(location)
      val sx=x+location[0];val sy=y+location[1]
@@ -1202,14 +1232,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   cursor.onHorizontal={raw->if(conversationForeground && airTouch!=null && !busy){
    val direction=if(gestureReverse)-raw else raw
-   if(gestureNavigation){
+   if(dispatchGestureBinding(if(direction>0) "right" else "left"))Unit else if(gestureNavigation){
     val action=if(direction>0 && gestureRecent)android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS else if(direction>0)android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME else android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
     val label=if(direction>0 && gestureRecent)"Aplicații recente" else if(direction>0)"Acasă" else "Înapoi"
     if(gestureDialog?.isShowing==true)Unit else if(LocalScreen.connected())gestureDialog=android.app.AlertDialog.Builder(this).setTitle("Navigare prin gest").setMessage(label).setNegativeButton("Anulează",null).setPositiveButton("Confirmă"){_,_->if(conversationForeground && airTouch!=null && !busy){modelStatus.text=if(LocalScreen.service()?.performGlobalAction(action)==true)"Navigare solicitată." else "Navigare indisponibilă."}}.show()
     else modelStatus.text="Activează accesibilitatea JARVIS."
    }else if(gestureMedia)MediaActions(this).execute(if(direction>0)"următoarea melodie" else "melodia anterioară")?.let{modelStatus.text=it}
   }}
-  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){if(gestureMedia){MediaActions(this).execute(if(direction>0)"crește volumul" else "scade volumul")?.let{modelStatus.text=it}}else{val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}}
+  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){if(dispatchGestureBinding(if(direction>0) "up" else "down"))Unit else if(gestureMedia){MediaActions(this).execute(if(direction>0)"crește volumul" else "scade volumul")?.let{modelStatus.text=it}}else{val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}}
   cursor.onFistHold={if(conversationForeground && airTouch!=null){voice.stop();kokoroVoice?.stop();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
