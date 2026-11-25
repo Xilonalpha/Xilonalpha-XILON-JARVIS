@@ -860,6 +860,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text="Benchmark încheiat.";report("Rezultat benchmark"){result}}}
    }
   }})
+  for((label,code) in listOf("Vision: importă model obiecte" to 53,"Vision: importă model fețe" to 54,"Vision: detectează obiecte" to 55,"Vision: detectează fețe" to 56)){
+   settings.addView(Button(this).apply{text=label;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type=if(code>=55)"image/*" else "*/*";addCategory(Intent.CATEGORY_OPENABLE)},code)}})
+  }
   for((label,code) in listOf("OCR: importă limba română" to 50,"OCR: importă limba engleză" to 51,"OCR: citește imagine" to 52)){
    settings.addView(Button(this).apply{text=label;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type=if(code==52)"image/*" else "*/*";addCategory(Intent.CATEGORY_OPENABLE)},code)}})
   }
@@ -1662,6 +1665,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode in 53..56){
+   if(resultCode!=RESULT_OK||busy)return
+   val uri=data?.data?:return
+   busy=true
+   worker.execute{
+    val result=runCatching{if(requestCode<=54){LocalVision.install(this,uri,requestCode==54);"Model vizual validat și instalat."}else LocalVision.detect(this,uri,requestCode==56)}.getOrElse{"Vision: "+it.message}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result);android.app.AlertDialog.Builder(this).setTitle("Vision local").setMessage(result).setPositiveButton("Închide",null).show()}}
+   };return
+  }
   if(requestCode in 50..52){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;if(requestCode==52)ocrText=null;busy=true;worker.execute{val result=runCatching{if(requestCode==52)LocalOcr.read(this,uri).also{raw->if(raw.isNotBlank()){runOnUiThread{if(!isDestroyed){ocrText=raw;ocrAt=android.os.SystemClock.elapsedRealtime()}}}}.ifBlank{"Niciun text detectat."} else {LocalOcr.install(this,uri,if(requestCode==50)"ron" else "eng");"Date OCR importate; validarea are loc la recunoaștere."}}.getOrElse{"OCR eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append("OCR: "+result);android.app.AlertDialog.Builder(this).setTitle("OCR local").setMessage(result).setPositiveButton("Închide",null).show()}}};return}
   if(requestCode==49){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;busy=true;worker.execute{val result=runCatching{KokoroImport.install(this,uri)}.fold({"Fișiere Kokoro instalate; inferența trebuie testată."},{"Import Kokoro eșuat: "+it.message});runOnUiThread{if(!isDestroyed){busy=false;append(result)}}};return}
   if(requestCode==46){
