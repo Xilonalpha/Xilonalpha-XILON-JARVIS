@@ -364,12 +364,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply{text="Catalog Hugging Face";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.entries
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA • Hugging Face").setItems(entries.map{it.name+" • "+it.role+" • "+it.mb+" MB"}.toTypedArray()){_,index->
+   val downloads=ModelDownloads(this@MainActivity)
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA • Hugging Face").setItems(entries.map{it.name+" • "+downloads.status(it)}.toTypedArray()){_,index->
     val entry=entries[index]
-    val sufficient=filesDir.usableSpace>=entry.mb*2000000L+200000000L
-    android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\nQ4_K_M • aproximativ "+entry.mb+" MB\n"+(if(sufficient)"Spațiu estimat suficient." else "Spațiu posibil insuficient pentru descărcare și import.")+"\nDescarcă prin browser, apoi importă fișierul GGUF din panoul AI.")
-     .setPositiveButton("Descarcă"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(entry.url)))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
-     .setNegativeButton("Anulează",null).show()
+    val uri=downloads.uri(entry)
+    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy)importGguf(uri,false)}
+    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy)append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Descărcare eșuată: "+it.message})}
+    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Anulezi transferul și ștergi copia descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
+    dialog.setNegativeButton("Închide",null).show()
    }.setNeutralButton("Importă GGUF"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)},41)}.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Catalog OCR";setOnClickListener{
@@ -624,11 +627,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(requestCode!=41 || resultCode!=RESULT_OK || busy) return
   val uri=data?.data ?: return
+  importGguf(uri,true)
+ }
+ private fun importGguf(uri:android.net.Uri,persistPermission:Boolean){
+  if(busy)return
   try {
    val magic=ByteArray(4)
    val valid=contentResolver.openInputStream(uri)?.use { java.io.DataInputStream(it).readFully(magic); magic.contentEquals(byteArrayOf(71,71,85,70)) } ?: false
    if(!valid) { modelStatus.text="Fișierul nu are antet GGUF."; return }
-   contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)
+   if(persistPermission)contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)
    busy=true
    modelStatus.text="Se copiază și se încarcă modelul local..."
    worker.execute {
