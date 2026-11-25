@@ -27,10 +27,18 @@ class GestureCursorView(
     private var cursor = PointF(-1f, -1f)
     private var hasPosition = false
     private var cursorVisible = true
+    var onFistHold:()->Unit={}
+    private var fistSince=0L
+    private var fistFired=false
+    private var active=false
+    fun setTracking(enabled:Boolean){active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
         post {
+            if(!active)return@post
+            if(frame.point==null){hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val mirrorX = 1f - normalized.x
                 val targetX = mirrorX.coerceIn(0f, 1f) * width.coerceAtLeast(1)
@@ -44,7 +52,12 @@ class GestureCursorView(
                 }
             }
             when (frame.gesture) {
-                HandGesture.FIST -> cursorVisible = false
+                HandGesture.FIST -> {
+                    cursorVisible=false
+                    val now=android.os.SystemClock.elapsedRealtime()
+                    if(fistSince==0L)fistSince=now
+                    if(!fistFired && now-fistSince>=900L){fistFired=true;onFistHold()}
+                }
                 HandGesture.OPEN_PALM -> cursorVisible = true
                 HandGesture.PINCH_TAP -> {
                     cursorVisible = true

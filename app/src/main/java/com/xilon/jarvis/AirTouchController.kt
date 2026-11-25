@@ -14,6 +14,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
  @Volatile private var closed=false
  private val engine=GestureEngine(context,{if(!closed)cursor.update(it)},{if(!closed)ContextCompat.getMainExecutor(context).execute{if(!closed)status(it)}})
  fun start(){
+  cursor.setTracking(true)
   worker.execute{
    val result=runCatching{engine.initialize()}
    ContextCompat.getMainExecutor(context).execute{
@@ -35,6 +36,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
  fun close(){
   if(closed)return
   closed=true
+  cursor.setTracking(false)
   analysis?.clearAnalyzer()
   analysis?.let{provider?.unbind(it)}
   worker.execute{engine.close()}

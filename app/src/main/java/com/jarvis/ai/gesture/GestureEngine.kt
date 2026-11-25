@@ -27,6 +27,8 @@ class GestureEngine(
     private var lastTimestampMs = 0L
     private var previousGesture = HandGesture.NONE
     private var lastPinchAtMs = 0L
+    private var pinchFrames=0
+    private var pinchLatched=false
 
     /** Loads an imported MediaPipe task model from private app storage. */
     fun initialize() {
@@ -120,19 +122,13 @@ class GestureEngine(
 
     private fun emit(frame: GestureFrame) {
         val now = SystemClock.elapsedRealtime()
-        val gesture = if (
-            frame.gesture == HandGesture.PINCH_TAP &&
-            previousGesture != HandGesture.PINCH_TAP &&
-            now - lastPinchAtMs >= PINCH_DEBOUNCE_MILLIS
-        ) {
-            lastPinchAtMs = now
-            HandGesture.PINCH_TAP
-        } else if (frame.gesture == HandGesture.PINCH_TAP) {
-            HandGesture.NONE
-        } else {
-            frame.gesture
-        }
-        previousGesture = frame.gesture
+        if(frame.gesture==HandGesture.PINCH_TAP)pinchFrames++ else {pinchFrames=0;pinchLatched=false}
+        val gesture=if(frame.gesture==HandGesture.PINCH_TAP){
+            if(pinchFrames>=3 && !pinchLatched && now-lastPinchAtMs>=PINCH_DEBOUNCE_MILLIS){
+                pinchLatched=true;lastPinchAtMs=now;HandGesture.PINCH_TAP
+            }else HandGesture.NONE
+        }else frame.gesture
+        previousGesture=frame.gesture
         onFrame(frame.copy(gesture = gesture))
     }
 
