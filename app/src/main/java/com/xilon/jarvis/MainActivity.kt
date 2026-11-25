@@ -60,7 +60,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var observedAt=0L
  private val screenHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private lateinit var memory: LocalMemory
- private lateinit var transcript: TextView
+ private lateinit var transcript: LinearLayout
  private lateinit var scroll: ScrollView
  private lateinit var modelStatus: TextView
  override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,7 +111,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
   settings.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
-  transcript = TextView(this).apply { textSize = 16f; setTextColor(android.graphics.Color.rgb(220,235,247)); setTextIsSelectable(true);setPadding(dp(8),dp(12),dp(8),dp(12)) }
+  transcript = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(8),dp(12),dp(8),dp(12)) }
   scroll = ScrollView(this).apply { addView(transcript) }
   val core=OmegaCoreView(this)
   omegaCore=core
@@ -190,9 +190,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     else {
      busy=true
      nativeModel?.resetCancellation()
-     val previous=android.text.SpannableString(transcript.text)
-     val prefix=android.text.SpannableStringBuilder(previous).append("JARVIS: ")
-     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { transcript.text=android.text.SpannableStringBuilder(prefix).append(partial); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
+     val streamingBubble=messageBubble("JARVIS: …")
+     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { streamingBubble.text="JARVIS: "+partial; scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
      worker.execute {
       val answer=try { nativeModel?.let { model ->
        val info=android.app.ActivityManager.MemoryInfo()
@@ -217,7 +216,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        sourced
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
-      runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=previous; append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""); if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
+      runOnUiThread { if(!isDestroyed) { busy=false; streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""; if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
      }
     }
    }
@@ -305,15 +304,25 @@ class MainActivity : androidx.activity.ComponentActivity() {
   history.forEach { (role,text) -> array.put(org.json.JSONObject().put("role",role).put("text",text)) }
   getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("turns",array.toString()).apply()
  }
- private fun append(s:String){
-  val line=android.text.SpannableString(s+"\n\n")
-  val color=if(s.startsWith("Tu:"))0xff19384a.toInt() else 0xff142437.toInt()
-  line.setSpan(android.text.style.BackgroundColorSpan(color),0,s.length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-  val colon=s.indexOf(':')
-  if(colon in 1..8)line.setSpan(android.text.style.ForegroundColorSpan(0xff65dcff.toInt()),0,colon+1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-  transcript.append(line)
+ private fun messageBubble(s:String):TextView{
+  val user=s.startsWith("Tu:")
+  val density=resources.displayMetrics.density
+  fun dp(n:Int)=(n*density).toInt()
+  val bubble=TextView(this).apply{
+   text=s;textSize=16f;setTextColor(0xffdcebf7.toInt());setTextIsSelectable(true)
+   setPadding(dp(14),dp(10),dp(14),dp(10))
+   maxWidth=(resources.displayMetrics.widthPixels*0.82f).toInt()
+   background=android.graphics.drawable.GradientDrawable().apply{
+    setColor(if(user)0xff19384a.toInt() else 0xff142437.toInt());cornerRadius=dp(16).toFloat()
+   }
+  }
+  val params=LinearLayout.LayoutParams(-2,-2).apply{gravity=if(user)android.view.Gravity.END else android.view.Gravity.START;bottomMargin=dp(10)}
+  transcript.addView(bubble,params)
+  while(transcript.childCount>150)transcript.removeViewAt(0)
   scroll.post{scroll.fullScroll(ScrollView.FOCUS_DOWN)}
+  return bubble
  }
+ private fun append(s:String){messageBubble(s)}
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
  private fun runTracked(steps:List<String>):String{
