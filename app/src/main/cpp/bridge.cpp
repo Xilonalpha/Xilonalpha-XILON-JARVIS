@@ -4,6 +4,20 @@
 #include <string>
 #include <mutex>
 #include <chrono>
+struct AbortState { JavaVM* vm; jobject owner; jmethodID method; };
+static bool abortDecode(void* data){
+ auto* state=static_cast<AbortState*>(data);
+ JNIEnv* env=nullptr;
+ bool attached=false;
+ if(state->vm->GetEnv(reinterpret_cast<void**>(&env),JNI_VERSION_1_6)==JNI_EDETACHED){
+  if(state->vm->AttachCurrentThread(&env,nullptr)!=JNI_OK)return true;
+  attached=true;
+ }
+ if(!env)return true;
+ bool stop=env->CallBooleanMethod(state->owner,state->method)||env->ExceptionCheck();
+ if(attached){if(env->ExceptionCheck())env->ExceptionClear();state->vm->DetachCurrentThread();}
+ return stop;
+}
 static std::once_flag init;
 static void fail(JNIEnv* e,const char* msg){e->ThrowNew(e->FindClass("java/lang/IllegalStateException"),msg);}
 extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(JNIEnv* e,jobject,jstring path){
@@ -67,10 +81,16 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(!progress){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
  auto tokenEvent=e->GetMethodID(e->GetObjectClass(self),"publishToken","()V");
  if(!tokenEvent){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ JavaVM* vm=nullptr;
+ if(e->GetJavaVM(&vm)!=JNI_OK){llama_sampler_free(sampler);llama_free(ctx);fail(e,"Java VM unavailable");return nullptr;}
+ jobject owner=e->NewGlobalRef(self);
+ if(!owner){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ AbortState abortState{vm,owner,cancel};
+ llama_set_abort_callback(ctx,abortDecode,&abortState);
  auto lastProgress=std::chrono::steady_clock::now();
  for(int i=0;i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
-  if(llama_decode(ctx,batch)!=0){ok=false;break;}
+  if(llama_decode(ctx,batch)!=0){ok=e->CallBooleanMethod(self,cancel);break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
   std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
@@ -87,7 +107,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   }
   tokens[0]=t;batch=llama_batch_get_one(tokens.data(),1);
  }
- llama_sampler_free(sampler);llama_free(ctx);
+ llama_sampler_free(sampler);llama_free(ctx);e->DeleteGlobalRef(owner);
  if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
