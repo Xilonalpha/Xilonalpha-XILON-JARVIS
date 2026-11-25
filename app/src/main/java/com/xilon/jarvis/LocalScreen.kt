@@ -20,6 +20,17 @@ class LocalScreen:AccessibilityService(){
  override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
  override fun onInterrupt(){com.jarvis.mobile.core.skills.SkillRecorder.stop()}
  override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
+ internal fun elementGesture(x:Int,y:Int,mode:String,pkg:String?,fingerprint:String):Boolean {
+  val obs=structuredScreen()?:return false
+  if(pkg==null||obs.packageName!=pkg||obs.fingerprint()!=fingerprint)return false
+  val m=resources.displayMetrics
+  if(x !in 0 until m.widthPixels||y !in 0 until m.heightPixels)return false
+  val path=android.graphics.Path().apply{moveTo(x.toFloat(),y.toFloat())}
+  val builder=android.accessibilityservice.GestureDescription.Builder()
+  builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,if(mode=="long")650L else 60L))
+  if(mode=="double")builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,120,60))
+  return dispatchGesture(builder.build(),null,null)
+ }
  internal fun scrollConfirmed(forward:Boolean):Boolean {
   val m=resources.displayMetrics
   val x=m.widthPixels/2
