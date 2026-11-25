@@ -243,7 +243,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -408,6 +408,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .setPositiveButton("Descarcă"){_,_->runCatching{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/Soulcreek2/speechkit-wakeword-models/resolve/main/"+components[index]+"?download=true"))) }}
      .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Catalog Kokoro";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val enabled=runCatching{Class.forName("com.xilon.jarvis.KokoroVoice")}.isSuccess
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Kokoro TTS • engleză")
+    .setMessage((if(enabled)"Motor inclus." else "Necesită profilul enableSherpa=true.")+"\nDeschide sursa Hugging Face. Pregătește un ZIP cu model.int8.onnx, voices.bin, tokens.txt și directorul espeak-ng-data la rădăcină. Compatibilitatea necesită test. Pentru română folosește vocea Android offline.")
+    .setPositiveButton("Sursa modelelor"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/csukuangfj/kokoro-en-v0_19/tree/main")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
+    .setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
+    .setNegativeButton("Închide",null).show()
   }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
