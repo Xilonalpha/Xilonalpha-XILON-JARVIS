@@ -35,6 +35,9 @@ object NaturalToolCommands {
 
   if(q.equals("redare pauză",true)||q.equals("redare pauza",true))return call("media_play_pause")
   when(q.lowercase(java.util.Locale.ROOT)){
+   "listează aplicațiile","listeaza aplicatiile","list apps" -> return call("list_apps")
+   "derulează la stânga","deruleaza la stanga" -> return call("scroll","direction" to JsonPrimitive("left"))
+   "derulează la dreapta","deruleaza la dreapta" -> return call("scroll","direction" to JsonPrimitive("right"))
    "înapoi","inapoi" -> return call("press_back")
    "ecran principal","mergi acasă","mergi acasa" -> return call("press_home")
    "aplicații recente","aplicatii recente" -> return call("press_recents")
@@ -68,7 +71,10 @@ object NaturalToolCommands {
    is com.jarvis.assistant.router.FastCommand.SetTimer ->
     call("set_timer","seconds" to JsonPrimitive(cmd.seconds))
    is com.jarvis.assistant.router.FastCommand.WebSearch ->
-    if(cmd.site=="youtube")call("youtube_search","query" to JsonPrimitive(cmd.query)) else null
+    if(cmd.site=="youtube")call("youtube_search","query" to JsonPrimitive(cmd.query))
+    else if(cmd.site=="google")call("launch_intent","kind" to JsonPrimitive("search"),"value" to JsonPrimitive(cmd.query)) else null
+   is com.jarvis.assistant.router.FastCommand.Dial ->
+    call("launch_intent","kind" to JsonPrimitive("dial"),"value" to JsonPrimitive(cmd.number))
    else -> null
   }
  }
