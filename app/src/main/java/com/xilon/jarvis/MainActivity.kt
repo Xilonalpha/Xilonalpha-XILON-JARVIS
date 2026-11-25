@@ -955,7 +955,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(pendingRegistry.isNotEmpty())try { PendingRegistryStore(this@MainActivity).save(pendingRegistry) } catch(e:Exception){append("Planul rămas este disponibil doar în memorie: "+e.message)}
     busy=false;refreshOmegaStatus()
     if(!saved)append("Jurnalul sau graful nu a putut fi actualizat.")
-    append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
+    append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))
+    val critical=result.getOrNull()?.takeIf{it.status=="REQUIRES_CONFIRMATION"}?.remaining?.firstOrNull()
+    if(critical!=null && !agentCancelled && !busy){
+     append("Plan oprit înaintea operațiunii critice. Pașii anteriori nu vor fi repetați.")
+     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Operațiune critică")
+      .setMessage(critical.tool+"\n"+critical.args.toString()+"\nDupă executare, solicită separat pașii rămași.")
+      .setPositiveButton("Confirmă"){_,_->if(!busy&&!agentCancelled&&!isDestroyed)executeRequestedTool(critical.tool,critical.args,true)}
+      .setNegativeButton("Anulează",null).show()
+    }
+   }}
+
   }
  }
  private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject,approved:Boolean=false){
