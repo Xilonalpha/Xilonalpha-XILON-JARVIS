@@ -33,7 +33,8 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
        analysis=a;a.setAnalyzer(worker){frame->
         try{
          val now=android.os.SystemClock.elapsedRealtime()
-         if(!closed && onObservation!=null && now-lastVision>=visionInterval()){
+         if(!closed && onObservation!=null && now-lastVision>=visionInterval() && VisionWorkGate.tryEnter()){
+          try {
           lastVision=now
           val report=runCatching{
            val bitmap=frame.toBitmap()
@@ -44,6 +45,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
            }finally{bitmap.recycle()}
           }.getOrNull()
           if(report!=null)ContextCompat.getMainExecutor(context).execute{if(!closed)onObservation?.invoke(report)}
+          } finally { VisionWorkGate.leave() }
          }
         }finally{engine.process(frame)}
        }
@@ -60,7 +62,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
   val info=android.app.ActivityManager.MemoryInfo()
   manager.getMemoryInfo(info)
   val thermal=if(android.os.Build.VERSION.SDK_INT>=29)context.getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
-  if(!ResourceBudget.allowOptionalVision(info.availMem/1048576,info.lowMemory,thermal))return Long.MAX_VALUE
+  if(ResourceBudget.maxConcurrentOptionalVision(info.availMem/1048576,info.lowMemory,thermal,context.getSystemService(android.os.PowerManager::class.java).isPowerSaveMode)==0)return Long.MAX_VALUE
   return ResourceBudget.visionInterval(info.availMem/1048576,info.lowMemory,thermal,context.getSystemService(android.os.PowerManager::class.java).isPowerSaveMode)
  }
  fun close(){

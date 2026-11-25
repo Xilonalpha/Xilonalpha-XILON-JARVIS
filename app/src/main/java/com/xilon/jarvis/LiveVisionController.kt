@@ -25,7 +25,8 @@ internal class LiveVisionController(private val context:Context,private val owne
     a.setAnalyzer(worker){frame->
      try{
       val now=android.os.SystemClock.elapsedRealtime()
-      if(!closed && now-last>=interval()){
+      if(!closed && now-last>=interval() && VisionWorkGate.tryEnter()){
+       try {
        last=now
        val bitmap=frame.toBitmap()
        try{
@@ -38,6 +39,7 @@ internal class LiveVisionController(private val context:Context,private val owne
          main.execute{if(!closed)observation(report)}
         }finally{if(rotated!==bitmap)rotated.recycle()}
        }finally{bitmap.recycle()}
+       } finally { VisionWorkGate.leave() }
       }
      }catch(e:Exception){main.execute{if(!closed)failure("Vedere live: "+e.message)}}
      catch(e:LinkageError){main.execute{if(!closed)failure("Motor vizual indisponibil: "+e.message)}}
@@ -52,6 +54,7 @@ internal class LiveVisionController(private val context:Context,private val owne
   context.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
   val power=context.getSystemService(android.os.PowerManager::class.java)
   val thermal=if(android.os.Build.VERSION.SDK_INT>=29)power.currentThermalStatus else 0
+  if(ResourceBudget.maxConcurrentOptionalVision(info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode)==0)return Long.MAX_VALUE
   return ResourceBudget.visionInterval(info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode)
  }
  fun close(){

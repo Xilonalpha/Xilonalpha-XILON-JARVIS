@@ -52,6 +52,24 @@ class TaskJournal(context:Context){
   counts.entries.sortedWith(compareByDescending<Map.Entry<String,IntArray>>{it.value.sum()}.thenBy{it.key})
    .take(12).joinToString("\n"){(tool,n)->"$tool verified=${n[0]} unverified=${n[1]} failed=${n[2]}"}.take(800)
  }
+ /** Historical warnings only. These never represent a current screen observation or authorization. */
+ fun failurePatternFeedback():String=synchronized(lock){
+  val rows=entries()
+  val failures=linkedMapOf<String,Int>()
+  for(i in maxOf(0,rows.length()-30) until rows.length()){
+   val row=rows.optJSONObject(i) ?: continue
+   if(!row.has("remaining"))continue
+   val evidence=row.optJSONArray("evidence") ?: continue
+   for(j in 0 until evidence.length()){
+    val item=evidence.optJSONObject(j) ?: continue
+    if(item.optString("status")=="SUCCESS" && item.optString("verified")=="VERIFIED")continue
+    val name=item.optString("command").take(80)
+    if(name.isNotBlank())failures[name]=(failures[name] ?: 0)+1
+   }
+  }
+  failures.filterValues{it>=2}.entries.sortedWith(compareByDescending<Map.Entry<String,Int>>{it.value}.thenBy{it.key})
+   .take(5).joinToString("\n"){(tool,count)->"Historical warning: $tool had $count unverified/failed executions; recheck availability and observe before acting."}.take(700)
+ }
  fun summary():String=synchronized(lock){
   val a=entries()
   (0 until a.length()).reversed().joinToString("\n"){i->val x=a.getJSONObject(i);java.util.Date(x.getLong("time")).toString()+" "+x.getString("status")+" "+x.getJSONArray("steps")+(if(x.has("remaining"))" • pași rămași: "+x.getInt("remaining") else "")+(x.optJSONArray("evidence")?.let{" • dovezi: "+it.toString()}?:"")}.ifBlank{"Jurnal gol."}

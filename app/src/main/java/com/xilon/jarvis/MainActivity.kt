@@ -14,6 +14,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var cachedNeural:NeuralSpeech?=null
  private val voiceRetry=VoiceRetryPolicy()
  private val voiceTurnGuard=VoiceTurnGuard()
+ private val voiceInterruptGate=VoiceInterruptGate()
  private fun stopNeural(){neuralCancelled=true;neural?.stop()}
  private fun startNeural(fallback:Boolean=false){
   if(busy || wake!=null)return
@@ -118,13 +119,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!busy && !omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && !omegaCore.listening)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){stopAllSpeech();append("Răspuns vocal întrerupt.")}},{_->})
+   else if(voiceInterrupt && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){stopAllSpeech();append("Răspuns vocal întrerupt.")}},{_->})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset()}
+ private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset()}
  private fun acceptVoice(text:String){
-  if(text.isBlank() || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
+  if(text.isBlank() || (omegaCore.speaking && echoGate.isEcho(text)) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
   if((autoVoiceSend||continuousVoice)&&::sendControl.isInitialized&&!busy)sendControl.performClick()
  }
@@ -211,7 +212,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   corePanel.addView(activityStatus)
   listening.onLevel={level->omegaCore.level=level}
   listening.onSpeechStart={}
-  listening.onPartialText={partial->if(continuousVoice && conversationForeground && !omegaCore.speaking && !busy){modelStatus.text=partial.take(200)}}
+  listening.onPartialText={partial->if(continuousVoice && conversationForeground && !busy){if(omegaCore.speaking){if(voiceInterrupt && echoGate.isStop(partial)){stopAllSpeech();append("Răspuns vocal întrerupt.")}}else if(!echoGate.isEcho(partial)){modelStatus.text=partial.take(200)}}}
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
   voice.onFailure={message->append(message)}
   voice.onSpeaking={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
@@ -1749,7 +1750,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
    val thermal=if(android.os.Build.VERSION.SDK_INT>=29)getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
    val context=ResourceBudget.planningContext(info.availMem/1048576,info.lowMemory,thermal)
-   val firstPlan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(400)+"\n"+TaskJournal(this@MainActivity).planningFeedback()+"\n"+TaskJournal(this@MainActivity).toolReliabilityFeedback()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}
+   val firstPlan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(400)+"\n"+TaskJournal(this@MainActivity).planningFeedback()+"\n"+TaskJournal(this@MainActivity).toolReliabilityFeedback()+"\n"+TaskJournal(this@MainActivity).failurePatternFeedback()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}
    val plan=if(firstPlan.isFailure && !agentCancelled && !model.isCancelled())runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,"Planul anterior a fost respins. Folosește exclusiv instrumentele și argumentele din catalog. Nu inventa rezultate.",hints),1,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}else firstPlan
    runOnUiThread{
     if(!isDestroyed){
