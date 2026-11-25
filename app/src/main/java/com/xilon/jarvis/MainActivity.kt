@@ -370,7 +370,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
     if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy)importGguf(uri,false,entry)}
-    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy)append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Descărcare eșuată: "+it.message})}
+    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
+     val result=runCatching{downloads.start(entry);"Transfer solicitat; revizie și SHA-256 salvate."}.getOrElse{"Descărcare eșuată: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Anulezi transferul și ștergi copia descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
     dialog.setNegativeButton("Închide",null).show()
    }.setNeutralButton("Importă GGUF"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)},41)}.setNegativeButton("Închide",null).show()
@@ -694,7 +697,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val target=java.io.File(filesDir,"model-"+java.util.UUID.randomUUID()+".gguf")
     var candidate: NativeModel?=null
     val status=try {
-     val reference=entry?.let{ModelMetadata.fetch(it)}
+     val reference=entry?.let{ModelDownloads(this).reference(it)}
      val size=contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.SIZE),null,null,null)?.use { c -> if(c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L } ?: -1L
      if(size>0 && size>StatFs(filesDir.path).availableBytes) error("Spațiu insuficient pentru copiere")
      if(reference!=null)require(reference.bytes<=StatFs(filesDir.path).availableBytes){"Spațiu insuficient"}
