@@ -239,6 +239,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
       .setPositiveButton("Continuă"){_,_->pendingRegistry=emptyList();agentCancelled=false;runRegistryPlan(pending)}.show()
      return@setOnClickListener
     }
+    if(RegistryIntent.matches(q) && nativeModel!=null){
+     startRegistryPlan(q)
+     return@setOnClickListener
+    }
     val naturalTool=NaturalToolCommands.parse(q)
     if(naturalTool!=null){
      confirmTool(naturalTool.tool,naturalTool.args)
@@ -755,7 +759,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   pendingRegistry=emptyList();agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal),2,4096,512,emptyList(),RegistryPlanner.grammar))}
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registrySummary()}}.getOrDefault("")),2,4096,512,emptyList(),RegistryPlanner.grammar))}
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
