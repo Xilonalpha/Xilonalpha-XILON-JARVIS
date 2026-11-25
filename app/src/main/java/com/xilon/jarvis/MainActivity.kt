@@ -312,10 +312,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
     if(normalizedRomanian=="stare dictionar"){
-     append("Dicționar local: "+RomanianLexicon.dictionaryStatus())
+     append("Dicționar local: "+RomanianLexicon.dictionaryStatus()+"\nCorpus Wiktionary: "+RomanianLexicon.definitionsStatus())
      return@setOnClickListener
     }
-    val languagePrefix=listOf("analizeaza limba ","corecteaza textul ","sinonime pentru ").firstOrNull{normalizedRomanian.startsWith(it)}
+    val languagePrefix=listOf("analizeaza limba ","corecteaza textul ","sinonime pentru ","analizeaza gramatical ","definitii pentru ").firstOrNull{normalizedRomanian.startsWith(it)}
     if(languagePrefix!=null){
      val term=q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""}
      if(term.isBlank()){append("Introdu textul de analizat.");return@setOnClickListener}
@@ -324,6 +324,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
       val result=runCatching{
        if(languagePrefix=="sinonime pentru "){
         RomanianLexicon.synonyms(term).joinToString(", ").ifBlank{"Nu am găsit sinonime în corpusul local."}
+       }else if(languagePrefix=="definitii pentru "){
+        RomanianLexicon.englishDefinitions(term).joinToString("\n").ifBlank{"Nu există definiții locale disponibile. Corpus: "+RomanianLexicon.definitionsStatus()}
+       }else if(languagePrefix=="analizeaza gramatical "){
+        RomanianLexicon.grammarReport(term).joinToString("\n").ifBlank{"Nu există analize gramaticale disponibile. Corpus: "+RomanianLexicon.definitionsStatus()}
        }else{
         val review=RomanianLexicon.review(term)
         buildString{
@@ -332,7 +336,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
          if(review.blocked)append("\nNegație detectată; nicio acțiune executată.")
          if(review.spelling.isNotEmpty())append("\nCorecturi posibile: "+review.spelling.joinToString("; "))
          if(review.synonyms.isNotEmpty())append("\nComenzi alternative: "+review.synonyms.joinToString("; "))
-         review.translation?.let{append("\nTraducere: "+it)}
+         review.translation?.let{append("\nEchivalent lexical: "+it)}
+         val grammar=RomanianLexicon.grammarReport(term)
+         if(grammar.isNotEmpty())append("\nGramatică:\n"+grammar.joinToString("\n"))
          if(review.spelling.isEmpty() && review.synonyms.isEmpty())append("\nNu există sugestii pentru comenzile înregistrate.")
         }
        }
@@ -344,8 +350,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(normalizedRomanian.startsWith("tradu in engleza ") || normalizedRomanian.startsWith("tradu in romana ")){
      val english=normalizedRomanian.startsWith("tradu in engleza ")
      val term=q.trim().split(Regex("\\s+"),limit=4).getOrElse(3){""}
-     val translation=if(english)RomanianLexicon.translateKnown(term) else RomanianLexicon.translateReverse(term)
-     append(translation ?: "Traducere indisponibilă în dicționarul local.")
+     busy=true
+     worker.execute{
+      val result=runCatching{
+       val translation=if(english)RomanianLexicon.translateKnown(term) else RomanianLexicon.translateReverse(term)
+       translation ?: (if(english)RomanianLexicon.englishDefinitions(term).takeIf{it.isNotEmpty()}?.joinToString(" / ")?.let{"Definiții EN (nu traducere contextuală): "+it} else null)
+        ?: "Traducere indisponibilă în dicționarul local. Corpus: "+RomanianLexicon.definitionsStatus()
+      }.getOrElse{"Căutarea lexicală nu este disponibilă: "+it.javaClass.simpleName}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }
      return@setOnClickListener
     }
     if(RomanianLexicon.negated(q) || RomanianLexicon.split(q).any{RomanianLexicon.negated(it)}){
@@ -404,7 +417,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       val lexicalHint=runCatching {
        if(q.length > 160 || q.contains('?') || RegistryIntent.compound(q) || RomanianLexicon.negated(q)) null
        else {
-        val suggestions=RomanianLexicon.spellingSuggestions(q).distinct().take(5)
+        val suggestions=(RomanianLexicon.spellingSuggestions(q)+RomanianLexicon.suggestedPhrases(q)).distinct().take(5)
         // Only exact registered command corrections, never automatic dispatch.
         if(suggestions.isEmpty()) null else "Nu am identificat sigur comanda. Ai vrut să spui: "+suggestions.joinToString(" / ")+"? Scrie comanda dorită. Nu am executat nicio acțiune."
        }
