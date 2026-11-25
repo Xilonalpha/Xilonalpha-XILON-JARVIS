@@ -10,17 +10,19 @@ import java.text.DateFormat
 import java.util.Date
 class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var neural:NeuralSpeech?=null
- private var neuralCancelled=false
+ @Volatile private var neuralCancelled=false
+ private var cachedNeural:NeuralSpeech?=null
+ private val voiceRetry=VoiceRetryPolicy()
  private fun stopNeural(){neuralCancelled=true;neural?.stop()}
  private fun startNeural(fallback:Boolean=false){
   if(busy || wake!=null)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
-  val engine=try{NeuralSpeechFactory.create(this)}catch(e:Exception){modelStatus.text="Sherpa indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}catch(e:LinkageError){modelStatus.text="Sherpa nativ indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}
+  val engine=try{cachedNeural ?: NeuralSpeechFactory.create(this).also{cachedNeural=it}}catch(e:Exception){modelStatus.text="Sherpa indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}catch(e:LinkageError){modelStatus.text="Sherpa nativ indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}
   if(engine==null){if(fallback)startAndroidMicrophone() else modelStatus.text="Motor Sherpa indisponibil.";return}
   listening.close();stopAllSpeech();busy=true;neuralCancelled=false;neural=engine;omegaCore.listening=true;refreshOmegaStatus()
   worker.execute{
-   val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{runCatching{engine.close()};neural=null}
-   runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled)result.fold({if(it.isBlank())modelStatus.text="Nicio comandă detectată." else {acceptVoice(it)}},{modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
+   val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{neural=null}
+   runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled && conversationForeground)result.fold({if(it.isBlank()){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text="Nicio comandă detectată."} else {voiceRetry.reset();acceptVoice(it)}},{cachedNeural=null;worker.execute{runCatching{engine.close()}};voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
   }
  }
  private var wake:WakeController?=null
@@ -74,7 +76,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var speakReplies=false
  private var kokoroVoice:NeuralVoice?=null
  private var voiceTicket=0L
- private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop()}
+ private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
   omegaCore.speaking=true;refreshOmegaStatus()
@@ -100,13 +102,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
-  if(!busy && !omegaCore.listening && wake==null){
+  if(!busy && !omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
    else if(voiceInterrupt && !omegaCore.listening)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){stopAllSpeech();append("Răspuns vocal întrerupt.")}},{_->})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop)}
+ private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset()}
  private fun acceptVoice(text:String){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length);if((autoVoiceSend||continuousVoice)&&text.isNotBlank()&&::sendControl.isInitialized&&!busy)sendControl.performClick()}
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
@@ -1321,8 +1323,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
-  voice.stop();kokoroVoice?.stop()
-  listening.listen({ text -> if(!isDestroyed){acceptVoice(text)} },{ error -> if(!isDestroyed){modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română")||error.startsWith("Recunoașterea offline nu este disponibilă"))stopVoiceLoop()} })
+  stopAllSpeech()
+  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română")||error.startsWith("Recunoașterea offline nu este disponibilă"))stopVoiceLoop()} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
@@ -1342,8 +1344,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun speakReply(text:String,manual:Boolean=false){
-  echoGate.remember(text)
   if((!manual && !speakReplies && !continuousVoice) || text.isBlank())return
+  listening.close();echoGate.remember(text)
   val neural=kokoroVoice
   if(!continuousVoice && englishNeuralVoice && neural!=null && neural.installed()){
    playNeural(text,neural);return
@@ -1729,7 +1731,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
    val thermal=if(android.os.Build.VERSION.SDK_INT>=29)getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
    val context=ResourceBudget.planningContext(info.availMem/1048576,info.lowMemory,thermal)
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(400)+"\n"+TaskJournal(this@MainActivity).planningFeedback()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}
+   val firstPlan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(400)+"\n"+TaskJournal(this@MainActivity).planningFeedback()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}
+   val plan=if(firstPlan.isFailure && !agentCancelled && !model.isCancelled())runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,"Planul anterior a fost respins. Folosește exclusiv instrumentele și argumentele din catalog. Nu inventa rezultate.",hints),1,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}else firstPlan
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
@@ -2117,7 +2120,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerHandler.post(triggerTick)
  }
  override fun onPause(){
-  stopVoiceLoop();listening.close()
+  stopVoiceLoop();listening.close();stopNeural();stopAllSpeech()
   conversationForeground=false
   stopLiveVision()
   conversationHandler.removeCallbacks(conversationTick)
@@ -2138,7 +2141,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   listening.close()
   voice.close()
   nativeModel?.stop()
-  worker.execute { nativeModel?.close(); nativeModel=null }
+  stopNeural();val speech=cachedNeural;cachedNeural=null
+  worker.execute { runCatching{speech?.close()};nativeModel?.close(); nativeModel=null }
   worker.shutdown()
   super.onDestroy()
  }

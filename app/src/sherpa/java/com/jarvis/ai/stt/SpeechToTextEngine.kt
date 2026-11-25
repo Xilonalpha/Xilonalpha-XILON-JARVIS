@@ -80,6 +80,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val files = modelDirectory.listFiles()?.filter { it.isFile && it.length() > 0L }.orEmpty()
         val senseVoice = ModelStore.senseVoiceFiles(files)
         val whisper = ModelStore.whisperFiles(files)
+        val memory=android.app.ActivityManager.MemoryInfo().also{appContext.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it)}
+        val thermal=if(android.os.Build.VERSION.SDK_INT>=29)appContext.getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
+        val threads=com.xilon.jarvis.ResourceBudget.speechThreads(Runtime.getRuntime().availableProcessors(),memory.availMem/1048576,memory.lowMemory,thermal)
         val modelConfig = when {
             senseVoice != null && whisper == null -> OfflineModelConfig(
                 senseVoice = OfflineSenseVoiceModelConfig(
@@ -88,7 +91,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     useInverseTextNormalization = true,
                 ),
                 tokens = senseVoice.second.absolutePath,
-                numThreads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4),
+                numThreads = threads,
                 modelType = "sense_voice",
             )
             whisper != null -> OfflineModelConfig(
@@ -100,7 +103,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     tailPaddings = 1_000,
                 ),
                 tokens = whisper.third.absolutePath,
-                numThreads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4),
+                numThreads = threads,
                 modelType = "whisper",
             )
             else -> throw IllegalStateException(

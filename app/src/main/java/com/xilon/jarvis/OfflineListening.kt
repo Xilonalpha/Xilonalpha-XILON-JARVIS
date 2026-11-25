@@ -11,6 +11,8 @@ class OfflineListening(private val context: Context): AutoCloseable {
  var onLevel:(Float)->Unit={}
  var onListening:(Boolean)->Unit={}
  private var engine: SpeechRecognizer?=null
+ private val handler=android.os.Handler(android.os.Looper.getMainLooper())
+ private var timeout:Runnable?=null
  fun listen(result:(String)->Unit,error:(String)->Unit){
   close()
   if(Build.VERSION.SDK_INT<31 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(context)){
@@ -35,6 +37,7 @@ class OfflineListening(private val context: Context): AutoCloseable {
      if(text.isNullOrBlank())error("Nu am detectat un mesaj.") else result(text)
     }
    })
+   timeout=Runnable{if(engine===recognizer){close();error("Recunoaștere offline: timp depășit.")}}.also{handler.postDelayed(it,30000L)}
    onListening(true)
    recognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{
     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -44,5 +47,5 @@ class OfflineListening(private val context: Context): AutoCloseable {
    })
   }catch(e:Exception){close();error("Microfon: "+e.message)}
  }
- override fun close(){val previous=engine;engine=null;previous?.let{runCatching{it.cancel()};runCatching{it.destroy()}};onLevel(0f);onListening(false)}
+ override fun close(){timeout?.let{handler.removeCallbacks(it)};timeout=null;val previous=engine;engine=null;previous?.let{runCatching{it.cancel()};runCatching{it.destroy()}};onLevel(0f);onListening(false)}
 }
