@@ -365,7 +365,6 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
-    val normalizedRomanian=RomanianLexicon.normalize(q)
     if(normalizedRomanian=="fotografiaza si analizeaza"){
      if(!busy)runCatching{startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),57)}.onFailure{append("Camera indisponibilă: "+it.message)}
      return@setOnClickListener
