@@ -365,18 +365,42 @@ object RomanianLexicon {
     val input = context.assets.open("ro_wiktionary/lexicon.jsonl")
     input.bufferedReader(Charsets.UTF_8).useLines { lines ->
      val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
-      java.io.File(context.noBackupFilesDir,"romanian-definitions-v2.db"),null)
+      java.io.File(context.noBackupFilesDir,"romanian-definitions-v3.db"),null)
      db = opened
-     if (opened.version != 2) {
+     if (opened.version != 3) {
       opened.beginTransaction()
       try {
        opened.execSQL("CREATE TABLE IF NOT EXISTS definitions(key TEXT, lemma TEXT, gloss TEXT, PRIMARY KEY(key,lemma,gloss))")
+       opened.execSQL("CREATE TABLE IF NOT EXISTS grammar(key TEXT NOT NULL, lemma TEXT NOT NULL, pos TEXT NOT NULL, tags TEXT NOT NULL, PRIMARY KEY(key,lemma,pos,tags))")
+       val grammatical = opened.compileStatement("INSERT OR IGNORE INTO grammar VALUES (?,?,?,?)")
        val insert = opened.compileStatement("INSERT OR IGNORE INTO definitions VALUES (?,?,?)")
        var count = 0
        try {
         for (line in lines) {
          val row = Json.parseToJsonElement(line).jsonObject
          val lemma = row.getValue("word").jsonPrimitive.content
+         val pos = (row["pos"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+         fun addGrammar(form: String, root: String, tags: List<String>) {
+          if (form.isBlank() || root.isBlank() || form.length > 160) return
+          grammatical.bindString(1,normalize(form)); grammatical.bindString(2,root)
+          grammatical.bindString(3,pos); grammatical.bindString(4,tags.distinct().sorted().joinToString("|"))
+          grammatical.executeInsert()
+         }
+         fun tagsOf(obj: JsonObject): List<String> = (obj["tags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+         addGrammar(lemma,lemma,emptyList())
+         for (item in (row["grammar"] as? JsonArray).orEmpty()) {
+          val form = item as? JsonObject ?: continue
+          addGrammar((form["form"] as? JsonPrimitive)?.contentOrNull.orEmpty(),lemma,tagsOf(form))
+         }
+         for (item in (row["senses"] as? JsonArray).orEmpty()) {
+          val sense = item as? JsonObject ?: continue
+          for (relation in listOf("form_of","alt_of")) {
+           for (link in (sense[relation] as? JsonArray).orEmpty()) {
+            val root = ((link as? JsonObject)?.get("word") as? JsonPrimitive)?.contentOrNull ?: continue
+            addGrammar(lemma,root,tagsOf(sense) + relation)
+           }
+          }
+         }
          val glosses = row.getValue("english_glosses").jsonArray.map { it.jsonPrimitive.content }
          val forms = row.getValue("forms").jsonArray.map { it.jsonPrimitive.content }.filter { it.isNotBlank() && it.length <= 160 }
          for (form in (listOf(lemma) + forms).distinct()) {
@@ -387,10 +411,10 @@ object RomanianLexicon {
          }
          count++
         }
-       } finally { insert.close() }
+       } finally { insert.close(); grammatical.close() }
        check(count >= 10000)
        opened.execSQL("CREATE INDEX IF NOT EXISTS definitions_gloss ON definitions(gloss COLLATE NOCASE,lemma)")
-       opened.version = 2
+       opened.version = 3
        opened.setTransactionSuccessful()
       } finally { opened.endTransaction() }
      }
@@ -406,6 +430,23 @@ object RomanianLexicon {
    }
   }
  }
+ data class GrammarMatch(val lemma: String, val partOfSpeech: String, val tags: List<String>)
+ fun grammarMatches(word: String): List<GrammarMatch> {
+  if (definitionsState != "ready" || word.length !in 1..160) return emptyList()
+  return synchronized(this) {
+   val db = definitionsDb ?: return@synchronized emptyList()
+   db.rawQuery("SELECT lemma,pos,tags FROM grammar WHERE key=? ORDER BY lemma,pos,tags LIMIT 24",arrayOf(normalize(word))).use { cursor ->
+    val result = ArrayList<GrammarMatch>()
+    while (cursor.moveToNext()) result.add(GrammarMatch(cursor.getString(0),cursor.getString(1),cursor.getString(2).split('|').filter { it.isNotBlank() }))
+    result
+   }
+  }
+ }
+ fun grammarReport(text: String): List<String> =
+  Regex("[\\p{L}\\p{M}]+").findAll(text.take(500)).map { it.value }.distinct().take(24).mapNotNull { word ->
+   val matches = grammarMatches(word)
+   if (matches.isEmpty()) null else word + ": " + matches.take(4).joinToString(" / ") { it.lemma + " [" + (listOf(it.partOfSpeech) + it.tags).filter { tag -> tag.isNotBlank() }.joinToString(", ") + "]" }
+  }.toList()
  fun englishDefinitions(word: String): List<String> {
   if (definitionsState != "ready" || word.length !in 1..160) return emptyList()
   return synchronized(this) {
