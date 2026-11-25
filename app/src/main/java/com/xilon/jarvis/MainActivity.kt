@@ -226,7 +226,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -252,6 +252,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{it.summary()}}}})
+  settings.addView(Button(this).apply{text="Detalii model local";setOnClickListener{report("Model local"){
+   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+   val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
+   val memory=android.app.ActivityManager.MemoryInfo()
+   (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
+   "Model în memorie: "+(if(nativeModel!=null)"da" else "nu")+"\nFișier: "+(file?.name ?: "absent")+"\nDimensiune: "+(file?.let{(it.length()/1048576).toString()+" MiB"} ?: "indisponibilă")+"\nRAM disponibilă: "+memory.availMem/1048576+" MiB\nStocare liberă: "+android.os.StatFs(filesDir.path).availableBytes/1048576+" MiB\nCompatibilitatea se confirmă prin încărcare și inferență."
+  }}})
+  settings.addView(Button(this).apply{text="Descarcă modelul din memorie";setOnClickListener{
+   if(!busy && nativeModel!=null)android.app.AlertDialog.Builder(this@MainActivity).setTitle("Eliberează memoria RAM?").setMessage("Fișierul GGUF rămâne salvat. Modelul poate fi restaurat la repornirea aplicației.").setPositiveButton("Eliberează"){_,_->if(!busy){busy=true;worker.execute{
+    val result=runCatching{nativeModel?.close();nativeModel=null;"Model eliberat din memorie."}.getOrElse{"Eroare: "+it.message}
+    runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result;navigate("AI")}}
+   }}}.setNegativeButton("Anulează",null).show()
+  }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
 
