@@ -243,7 +243,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -380,6 +380,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
     android.app.AlertDialog.Builder(this@MainActivity).setTitle(languages[index].second).setMessage("Tesseract LSTM offline. Descarcă fișierul, apoi importă-l.")
      .setPositiveButton("Descarcă"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/lm-kit/tessdata-fast/resolve/83ff76b97461395f257255720bf7f3957606dbb5/$lang.traineddata?download=true")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
      .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},if(lang=="ron")50 else 51)}.setNegativeButton("Anulează",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Catalog voce Sherpa";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val files=listOf("tiny-encoder.int8.onnx","tiny-decoder.int8.onnx","tiny-tokens.txt")
+   val root=java.io.File(filesDir,"models")
+   val enabled=runCatching{Class.forName("com.xilon.jarvis.SherpaSpeech")}.isSuccess
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Whisper Tiny multilingual • "+if(enabled)"Sherpa inclus" else "Necesită APK Sherpa").setItems(files.map{it+if(java.io.File(root,it).isFile)" • prezent" else " • lipsește"}.toTypedArray()){_,index->
+    val file=files[index]
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle(file).setMessage("Set INT8 multilingv. Sunt necesare toate cele trei fișiere. Păstrează numele original.")
+     .setPositiveButton("Descarcă"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/$file?download=true")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
+     .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}.setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
   var currentPage="Chat"
