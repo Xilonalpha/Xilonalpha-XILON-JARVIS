@@ -285,9 +285,10 @@ object RomanianLexicon {
   val tokens = cleaned.split(' ')
   if (tokens.size !in 2..12 || tokens.any { it.isBlank() || !it.all(Char::isLetter) }) return emptyList()
   // Corpus alternatives are evidence for clarification, never executable actions.
-  fun roots(word: String): Set<String> = (listOf(word) +
+  val rootCache = HashMap<String,Set<String>>()
+  fun roots(word: String): Set<String> = rootCache.getOrPut(word) { (listOf(word) +
    grammarMatches(word).map { normalize(it.lemma) } +
-   morphologicalRoots(word).map { normalize(it) }).toSet()
+   morphologicalRoots(word).map { normalize(it) }).toSet() }
   val inputRoots = tokens.map { roots(it) }
   val first = tokens.first()
   val related = (synonyms(first) + corpusSynonyms(first)).map { normalize(it) }.toSet()
@@ -400,17 +401,19 @@ object RomanianLexicon {
     val input = context.assets.open("ro_wiktionary/lexicon.jsonl")
     input.bufferedReader(Charsets.UTF_8).useLines { lines ->
      val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
-      java.io.File(context.noBackupFilesDir,"romanian-definitions-v4.db"),null)
+      java.io.File(context.noBackupFilesDir,"romanian-definitions-v5.db"),null)
      db = opened
-     if (opened.version != 4) {
+     if (opened.version != 5) {
       opened.beginTransaction()
       try {
-       opened.execSQL("CREATE TABLE IF NOT EXISTS definitions(key TEXT, lemma TEXT, gloss TEXT, PRIMARY KEY(key,lemma,gloss))")
+       opened.execSQL("CREATE TABLE IF NOT EXISTS definitions(lemma TEXT NOT NULL, gloss TEXT NOT NULL, PRIMARY KEY(lemma,gloss)) WITHOUT ROWID")
        opened.execSQL("CREATE TABLE IF NOT EXISTS grammar(key TEXT NOT NULL, lemma TEXT NOT NULL, pos TEXT NOT NULL, tags TEXT NOT NULL, PRIMARY KEY(key,lemma,pos,tags))")
        opened.execSQL("CREATE TABLE IF NOT EXISTS relations(key TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY(key,term))")
        val relationInsert = opened.compileStatement("INSERT OR IGNORE INTO relations VALUES (?,?)")
        val grammatical = opened.compileStatement("INSERT OR IGNORE INTO grammar VALUES (?,?,?,?)")
-       val insert = opened.compileStatement("INSERT OR IGNORE INTO definitions VALUES (?,?,?)")
+       opened.execSQL("CREATE TABLE IF NOT EXISTS definition_forms(key TEXT NOT NULL, lemma TEXT NOT NULL, PRIMARY KEY(key,lemma)) WITHOUT ROWID")
+       val formInsert = opened.compileStatement("INSERT OR IGNORE INTO definition_forms VALUES (?,?)")
+       val insert = opened.compileStatement("INSERT OR IGNORE INTO definitions VALUES (?,?)")
        var count = 0
        try {
         for (line in lines) {
@@ -446,17 +449,17 @@ object RomanianLexicon {
          val glosses = row.getValue("english_glosses").jsonArray.map { it.jsonPrimitive.content }
          val forms = row.getValue("forms").jsonArray.map { it.jsonPrimitive.content }.filter { it.isNotBlank() && it.length <= 160 }
          for (form in (listOf(lemma) + forms).distinct()) {
-          for (gloss in glosses) {
-           insert.bindString(1,normalize(form)); insert.bindString(2,lemma)
-           insert.bindString(3,gloss); insert.executeInsert()
-          }
+          formInsert.bindString(1,normalize(form)); formInsert.bindString(2,lemma); formInsert.executeInsert()
+         }
+         for (gloss in glosses) {
+          insert.bindString(1,lemma); insert.bindString(2,gloss); insert.executeInsert()
          }
          count++
         }
-       } finally { insert.close(); grammatical.close(); relationInsert.close() }
+       } finally { insert.close(); grammatical.close(); relationInsert.close(); formInsert.close() }
        check(count >= 10000)
        opened.execSQL("CREATE INDEX IF NOT EXISTS definitions_gloss ON definitions(gloss COLLATE NOCASE,lemma)")
-       opened.version = 4
+       opened.version = 5
        opened.setTransactionSuccessful()
       } finally { opened.endTransaction() }
      }
@@ -493,7 +496,7 @@ object RomanianLexicon {
   if (definitionsState != "ready" || word.length !in 1..160) return emptyList()
   return synchronized(this) {
    val db = definitionsDb ?: return@synchronized emptyList()
-   db.rawQuery("SELECT DISTINCT gloss FROM definitions WHERE key=? ORDER BY gloss LIMIT 12",arrayOf(normalize(word))).use { cursor ->
+   db.rawQuery("SELECT DISTINCT d.gloss FROM definition_forms f JOIN definitions d ON d.lemma=f.lemma WHERE f.key=? ORDER BY d.gloss LIMIT 12",arrayOf(normalize(word))).use { cursor ->
     val result = ArrayList<String>()
     while (cursor.moveToNext()) result.add(cursor.getString(0))
     result
