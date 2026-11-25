@@ -132,17 +132,29 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(corePanel.visibility!=visible)corePanel.visibility=visible
   }
   fun rounded(color:Int,radius:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=dp(radius).toFloat()}
-  val input = EditText(this).apply { hint = "Scrie un mesaj..."; textSize=16f; minWidth=0; minLines=1; maxLines = 4; inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE;setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY) }
+  val input = EditText(this).apply {
+   hint="Scrie un mesaj...";textSize=17f;minWidth=0;minLines=2;maxLines=5
+   inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+   setSingleLine(false);setHorizontallyScrolling(false);gravity=android.view.Gravity.TOP or android.view.Gravity.START
+   setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY)
+   background=null;setPadding(dp(12),dp(10),dp(12),dp(8))
+  }
   voiceInput=input
-  val composer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL;background=rounded(0xff142437.toInt(),18);setPadding(dp(4),dp(4),dp(4),dp(4))}
-  input.background=null
-  input.setPadding(dp(8),dp(10),dp(8),dp(10))
-  composer.addView(Button(this).apply{text="";setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("attach",dp(24),cyan),null,null,null);setPadding(dp(10),0,0,0);minWidth=0;minimumWidth=0;contentDescription="Importă document";setTextColor(cyan);background=null;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(44),dp(48)))
-  composer.addView(input,LinearLayout.LayoutParams(0,-2,1f))
+  window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+  val composer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;background=rounded(0xff142437.toInt(),18);setPadding(dp(6),dp(4),dp(6),dp(4))}
+  composer.addView(input,LinearLayout.LayoutParams(-1,-2))
+  val toolbar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL}
+  composer.addView(toolbar,LinearLayout.LayoutParams(-1,-2))
+  fun composerIcon(name:String,description:String)=android.widget.ImageButton(this).apply{
+   setImageDrawable(OmegaIcon(name,dp(24),cyan));scaleType=android.widget.ImageView.ScaleType.CENTER
+   background=null;setPadding(0,0,0,0);contentDescription=description
+  }
+  toolbar.addView(composerIcon("attach","Importă document").apply{setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(48),dp(48)))
+  toolbar.addView(android.view.View(this),LinearLayout.LayoutParams(0,1,1f))
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
-  chat.addView(composer)
-  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("mic",dp(24),cyan),null,null,null);contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } },LinearLayout.LayoutParams(dp(44),dp(48)))
+  toolbar.addView(actions,LinearLayout.LayoutParams(-2,-2))
+  chat.addView(composer,LinearLayout.LayoutParams(-1,-2))
+  actions.addView(composerIcon("mic","Microfon offline").apply{setOnClickListener{startMicrophone()}},LinearLayout.LayoutParams(dp(48),dp(48)))
   settings.addView(Button(this).apply { text="Accesibilitate și agenți";setOnClickListener{android.app.AlertDialog.Builder(this@MainActivity).setTitle("Accesibilitate locală").setMessage(if(LocalScreen.connected())"Serviciu conectat." else "Serviciu deconectat. Activează-l manual pentru observare și demonstrații.").setPositiveButton("Setări Android"){_,_->startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}.setNegativeButton("Închide",null).show()} })
   settings.addView(Button(this).apply { text="Înregistrează demonstrație";setOnClickListener{
    if(!busy){
@@ -185,7 +197,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  actions.addView(Button(this).apply { sendControl=this; text = "";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("send",dp(24),cyan),null,null,null);contentDescription="Trimite"; setOnClickListener {
+  actions.addView(composerIcon("send","Trimite").apply { sendControl=this; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
@@ -314,8 +326,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
     }
    }
-  } })
-  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("stop",dp(22),cyan),null,null,null);contentDescription="Oprește"; setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(40),dp(48)))
+  } },LinearLayout.LayoutParams(dp(48),dp(48)))
+  actions.addView(composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(48),dp(48)))
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
@@ -323,7 +335,6 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
-  for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(8),0,0,0);v.minHeight=0;v.minimumHeight=0;v.setSingleLine(true);v.text=""}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   val aiControls=setOf("OMEGA Model Center","Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
