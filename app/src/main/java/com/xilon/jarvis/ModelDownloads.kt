@@ -7,7 +7,7 @@ class ModelDownloads(private val context:Context){
  private val dm=context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
  private val prefs=context.getSharedPreferences("model_downloads",Context.MODE_PRIVATE)
  fun start(entry:ModelCatalog.Entry):Long{
-  require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake))
+  require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+listOf(ModelCatalog.hand)))
   check(!prefs.contains(entry.file)){"Există deja o descărcare pentru acest model."}
   check(context.filesDir.usableSpace>=entry.mb*2000000L+200000000L){"Spațiu insuficient"}
   val id=dm.enqueue(DownloadManager.Request(Uri.parse(entry.url)).setTitle(entry.name)
