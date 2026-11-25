@@ -226,7 +226,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -264,6 +264,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val result=runCatching{nativeModel?.close();nativeModel=null;"Model eliberat din memorie."}.getOrElse{"Eroare: "+it.message}
     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result;navigate("AI")}}
    }}}.setNegativeButton("Anulează",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Reîncarcă modelul local";setOnClickListener{
+   if(busy)return@setOnClickListener
+   if(nativeModel!=null){report("Model local"){"Modelul este deja încărcat."};return@setOnClickListener}
+   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+   val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
+   if(file==null){report("Model local"){"Nu există un model salvat. Selectează un fișier GGUF."};return@setOnClickListener}
+   busy=true;modelStatus.text="Se reîncarcă modelul local..."
+   worker.execute{
+    var candidate:NativeModel?=null
+    val result=try{val next=NativeModel();candidate=next;next.load(file.absolutePath);nativeModel=next;candidate=null;"Model reîncărcat."}
+     catch(e:Exception){"Reîncărcare eșuată: "+e.message}
+     catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}
+     finally{runCatching{candidate?.close()}}
+    runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result;navigate("AI")}}
+   }
   }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
