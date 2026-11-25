@@ -181,3 +181,18 @@ class CloseAppTool : Tool(
     }
 }
 
+
+class CloseAppTool : Tool(
+    ToolSpec(
+        "close_app", "Leave the current app and return to the home screen. Note: Android does not permit force-stopping other apps; JARVIS navigates away instead.",
+        listOf(com.jarvis.mobile.core.tools.ParamSpec("app", "string", false, "app name (optional; informational)")),
+        com.jarvis.mobile.core.tools.Risk.LOW,
+    ),
+) {
+    override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility service not connected.")
+        val ok = svc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+        return if (ok) ToolResult.ok("Left the app (home screen). Android does not allow force-stopping other apps; background processes are managed by the system.", Verification.UNVERIFIED)
+        else ToolResult.fail("Could not go home.")
+    }
+}
