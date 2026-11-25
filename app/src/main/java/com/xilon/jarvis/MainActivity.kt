@@ -482,7 +482,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val hour=field("Ora 0–23",existing?.hour?.takeIf{it>=0}?.toString().orEmpty())
     val minute=field("Minut 0–59",existing?.minute?.takeIf{it>=0}?.toString().orEmpty())
     val cooldown=field("Cooldown secunde",(existing?.cooldownSec?:60L).toString())
-    android.app.AlertDialog.Builder(this@MainActivity).setTitle(name).setMessage("Configurează o propunere de execuție. Nu autorizează execuția automată.").setView(ScrollView(this@MainActivity).apply{addView(panel)})
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle(name).setMessage("Salvarea activează executarea automată a abilității la evenimentul ales.").setView(ScrollView(this@MainActivity).apply{addView(panel)})
      .setPositiveButton("Salvează"){_,_->
       val result=runCatching{
        val trigger=com.jarvis.mobile.core.triggers.SkillTrigger(type.selectedItem.toString(),pkg.text.toString().trim().ifBlank{null},hour.text.toString().toIntOrNull()?:-1,minute.text.toString().toIntOrNull()?:-1,filter.text.toString().ifBlank{null},cooldown.text.toString().toLongOrNull()?:-1L)
@@ -1114,23 +1114,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var triggerActive=false
  private var lastTriggerMinute=""
  private val triggerQueue=java.util.ArrayDeque<com.jarvis.mobile.core.triggers.TriggerEngine.Proposal>()
- private var triggerDialog:android.app.AlertDialog?=null
  private fun offerTriggers(proposals:List<com.jarvis.mobile.core.triggers.TriggerEngine.Proposal>){
   for(p in proposals)if(triggerQueue.size<20 && triggerQueue.none{it.skill==p.skill})triggerQueue.addLast(p)
   showNextTrigger()
  }
  private fun showNextTrigger(){
-  if(!triggerActive||busy||isFinishing||isDestroyed||triggerDialog!=null)return
+  if(!triggerActive||busy||isFinishing||isDestroyed)return
   val proposal=triggerQueue.pollFirst()?:return
   val steps=runCatching{SkillStore(this).load(proposal.skill)}.getOrNull()
   if(steps.isNullOrEmpty())return
-  val dialog=android.app.AlertDialog.Builder(this).setTitle("Abilitate propusă: "+proposal.skill)
-   .setMessage(proposal.event+"\n"+steps.joinToString(" → "))
-   .setPositiveButton("Confirmă"){_,_->if(triggerActive&&!busy&&SkillStore(this).load(proposal.skill)==steps)executeAgentPlan(steps)}
-   .setNegativeButton("Respinge",null).create()
-  triggerDialog=dialog
-  dialog.setOnDismissListener{triggerDialog=null}
-  dialog.show()
+  if(triggerActive&&!busy&&SkillStore(this).load(proposal.skill)==steps){
+   append("Declanșator: "+proposal.event+" → "+proposal.skill)
+   executeAgentPlan(steps)
+  }
  }
  private val triggerTick=object:Runnable{
   override fun run(){
@@ -1161,7 +1157,6 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerActive=false
   triggerHandler.removeCallbacks(triggerTick)
   unregisterReceiver(triggerBatteryReceiver)
-  triggerDialog?.dismiss()
   triggerQueue.clear()
   super.onPause()
  }
