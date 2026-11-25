@@ -231,7 +231,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     if(q.equals("continuă sarcina",true)||q.equals("continua sarcina",true)){
-     val pending=pendingRegistry.toList()
+     val pending=try { pendingRegistry.ifEmpty { PendingRegistryStore(this@MainActivity).load() }.also { pendingRegistry=it } } catch(e:Exception){append("Planul salvat nu poate fi validat: "+e.message);return@setOnClickListener}
      if(pending.isEmpty())append("Nu există o sarcină întreruptă care poate fi reluată.")
      else android.app.AlertDialog.Builder(this@MainActivity).setTitle("Reia pașii rămași")
       .setMessage(pending.joinToString("\n"){it.tool+" "+it.args})
@@ -783,6 +783,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun runRegistryPlan(steps:List<com.jarvis.mobile.core.tools.PlannedAction>){
   if(busy||agentCancelled||isDestroyed)return
   if(steps.isEmpty()){append("Planul nu conține pași.");return}
+  try { PendingRegistryStore(this).clear() } catch(e:Exception){append("Execuție blocată: "+e.message);return}
   pendingRegistry=emptyList();busy=true;refreshOmegaStatus()
   worker.execute{
    val result=runCatching{kotlinx.coroutines.runBlocking{
@@ -797,6 +798,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    } ?: false
    runOnUiThread{if(!isDestroyed){
     pendingRegistry=result.getOrNull()?.takeIf{it.status=="STOPPED" && it.steps.all{step->step.result.status==com.jarvis.mobile.core.tools.ToolStatus.SUCCESS && step.result.verified==com.jarvis.mobile.core.tools.Verification.VERIFIED}}?.remaining.orEmpty()
+    if(pendingRegistry.isNotEmpty())try { PendingRegistryStore(this@MainActivity).save(pendingRegistry) } catch(e:Exception){append("Planul rămas este disponibil doar în memorie: "+e.message)}
     busy=false;refreshOmegaStatus()
     if(!saved)append("Jurnalul sau graful nu a putut fi actualizat.")
     append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
