@@ -83,7 +83,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   while(end<chat.end()-1 && std::string(end->role)!="user" && std::string(end->role)!="system")++end;
   chat.erase(first,end);
  }
- auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_ubatch=std::min<int>(context,256);cp.n_threads=threads;cp.n_threads_batch=threads;
+ auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=std::min<int>(context,512);cp.n_ubatch=std::min<int>(context,256);cp.n_threads=threads;cp.n_threads_batch=threads;
  if(state->context && (state->size!=context || state->threads!=threads)){
   llama_free(state->context);state->context=nullptr;
  }
@@ -113,7 +113,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   llama_sampler_chain_add(sampler,llama_sampler_init_temp(0.7f));
   llama_sampler_chain_add(sampler,llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
  }
- std::string out;auto batch=llama_batch_get_one(tokens.data(),n);bool ok=true;
+ std::string out;bool ok=true;
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");
  if(!cancel){llama_sampler_free(sampler);return nullptr;}
  auto progress=e->GetMethodID(e->GetObjectClass(self),"publishProgress","([B)V");
@@ -128,9 +128,14 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  llama_set_abort_callback(ctx,abortDecode,&abortState);
  size_t publishedBytes=0;
  auto lastProgress=std::chrono::steady_clock::now();
- for(int i=0;i<maxTokens;i++){
+ bool ready=true;
+ for(int offset=0;offset<n;offset+=512){
+  if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
+  auto promptBatch=llama_batch_get_one(tokens.data()+offset,std::min(512,n-offset));
+  if(llama_decode(ctx,promptBatch)!=0){ok=e->CallBooleanMethod(self,cancel);ready=false;break;}
+ }
+ for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
-  if(llama_decode(ctx,batch)!=0){ok=e->CallBooleanMethod(self,cancel);break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
   std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
@@ -146,7 +151,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   if(e->ExceptionCheck()){ok=false;break;}
   publishedBytes=out.size();
   }
-  tokens[0]=t;batch=llama_batch_get_one(tokens.data(),1);
+  if(i+1<maxTokens){auto nextBatch=llama_batch_get_one(&t,1);if(llama_decode(ctx,nextBatch)!=0){ok=e->CallBooleanMethod(self,cancel);break;}}
  }
  if(ok && !e->ExceptionCheck() && publishedBytes!=out.size()){
   auto partial=e->NewByteArray(out.size());
