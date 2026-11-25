@@ -56,7 +56,7 @@ class YoutubeSearchTool : Tool(
             return ToolResult.ok("YouTube search results for \"$q\" are open.", Verification.UNVERIFIED)
         }
         return CommStart.start(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$enc")))
-            .copy(message = "YouTube app not found - opened results in the browser.")
+            
     }
 }
 
@@ -96,10 +96,7 @@ class SetAlarmTool : Tool(
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             T.str(args, "label")?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
         }
-        return CommStart.start(i).copy(
-            message = "Alarm set for %02d:%02d in the clock app.".format(hour, minute),
-            detail = "alarm=$hour:$minute",
-        )
+        return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Alarm configuration requested; save in clock app.", detail = "alarm=$hour:$minute") else it }
     }
 }
 
@@ -121,10 +118,7 @@ class SetTimerTool : Tool(
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             T.str(args, "label")?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
         }
-        return CommStart.start(i).copy(
-            message = "Timer started for ${s / 60}m ${s % 60}s.",
-            detail = "timer=${s}s",
-        )
+        return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Timer configuration requested; confirm in clock app.", detail = "timer=${s}s") else it }
     }
 }
 
