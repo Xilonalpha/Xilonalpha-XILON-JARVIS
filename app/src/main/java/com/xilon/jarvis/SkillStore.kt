@@ -2,6 +2,7 @@ package com.xilon.jarvis
 import android.content.Context
 import org.json.JSONArray
 class SkillStore(context:Context){
+ private val triggerPrefs=context.getSharedPreferences("xilon_triggers",Context.MODE_PRIVATE)
  private val prefs=context.getSharedPreferences("xilon_skills",Context.MODE_PRIVATE)
  private fun key(name:String):String{
   val k=name.trim().lowercase(java.util.Locale.ROOT)
@@ -18,6 +19,7 @@ class SkillStore(context:Context){
  fun names():List<String> = prefs.all.keys.sorted()
  fun delete(name:String):Boolean{
   val k=key(name);if(!prefs.contains(k))return false
+  check(triggerPrefs.edit().remove(k).commit()){"Eliminarea declanșatorului a eșuat"}
   check(prefs.edit().remove(k).commit()){"Ștergere eșuată"};return true
  }
 }
