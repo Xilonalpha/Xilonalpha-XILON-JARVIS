@@ -36,16 +36,18 @@ object MemoryPrompt {
     private val STOP = setOf(
         "the", "and", "for", "you", "are", "was", "what", "who", "how", "why", "when", "where", "this", "that", "with", "have",
         "has", "had", "can", "could", "would", "should", "tell", "about", "please", "jarvis", "your", "from", "into", "mera",
-        "meri", "mere", "kya", "hai", "ho", "ko", "ka", "ki", "ke", "se", "mein", "par", "aur",
+        "meri", "mere", "kya", "hai", "ho", "ko", "ka", "ki", "ke", "se", "mein", "par", "aur", "care", "este", "sunt", "pentru", "despre", "spune", "vreau", "cum", "cand", "unde", "cine", "ceva", "asta", "acest", "aceasta",
     )
 
     /** One line, no markup characters, bounded length. */
     fun sanitize(text: String, max: Int = MAX_ITEM): String =
         text.replace(UNSAFE, " ").replace(Regex("[\\p{Cntrl}\\s]+"), " ").trim().take(max)
 
+    fun normalize(text: String): String = java.text.Normalizer.normalize(text.lowercase(java.util.Locale.ROOT), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+
     /** Words worth searching memories for: lower-case letters/digits, at least 3 long, no filler, at most 6. */
     fun searchTerms(query: String): List<String> =
-        query.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 && it !in STOP }.distinct().take(6)
+        normalize(query).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 && it !in STOP }.distinct().take(6)
 
     fun build(styleFacts: List<MemoryFact>, relevant: List<MemoryFact>, earlierTasks: List<String> = emptyList()): String {
         val lines = (styleFacts + relevant).distinctBy { it.id }.map { sanitize(it.text) }.filter { it.isNotEmpty() }
