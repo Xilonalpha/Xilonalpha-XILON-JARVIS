@@ -399,7 +399,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
     if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy)importGguf(uri,false,entry)}
-    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{
      val result=runCatching{downloads.start(entry);"Transfer solicitat; revizie și SHA-256 salvate."}.getOrElse{"Descărcare eșuată: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
     }}}
@@ -415,7 +415,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val entry=entries[index];val lang=entry.file.substringBefore(".");val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(downloads.status(entry)+"\n"+if(java.io.File(filesDir,"tesseract/tessdata/"+entry.file).isFile)"Fișier instalat" else "Fișier neinstalat")
     if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Fișier inaccesibil"),ref.sha256,ref.bytes,ref.algorithm);LocalOcr.install(this@MainActivity,uri,lang);"Date OCR instalate; validarea are loc la recunoaștere."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
-    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -443,7 +443,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }.getOrElse{"Import eșuat: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
     }}}
-    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -464,7 +464,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }.getOrElse{"Instalare eșuată: "+it.message}
     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
    }}}
-   else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+   else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
    dialog.setNegativeButton("Închide",null).show()
   }})
@@ -487,7 +487,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }.getOrElse{"Import eșuat: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
     }}}
-    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -501,7 +501,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm);KokoroArchive.install(this@MainActivity,uri);"Pachet extras și instalat; sinteza vocală rămâne de testat."}.getOrElse{"Instalare eșuată: "+it.message}
     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
    }}}
-   else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+   else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
    dialog.setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
    if(downloads.id(entry)>=0)dialog.setNegativeButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi arhiva descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
    else dialog.setNegativeButton("Închide",null)
