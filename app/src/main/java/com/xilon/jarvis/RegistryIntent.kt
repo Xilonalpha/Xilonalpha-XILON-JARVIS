@@ -5,9 +5,9 @@ import java.util.Locale
 
 object RegistryIntent {
  private val verbs = "deschide|seteaza|activeaza|dezactiveaza|cauta|porneste|arata|citeste|trimite|creeaza|apeleaza|navigheaza|opreste|inchide|pune|baga|reda|asculta|aprinde|stinge|regleaza|deruleaza|afiseaza|listeaza|lanseaza|da drumul"
- private val action = Regex("^(?:(?:te rog|jarvis)[,\\s]+)*(?:$verbs)\\b")
+ private val action get() = Regex("^(?:(?:te rog|jarvis)[,\\s]+)*(?:${(verbs.split("|") + RomanianLexicon.verbs).distinct().joinToString("|"){Regex.escape(it)}})\\b")
  private val question = Regex("^(cum|ce|de ce|care|explica|poti explica)\\b")
- private val separator = Regex("(?:\\b(?:si|apoi|dupa aceea)\\b[,\\s]*|;\\s*)(?:(?:te rog|jarvis)[,\\s]+)*(?:$verbs)\\b")
+ private val separator get() = Regex("(?:\\b(?:si|apoi|dupa aceea)\\b[,\\s]*|;\\s*)(?:(?:te rog|jarvis)[,\\s]+)*(?:${(verbs.split("|") + RomanianLexicon.verbs).distinct().joinToString("|"){Regex.escape(it)}})\\b")
  private fun normalized(text: String): String =
   Normalizer.normalize(text.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
    .replace(Regex("\\p{M}+"), "")

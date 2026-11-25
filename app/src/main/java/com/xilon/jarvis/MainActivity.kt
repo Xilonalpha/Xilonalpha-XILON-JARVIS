@@ -310,6 +310,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
+    val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian.startsWith("tradu in engleza ") || normalizedRomanian.startsWith("tradu in romana ")){
+     val english=normalizedRomanian.startsWith("tradu in engleza ")
+     val term=q.trim().split(Regex("\\s+"),limit=4).getOrElse(3){""}
+     val translation=if(english)RomanianLexicon.translateKnown(term) else RomanianLexicon.translateReverse(term)
+     append(translation ?: "Traducere indisponibilă în dicționarul local.")
+     return@setOnClickListener
+    }
+    if(RomanianLexicon.negated(q) || (RegistryIntent.compound(q) && RomanianLexicon.split(q).any{RomanianLexicon.negated(it)})){
+     append("Comandă cu negație: nu execut acțiuni.")
+     return@setOnClickListener
+    }
+    val offlinePlan=if(RegistryIntent.compound(q))RomanianLexicon.compoundPlan(q) else null
+    if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
     val lexicalTool=RomanianLexicon.parse(q)
     if(lexicalTool!=null){executeRequestedTool(lexicalTool.tool,lexicalTool.args);return@setOnClickListener}
     val naturalTool=NaturalToolCommands.parse(q)

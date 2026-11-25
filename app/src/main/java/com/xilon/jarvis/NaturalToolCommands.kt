@@ -5,7 +5,8 @@ object NaturalToolCommands {
  fun parse(input:String):PlannedAction? {
   RomanianLexicon.parse(input)?.let { return it }
   if(RegistryIntent.compound(input))return null
-  val q=input.trim().trimEnd('!','?')
+  if(RomanianLexicon.negated(input))return null
+  val q=RomanianLexicon.clean(input).trim().trimEnd('!','?')
   fun call(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
   fun match(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(q)
   match("(?:aprinde|pornește|porneste|stinge|oprește|opreste) (?:lanterna|lanternă)")?.let{

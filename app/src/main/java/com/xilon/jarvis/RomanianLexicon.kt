@@ -28,6 +28,22 @@ object RomanianLexicon {
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
   entries = map.toMap()
  }
- fun parse(text: String): PlannedAction? = entries[normalize(text)]?.action
+ fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
+ fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
+ fun parse(text: String): PlannedAction? {
+  if (negated(text)) return null
+  return entries[normalize(clean(text))]?.action
+ }
+ fun translateReverse(text: String): String? {
+  val key = normalize(text)
+  val matches = glossary.filterValues { normalize(it) == key }.keys.sorted()
+  return matches.takeIf { it.isNotEmpty() }?.joinToString(" / ")
+ }
+ fun split(text: String): List<String> = clean(text).split(Regex("\\s+(?:și|si|apoi|după aceea|dupa aceea)\\s+|;\\s*", RegexOption.IGNORE_CASE)).map { it.trim() }.filter { it.isNotEmpty() }
+ fun compoundPlan(text: String): List<PlannedAction>? {
+  val parts = split(text)
+  if (parts.size !in 2..20 || parts.any { negated(it) }) return null
+  return parts.map { NaturalToolCommands.parse(it) ?: return null }
+ }
  fun translateKnown(text: String): String? = entries[normalize(text)]?.english ?: glossary[normalize(text)]
 }
