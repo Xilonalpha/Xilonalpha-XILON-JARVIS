@@ -9,4 +9,5 @@ object ModelCatalog {
  Entry("Qwen 2.5 Coder 1.5B","Programare","bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF","Qwen2.5-Coder-1.5B-Instruct-Q4_K_M.gguf",986)
  )
  val ocr=listOf("ron","eng").map{lang->Entry("OCR "+lang,"Tesseract","lm-kit/tessdata-fast","$lang.traineddata",5,"83ff76b97461395f257255720bf7f3957606dbb5")}
+ val whisper=listOf("tiny-encoder.int8.onnx" to 13L,"tiny-decoder.int8.onnx" to 90L,"tiny-tokens.txt" to 1L).map{(file,mb)->Entry(file,"Whisper Tiny","csukuangfj/sherpa-onnx-whisper-tiny",file,mb,"65176e2")}
 }
