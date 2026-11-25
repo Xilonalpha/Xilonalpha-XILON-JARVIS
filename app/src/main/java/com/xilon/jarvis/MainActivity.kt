@@ -235,6 +235,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   actions.addView(composerIcon("send","Trimite").apply { background=rounded(0xff225c80.toInt(),24);sendControl=this; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
+     val normalizedRomanian=RomanianLexicon.normalize(q)
     lastConversationActivity=android.os.SystemClock.elapsedRealtime()
     append("Tu: "+q); input.text.clear()
     val languageTask=explicitLanguageTask(q)
