@@ -19,6 +19,10 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
    db.execSQL("UPDATE demo_edges SET count=count+1,last_seen=? WHERE source=? AND target=?",arrayOf(now,a,b))
   };db.setTransactionSuccessful()}finally{db.endTransaction()}
  }
+ fun rebuildDemonstrations(demos:List<List<com.jarvis.mobile.core.skills.ElementTarget>>){
+  val db=writableDatabase;db.beginTransaction()
+  try{db.delete("demo_edges",null,null);for(steps in demos){for((a,b) in steps.map{it.pkg+" / "+it.viewId}.zipWithNext()){val now=System.currentTimeMillis();db.execSQL("INSERT OR IGNORE INTO demo_edges(source,target,count,last_seen) VALUES(?,?,0,?)",arrayOf(a,b,now));db.execSQL("UPDATE demo_edges SET count=count+1,last_seen=? WHERE source=? AND target=?",arrayOf(now,a,b))}};db.setTransactionSuccessful()}finally{db.endTransaction()}
+ }
  fun demonstrationSummary():String=readableDatabase.rawQuery("SELECT source,target,count FROM demo_edges ORDER BY count DESC,source,target LIMIT 50",null).use{c->buildList{while(c.moveToNext())add(c.getString(0)+" → "+c.getString(1)+" : "+c.getLong(2))}.joinToString("\n").ifBlank{"Nicio tranziție demonstrată."}}
  fun record(steps:List<String>){
   require(steps.size in 1..5 && steps.all{ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))})
