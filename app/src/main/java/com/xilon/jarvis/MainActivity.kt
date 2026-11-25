@@ -537,7 +537,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     center.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})
    }
    val handler=android.os.Handler(android.os.Looper.getMainLooper())
-   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,bar,entry) in states){val transfer=runCatching{manager.transfer(entry)}.getOrNull();view.text=entry.name+" · "+(transfer?.label?:"Stare indisponibilă");val percent=transfer?.percent;bar.visibility=if(percent!=null&&transfer.state==android.app.DownloadManager.STATUS_RUNNING)android.view.View.VISIBLE else android.view.View.GONE;bar.progress=percent?:0};handler.postDelayed(this,1500)}}
+   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,bar,entry) in states){val transfer=runCatching{manager.transfer(entry)}.getOrNull();view.text=entry.name+" · "+(transfer?.label?:"Stare indisponibilă")+"\n"+ModelInventory.presence(this@MainActivity,entry);val percent=transfer?.percent;bar.visibility=if(percent!=null&&transfer?.state==android.app.DownloadManager.STATUS_RUNNING)android.view.View.VISIBLE else android.view.View.GONE;bar.progress=percent?:0};handler.postDelayed(this,1500)}}
    dialog.setOnDismissListener{handler.removeCallbacks(refresh)}
    dialog.show();refresh.run()
   }})
@@ -812,8 +812,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
      persistHistory()
      candidate=null
      getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",target.name).apply()
+     if(entry!=null)ModelInventory.recordGguf(this,entry,target)
      // Retain previously imported GGUF files for model switching.
-     if(reference!=null)"Model GGUF verificat SHA-256 și încărcat." else "Model GGUF importat manual; SHA-256 neverificat."
+     if(reference!=null)"Model GGUF verificat ("+reference.algorithm+") și încărcat." else "Model GGUF importat manual; SHA-256 neverificat."
     } catch(e:Exception) { candidate?.close(); target.delete(); "Încărcare eșuată: "+e.message } catch(e:LinkageError) { target.delete(); "Biblioteca nativă indisponibilă: "+e.message }
     runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
    }
