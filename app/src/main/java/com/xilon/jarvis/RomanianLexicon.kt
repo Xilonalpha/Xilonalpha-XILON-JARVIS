@@ -94,7 +94,7 @@ object RomanianLexicon {
   "arati" to "arata", "aratati" to "arata"
  )
  @Volatile private var corpusAssets: android.content.res.AssetManager? = null
- private data class Rule(val prefix: Boolean, val flag: String, val strip: String, val add: String, val condition: Regex)
+ private data class Rule(val prefix: Boolean, val flag: String, val strip: String, val add: String, val condition: Regex, val cross: Boolean, val continuation: String)
  private class Corpus(val words: android.database.sqlite.SQLiteDatabase, val rules: List<Rule>) {
   fun flags(word: String): String? = words.rawQuery("SELECT group_concat(flags, '') FROM lex WHERE word=?", arrayOf(word)).use { cursor ->
    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
@@ -108,13 +108,15 @@ object RomanianLexicon {
   return try {
    val file = indexFile ?: return null
    val rules = ArrayList<Rule>()
+   val crossClasses = mutableSetOf<Pair<String,String>>()
    assets.open("ro_hunspell/ro_RO.aff").bufferedReader(Charsets.UTF_8).useLines { lines ->
     lines.forEach { line ->
      val p = line.trim().split(Regex("\\s+"))
+     if (p.size == 4 && p[0] in setOf("PFX","SFX") && p[2] == "Y") crossClasses.add(p[0] to p[1])
      if (p.size >= 5 && (p[0] == "PFX" || p[0] == "SFX")) {
       val prefix = p[0] == "PFX"
       val condition = runCatching { Regex(if (prefix) "^" + p[4] else p[4] + "$") }.getOrNull()
-      if (condition != null) rules.add(Rule(prefix, p[1], p[2].takeUnless { it == "0" } ?: "", p[3].substringBefore('/').takeUnless { it == "0" } ?: "", condition))
+      if (condition != null) rules.add(Rule(prefix, p[1], p[2].takeUnless { it == "0" } ?: "", p[3].substringBefore('/').takeUnless { it == "0" } ?: "", condition, (p[0] to p[1]) in crossClasses, p[3].substringAfter('/', "")))
      }
     }
    }
@@ -189,11 +191,7 @@ object RomanianLexicon {
   val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
   if (c.flags(w) != null) return true
   if (w == normalize(w) && c.words.rawQuery("SELECT 1 FROM folded WHERE key=? LIMIT 1", arrayOf(w)).use { it.moveToFirst() }) return true
-  return c.rules.any { r ->
-   val stem = if (r.prefix && w.startsWith(r.add)) r.strip + w.removePrefix(r.add)
-    else if (!r.prefix && w.endsWith(r.add)) w.removeSuffix(r.add) + r.strip else return@any false
-   c.flags(stem)?.contains(r.flag) == true && r.condition.containsMatchIn(stem)
-  }
+  return morphologicalRoots(w).isNotEmpty()
  }
  private fun oneEdit(a: String, b: String): Boolean {
   if (a == b || kotlin.math.abs(a.length - b.length) > 1) return false
@@ -240,10 +238,25 @@ object RomanianLexicon {
    val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
    val result = linkedSetOf<String>()
    if (c.flags(w) != null) result.add(w)
-   for (r in c.rules) {
-    val stem = if (r.prefix && w.startsWith(r.add)) r.strip + w.removePrefix(r.add)
-     else if (!r.prefix && w.endsWith(r.add)) w.removeSuffix(r.add) + r.strip else continue
-    if (r.condition.containsMatchIn(stem) && c.flags(stem)?.contains(r.flag) == true) result.add(stem)
+   fun reverse(rule: Rule, form: String): String? {
+    val stem = if (rule.prefix && form.startsWith(rule.add)) rule.strip + form.removePrefix(rule.add)
+     else if (!rule.prefix && form.endsWith(rule.add)) form.removeSuffix(rule.add) + rule.strip else return null
+    return stem.takeIf { it.isNotEmpty() && rule.condition.containsMatchIn(it) }
+   }
+   val flagCache = HashMap<String,String?>()
+   fun flags(stem: String): String? = if (flagCache.containsKey(stem)) flagCache[stem] else c.flags(stem).also { flagCache[stem] = it }
+   for (outer in c.rules) {
+    val intermediate = reverse(outer,w) ?: continue
+    if (flags(intermediate)?.contains(outer.flag) == true) result.add(intermediate)
+    for (inner in c.rules) {
+     val cross = inner.prefix != outer.prefix && inner.cross && outer.cross
+     val continuation = inner.continuation.contains(outer.flag)
+     if (!cross && !continuation) continue
+     val root = reverse(inner,intermediate) ?: continue
+     val rootFlags = flags(root) ?: continue
+     if (rootFlags.contains(inner.flag) && (continuation || rootFlags.contains(outer.flag))) result.add(root)
+     if (result.size >= 24) break
+    }
     if (result.size >= 24) break
    }
    result.toList()
