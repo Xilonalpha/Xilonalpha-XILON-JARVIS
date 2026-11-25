@@ -120,6 +120,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   corePanel.addView(TextView(this).apply{text="J.A.R.V.I.S.";textSize=20f;gravity=android.view.Gravity.CENTER;setTextColor(cyan)})
   activityStatus=TextView(this).apply{text="Sistem local • În așteptare";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)}
   corePanel.addView(activityStatus)
+  listening.onLevel={level->omegaCore.level=level}
+  listening.onListening={enabled->omegaCore.listening=enabled;activityStatus.text=if(enabled)"Sistem local • Ascultă" else if(busy)"Sistem local • Procesează" else "Sistem local • În așteptare"}
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
