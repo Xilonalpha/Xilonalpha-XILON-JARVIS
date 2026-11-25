@@ -331,6 +331,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
     if(normalizedRomanian.startsWith("propune planul ")){startRegistryPlan(q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""},true);return@setOnClickListener}
+    if(normalizedRomanian=="stare plan propus"){append(previewStatus());return@setOnClickListener}
+    if(normalizedRomanian.startsWith("revizuieste planul ")){
+     if(previewRegistry.isEmpty() || android.os.SystemClock.elapsedRealtime()-previewRegistryAt>300000L){invalidatePreview();append("Nu există plan valabil de revizuit.");return@setOnClickListener}
+     val change=q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""}
+     val objective=previewRegistryGoal+"\nModificare solicitată: "+change
+     startRegistryPlan(objective,true);return@setOnClickListener
+    }
     if(normalizedRomanian=="anuleaza planul propus"){previewRegistry=emptyList();previewRegistryAt=0L;append("Planul propus a fost eliminat.");return@setOnClickListener}
     if(normalizedRomanian=="executa planul propus"){
      val steps=previewRegistry
@@ -584,7 +591,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -1428,17 +1435,26 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var pendingRegistry:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()
  private var previewRegistry:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()
  private var previewRegistryAt=0L
+ private var previewRegistryGoal=""
+ private fun invalidatePreview(){previewRegistry=emptyList();previewRegistryAt=0L;previewRegistryGoal=""}
+ private fun previewStatus():String{
+  val remaining=300000L-(android.os.SystemClock.elapsedRealtime()-previewRegistryAt)
+  if(previewRegistry.isEmpty() || remaining<=0){invalidatePreview();return "Nu există plan propus valabil."}
+  return "Obiectiv: "+previewRegistryGoal+"\nPași: "+previewRegistry.size+"\nValabil încă: "+(remaining/1000)+" secunde\n"+previewRegistry.mapIndexed{i,step->(i+1).toString()+". "+step.tool+" "+step.args.toString()}.joinToString("\n")
+ }
  private fun startRegistryPlan(goal:String,previewOnly:Boolean=false){
   if(busy)return
   val model=nativeModel ?: run{append("Încarcă un model GGUF.");return}
   if(goal.isBlank() || goal.length>2000){append("Introdu un obiectiv de maximum 2000 de caractere.");return}
-  previewRegistry=emptyList();previewRegistryAt=0L
+  invalidatePreview()
   agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
    val appTips=com.jarvis.assistant.agent.AppTips(getSharedPreferences("app_tips",MODE_PRIVATE).getString("notes","").orEmpty()) { name -> runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(name,0)).toString() }.getOrNull() }
    val hints=runCatching { appTips.forForeground(LocalScreen.observe()?.packageName).orEmpty() }.getOrDefault("")
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registryPatterns()+"\n"+it.registrySummary()}}.getOrDefault(""),hints),2,4096,512,emptyList(),RegistryPlanner.grammar))}
+   val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+   val context=if(info.lowMemory || info.availMem<768L*1048576)1024 else if(info.availMem<2048L*1048576)2048 else 4096
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registryPatterns()+"\n"+it.registrySummary()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.grammar))}
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
@@ -1446,7 +1462,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      else plan.fold({steps->
       if(!busy && !agentCancelled && !isDestroyed){
        if(previewOnly){
-        previewRegistry=steps.toList();previewRegistryAt=android.os.SystemClock.elapsedRealtime()
+        previewRegistry=steps.toList();previewRegistryAt=android.os.SystemClock.elapsedRealtime();previewRegistryGoal=goal
         append("Plan propus (neexecutat):\n"+steps.mapIndexed{i,step->(i+1).toString()+". "+step.tool+" "+step.args.toString()}.joinToString("\n")+"\nScrie «execută planul propus» pentru a porni. Confirmările critice rămân obligatorii.")
        }else runRegistryPlan(steps)
       }else append("Planul nu a fost pornit.")
