@@ -33,4 +33,17 @@ object SkillRunner {
         val after = LocalScreen.observe() ?: return false
         return obs != null && after.packageName == obs.packageName && after.fingerprint() != obs.fingerprint()
     }
+
+ data class ActionOutcome(val ok:Boolean,val message:String,val verified:Boolean)
+ suspend fun click(target:ElementTarget,confirm:suspend (ElementTarget)->Boolean):ActionOutcome{
+  val found=waitForElement(target)?:return ActionOutcome(false,"Țintă indisponibilă",false)
+  val el=found.second
+  if(!el.clickable)return ActionOutcome(false,"Elementul nu este clicabil",false)
+  val exact=ElementTarget(text=el.text,desc=el.desc,viewId=el.viewId,pkg=found.first.packageName)
+  if(!exact.hasNode||!confirm(exact))return ActionOutcome(false,"Acțiune neautorizată",false)
+  val before=LocalScreen.observe()?:return ActionOutcome(false,"Ecran indisponibil",false)
+  if(before.packageName!=exact.pkg||!LocalScreen.clickConfirmed(exact))return ActionOutcome(false,"Țintă schimbată, ambiguă sau inaccesibilă",false)
+  val changed=verifyChanged(before)
+  return ActionOutcome(true,if(changed)"Apăsare acceptată; ecran modificat" else "Apăsare acceptată; efect neverificat",changed)
+ }
 }
