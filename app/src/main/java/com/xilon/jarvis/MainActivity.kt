@@ -57,6 +57,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun acceptVoice(text:String){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length);if(autoVoiceSend&&text.isNotBlank()&&::sendControl.isInitialized&&!busy)sendControl.performClick()}
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
+ @Volatile private var agentCancelled=false
  private var busy = false
   set(value){field=value;if(::omegaCore.isInitialized)omegaCore.active=value;refreshOmegaStatus()}
  private var ocrText:String?=null
@@ -234,7 +235,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        if(!isDestroyed){
         busy=false
         if(model.isCancelled())append("Planificare oprită.")
-        else plan.fold({steps->append("Plan: "+steps.joinToString("; "));append(runTracked(steps))},{e->append("Plan neexecutat: "+e.message)})
+        else plan.fold({steps->append("Plan: "+steps.joinToString("; "));executeAgentPlan(steps)},{e->append("Plan neexecutat: "+e.message)})
        }
       }
      }
@@ -276,7 +277,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("stop",dp(22),cyan),null,null,null);contentDescription="Oprește"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(40),dp(48)))
+  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("stop",dp(22),cyan),null,null,null);contentDescription="Oprește"; setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(40),dp(48)))
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
@@ -307,7 +308,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val steps=runCatching{store.load(name)}.getOrNull()
     if(steps.isNullOrEmpty()){report("Abilitate"){"Pași indisponibili sau invalizi."}}
     else android.app.AlertDialog.Builder(this@MainActivity).setTitle(name).setMessage(steps.joinToString(" → "))
-     .setPositiveButton("Execută"){_,_->if(!busy){val result=runCatching{runTracked(steps)}.getOrElse{"Execuție eșuată: "+it.message};append(result);report("Rezultat"){result}}}
+     .setPositiveButton("Execută"){_,_->if(!busy){executeAgentPlan(steps)}}
      .setNeutralButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ștergi abilitatea?").setMessage(name).setPositiveButton("Șterge"){_,_->report("Abilitate"){if(store.delete(name))"Abilitate ștearsă." else "Abilitate negăsită."}}.setNegativeButton("Anulează",null).show()}
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -716,9 +717,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun append(s:String){messageBubble(s)}
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
+ private fun executeAgentPlan(steps:List<String>){
+  if(busy)return
+  agentCancelled=false;busy=true;refreshOmegaStatus()
+  worker.execute{
+   val result=runCatching{runTracked(steps)}.getOrElse{"Execuție eșuată: "+it.message}
+   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append(result)}}
+  }
+ }
  private fun runTracked(steps:List<String>):String{
   lastSuccessfulPlan=null
-  val outcome=OmegaEngine(this).run(steps){respond(it)}
+  val outcome=OmegaEngine(this).run(steps,{agentCancelled}){respond(it)}
   if(outcome.status=="COMPLETED")lastSuccessfulPlan=steps.toList()
   return outcome.text+"\nStare: "+outcome.status+(outcome.warning?.let{"\n"+it} ?: "")
  }
