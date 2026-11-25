@@ -236,7 +236,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
      else android.app.AlertDialog.Builder(this@MainActivity).setTitle("Reia pașii rămași")
       .setMessage(pending.joinToString("\n"){it.tool+" "+it.args})
       .setNegativeButton("Anulează",null)
-      .setPositiveButton("Continuă"){_,_->pendingRegistry=emptyList();agentCancelled=false;runRegistryPlan(pending)}.show()
+      .setPositiveButton("Continuă"){_,_->
+       if(!busy && !isDestroyed && pendingRegistry==pending){agentCancelled=false;runRegistryPlan(pending)}
+       else append("Sarcina nu mai poate fi reluată în starea actuală.")
+      }.show()
      return@setOnClickListener
     }
     val naturalTool=NaturalToolCommands.parse(q)
@@ -244,7 +247,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      confirmTool(naturalTool.tool,naturalTool.args)
      return@setOnClickListener
     }
-    if(RegistryIntent.matches(q) && nativeModel!=null){
+    if(RegistryIntent.matches(q)){
      startRegistryPlan(q)
      return@setOnClickListener
     }
@@ -756,7 +759,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun startRegistryPlan(goal:String){
   if(busy)return
   val model=nativeModel ?: run{append("Încarcă un model GGUF.");return}
-  pendingRegistry=emptyList();agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
+  agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
    val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registrySummary()}}.getOrDefault("")),2,4096,512,emptyList(),RegistryPlanner.grammar))}
@@ -768,15 +771,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
       android.app.AlertDialog.Builder(this@MainActivity).setTitle("Verifică planul JARVIS")
        .setMessage(steps.mapIndexed{i,a->"${i+1}. ${a.tool} ${a.args}"}.joinToString("\n"))
        .setNegativeButton("Anulează",null)
-       .setPositiveButton("Execută"){_,_->runRegistryPlan(steps)}.show()
+       .setPositiveButton("Execută"){_,_->
+        if(!busy && !agentCancelled && !isDestroyed)runRegistryPlan(steps)
+        else append("Planul nu a fost pornit: agent indisponibil sau oprit.")
+       }.show()
      },{append("Plan neexecutat: "+it.message)})
     }
    }
   }
  }
  private fun runRegistryPlan(steps:List<com.jarvis.mobile.core.tools.PlannedAction>){
-  if(busy||agentCancelled)return
-  busy=true;refreshOmegaStatus()
+  if(busy||agentCancelled||isDestroyed)return
+  if(steps.isEmpty()){append("Planul nu conține pași.");return}
+  pendingRegistry=emptyList();busy=true;refreshOmegaStatus()
   worker.execute{
    val result=runCatching{kotlinx.coroutines.runBlocking{
     RegistryAgentEngine.run(steps,{agentCancelled||isDestroyed},{!agentCancelled&&!isDestroyed}){step->
