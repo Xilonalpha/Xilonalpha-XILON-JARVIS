@@ -31,9 +31,10 @@ static void fail(JNIEnv* e,const char* msg){e->ThrowNew(e->FindClass("java/lang/
 extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(JNIEnv* e,jobject,jstring path){
  std::call_once(init,[]{llama_backend_init();});
  const char* p=e->GetStringUTFChars(path,nullptr); if(!p)return 0;
- auto params=llama_model_default_params(); params.n_gpu_layers=0;
+ auto params=llama_model_default_params(); params.n_gpu_layers=0; params.use_mmap=true;
  auto* m=llama_model_load_from_file(p,params); e->ReleaseStringUTFChars(path,p);
- return m?reinterpret_cast<jlong>(new ModelState{m}):0;
+ if(!m){fail(e,"GGUF load failed: unsupported architecture, invalid tensors, or insufficient memory; see native logcat");return 0;}
+ return reinterpret_cast<jlong>(new ModelState{m});
 }
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){delete reinterpret_cast<ModelState*>(h);}
 extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
@@ -92,7 +93,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  }
  auto* ctx=state->context;
  if(!ctx){fail(e,"Context allocation failed");return nullptr;}
- llama_kv_self_clear(ctx);
+ llama_memory_clear(llama_get_memory(ctx), true);
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler){fail(e,"Sampler allocation failed");return nullptr;}
  const char* rules=e->GetStringUTFChars(grammar,nullptr);
