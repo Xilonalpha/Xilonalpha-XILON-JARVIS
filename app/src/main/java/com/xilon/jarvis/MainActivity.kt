@@ -491,7 +491,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        val trigger=com.jarvis.mobile.core.triggers.SkillTrigger(type.selectedItem.toString(),pkg.text.toString().trim().ifBlank{null},hour.text.toString().toIntOrNull()?:-1,minute.text.toString().toIntOrNull()?:-1,filter.text.toString().ifBlank{null},cooldown.text.toString().toLongOrNull()?:-1L)
        store.save(name,trigger)
       }
-      report("Declanșatoare"){if(result.isSuccess)"Configurație salvată. Sursele de evenimente nu sunt încă active." else "Configurație invalidă sau salvare eșuată."}
+      report("Declanșatoare"){if(result.isSuccess)"Configurație salvată. Ora și bateria sunt monitorizate cât timp aplicația este deschisă; celelalte surse nu sunt încă active." else "Configurație invalidă sau salvare eșuată."}
      }.setNeutralButton("Elimină"){_,_->val result=runCatching{store.remove(name)};report("Declanșatoare"){if(result.isSuccess)"Configurație eliminată." else "Eliminare eșuată."}}
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -1118,6 +1118,62 @@ class MainActivity : androidx.activity.ComponentActivity() {
     runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
    }
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
+ }
+ private val triggerEngine=com.jarvis.mobile.core.triggers.TriggerEngine()
+ private val triggerHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ private var triggerActive=false
+ private var lastTriggerMinute=""
+ private val triggerQueue=java.util.ArrayDeque<com.jarvis.mobile.core.triggers.TriggerEngine.Proposal>()
+ private var triggerDialog:android.app.AlertDialog?=null
+ private fun offerTriggers(proposals:List<com.jarvis.mobile.core.triggers.TriggerEngine.Proposal>){
+  for(p in proposals)if(triggerQueue.size<20 && triggerQueue.none{it.skill==p.skill})triggerQueue.addLast(p)
+  showNextTrigger()
+ }
+ private fun showNextTrigger(){
+  if(!triggerActive||busy||isFinishing||isDestroyed||triggerDialog!=null)return
+  val proposal=triggerQueue.pollFirst()?:return
+  val steps=runCatching{SkillStore(this).load(proposal.skill)}.getOrNull()
+  if(steps.isNullOrEmpty())return
+  val dialog=android.app.AlertDialog.Builder(this).setTitle("Abilitate propusă: "+proposal.skill)
+   .setMessage(proposal.event+"\n"+steps.joinToString(" → "))
+   .setPositiveButton("Confirmă"){_,_->if(triggerActive&&!busy&&SkillStore(this).load(proposal.skill)==steps)executeAgentPlan(steps)}
+   .setNegativeButton("Respinge",null).create()
+  triggerDialog=dialog
+  dialog.setOnDismissListener{triggerDialog=null}
+  dialog.show()
+ }
+ private val triggerTick=object:Runnable{
+  override fun run(){
+   if(!triggerActive)return
+   val now=java.util.Calendar.getInstance()
+   val minuteKey=now.get(java.util.Calendar.YEAR).toString()+":"+now.get(java.util.Calendar.DAY_OF_YEAR)+":"+now.get(java.util.Calendar.HOUR_OF_DAY)+":"+now.get(java.util.Calendar.MINUTE)
+   if(minuteKey!=lastTriggerMinute){
+    lastTriggerMinute=minuteKey
+    offerTriggers(triggerEngine.onTime(com.jarvis.mobile.core.triggers.TriggerStore(this@MainActivity).bindings(),now.get(java.util.Calendar.HOUR_OF_DAY),now.get(java.util.Calendar.MINUTE)))
+   }
+   showNextTrigger()
+   triggerHandler.postDelayed(this,1000)
+  }
+ }
+ private val triggerBatteryReceiver=object:android.content.BroadcastReceiver(){
+  override fun onReceive(context:android.content.Context,intent:Intent){
+   if(triggerActive&&intent.action==Intent.ACTION_BATTERY_LOW)
+    offerTriggers(triggerEngine.onBatteryLow(com.jarvis.mobile.core.triggers.TriggerStore(this@MainActivity).bindings()))
+  }
+ }
+ override fun onResume(){
+  super.onResume()
+  triggerActive=true
+  androidx.core.content.ContextCompat.registerReceiver(this,triggerBatteryReceiver,android.content.IntentFilter(Intent.ACTION_BATTERY_LOW),androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+  triggerHandler.post(triggerTick)
+ }
+ override fun onPause(){
+  triggerActive=false
+  triggerHandler.removeCallbacks(triggerTick)
+  unregisterReceiver(triggerBatteryReceiver)
+  triggerDialog?.dismiss()
+  triggerQueue.clear()
+  super.onPause()
  }
  override fun onStop(){kokoroVoice?.stop();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
