@@ -169,7 +169,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      if(model==null){append("Încarcă un model GGUF.");return@setOnClickListener}
      busy=true;model.resetCancellation()
      worker.execute{
-      val plan=runCatching{TaskPlanner.parse(model.generate(TaskPlanner.prompt(q.substringAfter(" "),runCatching{LocalGraph(this@MainActivity).use{it.summary()}}.getOrDefault("")),2,512,96,emptyList()))}
+      val plan=runCatching{TaskPlanner.parse(model.generate(TaskPlanner.prompt(q.substringAfter(" "),runCatching{LocalGraph(this@MainActivity).use{it.summary()}}.getOrDefault("")),2,512,96,emptyList(),TaskPlanner.grammar()))}
       runOnUiThread{
        if(!isDestroyed){
         busy=false
