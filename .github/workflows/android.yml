@@ -105,6 +105,20 @@ jobs:
           name: xilon-jarvis-vulkan-vlm-debug
           path: vulkan-apk/*.apk
           if-no-files-found: error
+      - name: Verify APK signatures and record checksums
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          for apk in app/build/outputs/apk/debug/*.apk vlm-apk/*.apk vulkan-apk/*.apk; do
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+            sha256sum "$apk" >> validation/apk-sha256.txt
+          done
+          git rev-parse HEAD > validation/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xilon-apk-validation
+          path: validation/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:

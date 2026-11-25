@@ -1,5 +1,5 @@
 package com.xilon.jarvis
-class NativeModel : AutoCloseable {
+class NativeModel(private val gpuLayers:Int=0) : AutoCloseable {
  companion object { init { System.loadLibrary("xilon_llama") } }
  @Volatile private var cancelled = false
  fun stop() { cancelled = true }
@@ -14,7 +14,7 @@ class NativeModel : AutoCloseable {
  private var startNanos=0L
  fun publishToken(){if(generatedTokens==0)firstTokenNanos=android.os.SystemClock.elapsedRealtimeNanos()-startNanos;generatedTokens++}
  private var handle = 0L
- @Synchronized fun load(path: String) { close(); handle = openModel(path); check(handle != 0L) { "Model loading failed" } }
+ @Synchronized fun load(path: String) { close(); handle = openModel(path,gpuLayers); check(handle != 0L) { "Model loading failed" } }
  @Synchronized fun generate(prompt: String, threads: Int = 2, context: Int = 1024, maxTokens: Int = 128, history: List<Pair<String,String>> = emptyList(), grammar:String = ""): String { check(handle != 0L); generatedTokens=0;firstTokenNanos=0;startNanos=android.os.SystemClock.elapsedRealtimeNanos(); return infer(handle,(history + ("user" to prompt)).map { it.first }.toTypedArray(),(history + ("user" to prompt)).map { it.second.toByteArray(Charsets.UTF_8) }.toTypedArray(),threads.coerceIn(1,8),context.coerceIn(512,4096),maxTokens.coerceIn(32,minOf(512,context.coerceIn(512,4096)/2)),grammar) }
  @Synchronized override fun close() { if(handle != 0L) { freeModel(handle); handle=0 } }
  @Synchronized fun supportsVisionProjector(path:String):Boolean { check(handle != 0L); return probeVision(handle,path) }
@@ -32,7 +32,7 @@ class NativeModel : AutoCloseable {
  }
  private external fun inferImage(handle:Long,projector:String,rgb:ByteArray,width:Int,height:Int,question:ByteArray,context:Int,limit:Int):ByteArray
  private external fun probeVision(handle:Long,path:String):Boolean
- private external fun openModel(path:String):Long
+ private external fun openModel(path:String,gpuLayers:Int):Long
  private external fun infer(handle:Long,roles:Array<String>,messages:Array<ByteArray>,threads:Int,context:Int,maxTokens:Int,grammar:String):String
  private external fun freeModel(handle:Long)
 }

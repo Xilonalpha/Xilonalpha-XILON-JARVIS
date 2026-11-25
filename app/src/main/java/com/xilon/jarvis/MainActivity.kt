@@ -76,6 +76,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var speakReplies=false
  private var kokoroVoice:NeuralVoice?=null
  private var voiceTicket=0L
+ private fun newNativeModel():NativeModel {
+  val info=android.app.ActivityManager.MemoryInfo().also{getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it)}
+  val power=getSystemService(android.os.PowerManager::class.java)
+  val thermal=if(android.os.Build.VERSION.SDK_INT>=29)power.currentThermalStatus else 0
+  return NativeModel(ResourceBudget.gpuLayers(info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode))
+ }
+ override fun onTrimMemory(level:Int){
+  super.onTrimMemory(level)
+  if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && !busy){
+   val speech=cachedNeural;cachedNeural=null
+   if(speech!=null)worker.execute{runCatching{speech.close()}}
+  }
+ }
  private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
@@ -942,7 +955,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    busy=true;modelStatus.text="Se reîncarcă modelul local..."
    worker.execute{
     var candidate:NativeModel?=null
-    val result=try{val next=NativeModel();candidate=next;next.load(file.absolutePath);nativeModel=next;candidate=null;"Model reîncărcat."}
+    val result=try{val next=newNativeModel();candidate=next;next.load(file.absolutePath);nativeModel=next;candidate=null;"Model reîncărcat."}
      catch(e:Exception){"Reîncărcare eșuată: "+e.message}
      catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}
      finally{runCatching{candidate?.close()}}
@@ -962,7 +975,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       var candidate:NativeModel?=null
       val result=try{
        nativeModel?.close();nativeModel=null
-       val next=NativeModel();candidate=next;next.load(file.absolutePath);nativeModel=next;candidate=null
+       val next=newNativeModel();candidate=next;next.load(file.absolutePath);nativeModel=next;candidate=null
        history.clear();persistHistory()
        getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",file.name).apply()
        "Model selectat și încărcat."
@@ -1301,7 +1314,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     busy=true
     modelStatus.text="Se restaurează ultimul model..."
     worker.execute {
-     val status=try { val next=NativeModel(); next.load(file.absolutePath); nativeModel=next; "Model restaurat." }
+     val status=try { val next=newNativeModel(); next.load(file.absolutePath); nativeModel=next; "Model restaurat." }
       catch(e:Exception) { "Restaurare eșuată: "+e.message }
       catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
      runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
@@ -2029,7 +2042,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      nativeModel?.close();nativeModel=null
      val old=previous?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile} ?: return ""
      return runCatching{
-      val restored=NativeModel()
+      val restored=newNativeModel()
       try{restored.load(old.absolutePath);nativeModel=restored}
       catch(t:Throwable){restored.close();throw t}
       " Modelul anterior a fost restaurat."
@@ -2052,7 +2065,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      switched=true
      nativeModel?.close()
      nativeModel=null
-     val next=NativeModel()
+     val next=newNativeModel()
      candidate=next
      next.load(target.absolutePath)
      nativeModel=next
