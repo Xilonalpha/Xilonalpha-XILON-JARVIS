@@ -61,8 +61,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var agentCancelled=false
  private var composerUpdate: (() -> Unit)? = null
  private var busy = false
-  set(value){field=value;runOnUiThread{if(!isDestroyed)composerUpdate?.invoke()}}
-  set(value){field=value;if(::omegaCore.isInitialized)omegaCore.active=value;refreshOmegaStatus()}
+  set(value){
+   field=value
+   runOnUiThread{
+    if(!isDestroyed){
+     if(::omegaCore.isInitialized)omegaCore.active=busy
+     refreshOmegaStatus()
+     composerUpdate?.invoke()
+    }
+   }
+  }
  private var ocrText:String?=null
  private var ocrAt=0L
  private var observedScreen:String?=null
