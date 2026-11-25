@@ -31,7 +31,7 @@ package com.jarvis.assistant.memory
 object SensitiveFilter {
     private val WORDS = Regex(
         """\b(password|passcode|pass word|pin|otp|one time (?:password|code)|cvv|cvc|card number|credit card|debit card|aadhaar|aadhar|""" +
-            """pan card|ssn|social security|bank account|account number|ifsc|upi pin|secret key|private key|api key|access token|login code|recovery code)\b""",
+            """pan card|ssn|social security|bank account|account number|ifsc|upi pin|secret key|private key|api key|access token|login code|recovery code|parolă|parola|cod pin|cod de acces|cod de verificare|cod de recuperare|număr de card|numar de card|cont bancar|cheie privată|cheie privata|cheie api|cnp)\b""",
         RegexOption.IGNORE_CASE,
     )
     private val LONG_NUMBER = Regex("""(?:\d[ -]?){12,}""")
