@@ -24,6 +24,7 @@ struct ModelState {
  llama_context* context=nullptr;
  int size=0;
  int threads=0;
+ int requestedSize=0;
  ~ModelState(){if(context)llama_free(context);llama_model_free(model);}
 };
 static std::once_flag init;
@@ -39,6 +40,10 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){delete reinterpret_cast<ModelState*>(h);}
 extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
  auto* state=reinterpret_cast<ModelState*>(h); auto* m=state->model; auto* v=llama_model_get_vocab(m);
+ const int trained=llama_model_n_ctx_train(m);
+ if(trained>0)context=std::min<int>(context,trained);
+ if(context<64){fail(e,"Model context too small");return nullptr;}
+ maxTokens=std::min<int>(maxTokens,context/2);
  const int count=e->GetArrayLength(messages);
  if(count<1 || count!=e->GetArrayLength(roles)){fail(e,"Invalid conversation");return nullptr;}
  std::vector<std::string> role(count),body(count);
@@ -86,7 +91,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  // Retry with smaller context and batch sizes without dropping the current prompt.
  const int required=n+maxTokens;
  const int requested=context;
- if(state->context && (state->size!=requested || state->threads!=threads)){
+ if(state->context && (state->requestedSize!=requested || state->size<required)){
   llama_free(state->context);state->context=nullptr;
  }
  int batchSize=std::min<int>(requested,512);
@@ -97,12 +102,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
    cp.n_ubatch=std::min<int>(attempt,128);
    cp.n_threads=threads;cp.n_threads_batch=threads;
    state->context=llama_init_from_model(m,cp);
-   if(state->context){state->size=attempt;state->threads=threads;batchSize=cp.n_batch;break;}
+   if(state->context){state->size=attempt;state->requestedSize=requested;state->threads=threads;batchSize=cp.n_batch;break;}
    if(attempt<=required)break;
   }
  }
  auto* ctx=state->context;
  if(!ctx){fail(e,"Context allocation failed even at minimum prompt budget; reduce history or use a smaller GGUF");return nullptr;}
+ if(state->threads!=threads){llama_set_n_threads(ctx,threads,threads);state->threads=threads;}
  batchSize=std::min<int>(state->size,512);
  llama_memory_clear(llama_get_memory(ctx), true);
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
