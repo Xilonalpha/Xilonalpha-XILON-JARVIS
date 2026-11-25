@@ -463,11 +463,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply{text="Catalog Kokoro";setOnClickListener{
    if(busy)return@setOnClickListener
    val enabled=runCatching{Class.forName("com.xilon.jarvis.KokoroVoice")}.isSuccess
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Kokoro TTS • engleză")
-    .setMessage((if(enabled)"Motor inclus." else "Necesită profilul enableSherpa=true.")+"\nDeschide sursa Hugging Face. Pregătește un ZIP cu model.int8.onnx, voices.bin, tokens.txt și directorul espeak-ng-data la rădăcină. Compatibilitatea necesită test. Pentru română folosește vocea Android offline.")
-    .setPositiveButton("Sursa modelelor"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/csukuangfj/kokoro-en-v0_19/tree/main")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
-    .setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
-    .setNegativeButton("Închide",null).show()
+   val entry=ModelCatalog.kokoro;val downloads=ModelDownloads(this@MainActivity);val uri=downloads.uri(entry)
+   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Kokoro TTS • engleză").setMessage(downloads.status(entry)+"\n"+(if(enabled)"Motor inclus în APK." else "Necesită profilul enableSherpa=true.")+"\n"+(if(java.io.File(filesDir,"kokoro").isDirectory)"Director instalat." else "Neinstalat.")+"\nRezervă necesară: 1 GiB. Integritate criptografică neverificată.")
+   if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
+    val result=runCatching{KokoroArchive.install(this,uri);"Pachet extras și instalat; sinteza vocală rămâne de testat."}.getOrElse{"Instalare eșuată: "+it.message}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+   }}}
+   else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy)append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message})}
+   dialog.setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
+   if(downloads.id(entry)>=0)dialog.setNegativeButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi arhiva descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
+   else dialog.setNegativeButton("Închide",null)
+   dialog.show()
   }})
   val catalogLabels=listOf("Catalog Hugging Face","Catalog voce Sherpa","Catalog Hey Jarvis","Catalog Kokoro","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
