@@ -226,7 +226,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -286,7 +286,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val models=filesDir.listFiles()?.filter{it.isFile && it.name.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.sortedByDescending{it.lastModified()}.orEmpty()
    if(models.isEmpty()){report("Bibliotecă GGUF"){"Nu există modele importate."};return@setOnClickListener}
    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
-   val labels=models.map{it.name+" • "+it.length()/1048576+" MiB"+if(it.name==saved)" • selectat" else ""}
+   val labels=models.map{(getSharedPreferences("model_labels",MODE_PRIVATE).getString(it.name,null) ?: it.name)+" • "+it.length()/1048576+" MiB"+if(it.name==saved)" • selectat" else ""}
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Modele locale").setItems(labels.toTypedArray()){_,index->
     val file=models[index]
     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Schimbă modelul?").setMessage("Modelul curent va fi eliberat din RAM. Istoricul conversației AI va fi resetat.")
@@ -301,6 +301,23 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }catch(e:Exception){"Încărcare eșuată: "+e.message}catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}finally{runCatching{candidate?.close()}}
       runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result;navigate("AI")}}
      }}}.setNegativeButton("Anulează",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Administrează modele";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val models=filesDir.listFiles()?.filter{it.isFile && it.name.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.sortedByDescending{it.lastModified()}.orEmpty()
+   val labels=getSharedPreferences("model_labels",MODE_PRIVATE)
+   if(models.isEmpty()){report("Modele"){"Niciun model importat."};return@setOnClickListener}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Administrează modele").setItems(models.map{(labels.getString(it.name,null) ?: it.name)+" • "+it.length()/1048576+" MiB"}.toTypedArray()){_,index->
+    val file=models[index]
+    val name=EditText(this@MainActivity).apply{setSingleLine(true);setText(labels.getString(file.name,null) ?: file.name);filters=arrayOf(android.text.InputFilter.LengthFilter(80))}
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Nume model").setView(name)
+     .setPositiveButton("Salvează"){_,_->val value=name.text.toString().trim();report("Model"){if(value.isEmpty())"Nume invalid." else if(labels.edit().putString(file.name,value).commit())"Nume salvat." else "Salvare eșuată."}}
+     .setNeutralButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ștergi fișierul GGUF?").setMessage(file.name).setPositiveButton("Șterge"){_,_->report("Model"){
+      if(busy || getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)==file.name)"Modelul selectat este protejat. Selectează alt model înainte de ștergere."
+      else if(file.delete()){labels.edit().remove(file.name).apply();"Fișier șters."}else "Ștergere eșuată."
+     }}.setNegativeButton("Anulează",null).show()}
+     .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
   var currentPage="Chat"
