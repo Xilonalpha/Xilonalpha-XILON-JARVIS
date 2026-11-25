@@ -128,11 +128,23 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  llama_set_abort_callback(ctx,abortDecode,&abortState);
  size_t publishedBytes=0;
  auto lastProgress=std::chrono::steady_clock::now();
+ auto* batch=llama_batch_ext_init(ctx);
+ auto decode=[&](const llama_token* ids,int count,int offset,bool output)->int {
+  if(!batch)return -1;
+  llama_batch_ext_clear(batch);
+  for(int j=0;j<count;j++){
+   const int idx=llama_batch_ext_add_token(batch,0,ids[j]);
+   const llama_pos pos=offset+j;
+   if(idx<0 || !llama_batch_ext_set_pos(batch,idx,&pos) ||
+      !llama_batch_ext_set_output_logits(batch,idx,output && j==count-1))return -1;
+  }
+  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch);
+ };
  bool ready=true;
  for(int offset=0;offset<n;offset+=512){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
-  auto promptBatch=llama_batch_get_one(tokens.data()+offset,std::min(512,n-offset));
-  if(llama_decode(ctx,promptBatch)!=0){ok=e->CallBooleanMethod(self,cancel);ready=false;break;}
+  const int count=std::min(512,n-offset);
+  if(decode(tokens.data()+offset,count,offset,offset+count==n)!=0){ok=e->CallBooleanMethod(self,cancel);ready=false;break;}
  }
  for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
@@ -151,13 +163,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   if(e->ExceptionCheck()){ok=false;break;}
   publishedBytes=out.size();
   }
-  if(i+1<maxTokens){auto nextBatch=llama_batch_get_one(&t,1);if(llama_decode(ctx,nextBatch)!=0){ok=e->CallBooleanMethod(self,cancel);break;}}
+  if(i+1<maxTokens){if(decode(&t,1,n+i,true)!=0){ok=e->CallBooleanMethod(self,cancel);break;}}
  }
  if(ok && !e->ExceptionCheck() && publishedBytes!=out.size()){
   auto partial=e->NewByteArray(out.size());
   if(partial){e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));if(!e->ExceptionCheck())e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);}
  }
- llama_synchronize(ctx);llama_set_abort_callback(ctx,nullptr,nullptr);llama_sampler_free(sampler);e->DeleteGlobalRef(owner);
+ llama_synchronize(ctx);if(batch)llama_batch_ext_free(batch);llama_set_abort_callback(ctx,nullptr,nullptr);llama_sampler_free(sampler);e->DeleteGlobalRef(owner);
  if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
