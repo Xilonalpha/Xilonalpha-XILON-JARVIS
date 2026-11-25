@@ -27,8 +27,13 @@ object RomanianLexicon {
   glossary = root.getValue("translations").jsonObject.mapValues { it.value.jsonPrimitive.content }
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
   entries = map.toMap()
-  corpusAssets = context.applicationContext.assets
-  synchronized(this) { synonymCache.clear(); corpus = null }
+  synchronized(this) {
+   corpus?.words?.close()
+   corpus = null
+   synonymCache.clear()
+   corpusAssets = context.applicationContext.assets
+   indexFile = java.io.File(context.noBackupFilesDir, "romanian-lexicon-3.3.10-v1.db")
+  }
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
@@ -47,20 +52,18 @@ object RomanianLexicon {
  )
  @Volatile private var corpusAssets: android.content.res.AssetManager? = null
  private data class Rule(val prefix: Boolean, val flag: String, val strip: String, val add: String, val condition: Regex)
- private class Corpus(val words: Map<String, String>, val rules: List<Rule>)
+ private class Corpus(val words: android.database.sqlite.SQLiteDatabase, val rules: List<Rule>) {
+  fun flags(word: String): String? = words.rawQuery("SELECT group_concat(flags, '') FROM lex WHERE word=?", arrayOf(word)).use { cursor ->
+   if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
+  }
+ }
+ @Volatile private var indexFile: java.io.File? = null
  @Volatile private var corpus: Corpus? = null
  @Synchronized private fun loadCorpus(): Corpus? {
   corpus?.let { return it }
   val assets = corpusAssets ?: return null
   return try {
-   val words = HashMap<String, String>()
-   assets.open("ro_hunspell/ro_RO.dic").bufferedReader(Charsets.UTF_8).useLines { lines ->
-    lines.drop(1).forEach { line ->
-     val token = line.trim().substringBefore(' ').substringBefore('\t')
-     val word = token.substringBefore('/')
-     if (word.isNotEmpty()) words[word.lowercase(Locale.ROOT)] = token.substringAfter('/', "")
-    }
-   }
+   val file = indexFile ?: return null
    val rules = ArrayList<Rule>()
    assets.open("ro_hunspell/ro_RO.aff").bufferedReader(Charsets.UTF_8).useLines { lines ->
     lines.forEach { line ->
@@ -72,17 +75,48 @@ object RomanianLexicon {
      }
     }
    }
-   if (words.isEmpty()) null else Corpus(words, rules).also { corpus = it }
+   val db = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null)
+   try {
+    if (db.version != 1) {
+     db.beginTransaction()
+     try {
+      db.execSQL("DROP TABLE IF EXISTS lex")
+      db.execSQL("CREATE TABLE lex(word TEXT NOT NULL, flags TEXT NOT NULL, PRIMARY KEY(word,flags))")
+      val statement = db.compileStatement("INSERT OR IGNORE INTO lex VALUES (?,?)")
+      var count = 0
+      try {
+       assets.open("ro_hunspell/ro_RO.dic").bufferedReader(Charsets.UTF_8).useLines { lines ->
+        lines.drop(1).forEach { line ->
+         val token = line.trim().substringBefore(' ').substringBefore('\t')
+         val word = token.substringBefore('/').lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
+         if (word.isNotEmpty()) {
+          statement.bindString(1, word)
+          statement.bindString(2, token.substringAfter('/', ""))
+          statement.executeInsert()
+          count++
+         }
+        }
+       }
+      } finally { statement.close() }
+      check(count > 10000) { "Incomplete Romanian dictionary" }
+      db.version = 1
+      db.setTransactionSuccessful()
+     } finally { db.endTransaction() }
+    }
+    Corpus(db, rules).also { corpus = it }
+   } catch (e: Exception) { db.close(); throw e }
   } catch (_: java.io.IOException) { null }
+    catch (_: android.database.SQLException) { null }
+    catch (_: IllegalStateException) { null }
  }
- fun dictionaryContains(word: String): Boolean {
+ @Synchronized fun dictionaryContains(word: String): Boolean {
   val c = loadCorpus() ?: return false
   val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
-  if (c.words.containsKey(w)) return true
+  if (c.flags(w) != null) return true
   return c.rules.any { r ->
    val stem = if (r.prefix && w.startsWith(r.add)) r.strip + w.removePrefix(r.add)
     else if (!r.prefix && w.endsWith(r.add)) w.removeSuffix(r.add) + r.strip else return@any false
-   c.words[stem]?.contains(r.flag) == true && r.condition.containsMatchIn(stem)
+   c.flags(stem)?.contains(r.flag) == true && r.condition.containsMatchIn(stem)
   }
  }
  private fun oneEdit(a: String, b: String): Boolean {
@@ -96,8 +130,10 @@ object RomanianLexicon {
   return longer.indices.any { longer.removeRange(it,it+1) == shorter }
  }
  private fun correctVerb(first: String): String? {
-  if (first.length < 5 || dictionaryContains(first)) return null
-  val candidates = verbs.distinct().filter { oneEdit(normalize(first), it) && dictionaryContains(it) }
+  if (first.length !in 5..40) return null
+  val possible = verbs.distinct().filter { oneEdit(normalize(first), it) }
+  if (possible.isEmpty() || dictionaryContains(first)) return null
+  val candidates = possible.filter { dictionaryContains(it) }
   return candidates.singleOrNull()
  }
  private val synonymCache = object : LinkedHashMap<String, List<String>>(64, 0.75f, true) {
@@ -153,7 +189,7 @@ object RomanianLexicon {
  }
  fun parse(text: String): PlannedAction? {
   if (negated(text)) return null
-  return entries[normalize(canonicalCommand(text))]?.action
+  return entries[normalize(clean(text))]?.action ?: entries[normalize(canonicalCommand(text))]?.action
  }
  fun translateReverse(text: String): String? {
   val key = normalize(text)
