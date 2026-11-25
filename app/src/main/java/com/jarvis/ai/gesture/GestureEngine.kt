@@ -25,7 +25,7 @@ class GestureEngine(
     private val appContext = context.applicationContext
     private var landmarker: HandLandmarker? = null
     private var lastTimestampMs = 0L
-    private var previousGesture = HandGesture.NONE
+    private val settings = appContext.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     private var lastPinchAtMs = 0L
     private var pinchFrames=0
     private var pinchLatched=false
@@ -106,7 +106,7 @@ class GestureEngine(
     private fun classify(points: List<PointF>): HandGesture {
         val wrist = points[WRIST]
         val palmScale = distance(wrist, points[MIDDLE_MCP]).coerceAtLeast(0.001f)
-        val pinch = distance(points[THUMB_TIP], points[INDEX_TIP]) / palmScale < PINCH_RATIO
+        val pinch = distance(points[THUMB_TIP], points[INDEX_TIP]) / palmScale < settings.getFloat("pinch_ratio", PINCH_RATIO).coerceIn(0.15f, 0.55f)
         if (pinch) return HandGesture.PINCH_TAP
 
         val extendedFingers = FINGER_TIPS.indices.count { index ->
@@ -128,7 +128,6 @@ class GestureEngine(
                 pinchLatched=true;lastPinchAtMs=now;HandGesture.PINCH_TAP
             }else HandGesture.NONE
         }else frame.gesture
-        previousGesture=frame.gesture
         onFrame(frame.copy(gesture = gesture))
     }
 

@@ -55,7 +55,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
   val info=android.app.ActivityManager.MemoryInfo()
   manager.getMemoryInfo(info)
   val thermal=if(android.os.Build.VERSION.SDK_INT>=29)context.getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
-  return if(info.lowMemory || thermal>=3)10000L else if(thermal>=2 || info.availMem<768L*1024*1024)6000L else 3000L
+  return ResourceBudget.visionInterval(info.availMem/1048576,info.lowMemory,thermal,context.getSystemService(android.os.PowerManager::class.java).isPowerSaveMode)
  }
  fun close(){
   if(closed)return

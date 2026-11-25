@@ -32,7 +32,9 @@ class GestureCursorView(
     var onHorizontal: (Int)->Unit={}
     private var palmX:Float?=null
     var onPointTap: ((Float,Float)->Unit)?=null
-    var smoothing=0.22f
+    private val profile = context.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
+    var smoothing=profile.getFloat("smoothing", 0.22f).coerceIn(0.1f,0.65f)
+        set(value) { field=value.coerceIn(0.1f,0.65f); profile.edit().putFloat("smoothing",field).apply() }
     private var palmAnchor:Float?=null
     private var lastScroll=0L
     private var fistSince=0L
@@ -48,8 +50,8 @@ class GestureCursorView(
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val mirrorX = 1f - normalized.x
-                val targetX = mirrorX.coerceIn(0f, 1f) * width.coerceAtLeast(1)
-                val targetY = normalized.y.coerceIn(0f, 1f) * height.coerceAtLeast(1)
+                val targetX = mirrorX.coerceIn(0f, 1f) * (width-1).coerceAtLeast(0)
+                val targetY = normalized.y.coerceIn(0f, 1f) * (height-1).coerceAtLeast(0)
                 if (!hasPosition) {
                     cursor.set(targetX, targetY)
                     hasPosition = true

@@ -1,6 +1,10 @@
 package com.xilon.jarvis
 
 internal object ResourceBudget {
+ fun visionInterval(availableMiB:Long, lowMemory:Boolean, thermal:Int, powerSave:Boolean):Long =
+  when { lowMemory || thermal>=3 -> 10000L
+   powerSave || thermal>=2 || availableMiB<768 -> 6000L
+   else -> 3000L }
  fun planningContext(availableMiB:Long, lowMemory:Boolean, thermal:Int):Int =
   when { lowMemory || thermal>=3 || availableMiB<768 -> 1024
    thermal>=2 || availableMiB<2048 -> 2048
