@@ -228,6 +228,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(q.isNotEmpty() && !busy) {
     lastConversationActivity=android.os.SystemClock.elapsedRealtime()
     append("Tu: "+q); input.text.clear()
+    val deduction=symbolicQuery(q)
+    if(deduction!=null){append("JARVIS: "+deduction);speakReply(deduction);return@setOnClickListener}
     if(q.equals("șterge textul OCR",true)){ocrText=null;append("Text OCR eliminat din memoria de analiză.");return@setOnClickListener}
     if(q.startsWith("analizează imaginea ",true)){
      val source=ocrText
@@ -1101,6 +1103,40 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun interestContext(question:String):String{
   val words=RomanianLexicon.normalize(question).split(Regex("\\W+")).filter{it.length>=4}.toSet()
   return conversationInterests().filter{topic->RomanianLexicon.normalize(topic).split(Regex("\\W+")).any{it in words}}.take(3).joinToString("; ").take(240)
+ }
+ private fun symbolicQuery(text:String):String?{
+  val source=text.trim()
+  val prefix=Regex("^deduce\\s*:\\s*",RegexOption.IGNORE_CASE)
+  if(!prefix.containsMatchIn(source))return null
+  val parts=source.replaceFirst(prefix,"").split(";").map{it.trim()}
+  if(parts.size !in 2..101)return "Format: Deduce: A; A -> B; B -> C; ? C"
+  val query=parts.last().removePrefix("?").trim()
+  val atom=Regex("[\\p{L}\\p{N}_ -]{1,80}")
+  if(!parts.last().startsWith("?") || !atom.matches(query))return "Ultimul element trebuie să fie întrebarea: ? C"
+  fun key(s:String)=RomanianLexicon.normalize(s.trim())
+  val facts=linkedSetOf<String>()
+  val rules=mutableListOf<Pair<List<String>,String>>()
+  val proof=mutableMapOf<String,String>()
+  for(part in parts.dropLast(1)){
+   val sides=part.split("->").map{it.trim()}
+   if(sides.size==1 && atom.matches(sides[0]))facts.add(key(sides[0]))
+   else if(sides.size==2 && atom.matches(sides[1])){
+    val premises=sides[0].split("&").map{it.trim()}
+    if(premises.isEmpty() || premises.any{!atom.matches(it)})return "Premisă invalidă."
+    rules.add(premises.map(::key) to key(sides[1]))
+   }else return "Regulă invalidă: "+part.take(80)
+  }
+  val target=key(query)
+  repeat(rules.size+1){
+   var changed=false
+   for((premises,conclusion) in rules){
+    if(conclusion !in facts && premises.all{it in facts}){
+     facts.add(conclusion);proof[conclusion]=premises.joinToString(" și ")+" → "+conclusion;changed=true
+    }
+   }
+   if(!changed)return if(target in facts) "Concluzie derivabilă din premisele declarate: "+query+"\n"+proof.values.joinToString("\n") else "Concluzia nu poate fi derivată din premise. Nu înseamnă că este falsă."
+  }
+  return "Limită de deducție atinsă."
  }
  private fun dialogueStyle():String = when(getSharedPreferences("conversation",MODE_PRIVATE).getString("style","natural")){
   "creativ" -> "Explorează alternative neobișnuite, dar separă invențiile de fapte."
