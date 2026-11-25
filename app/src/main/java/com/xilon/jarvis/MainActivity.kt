@@ -71,6 +71,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var modelStatus: TextView
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  ToolEnvironment.initialize(this)
   memory = LocalMemory(this)
   voice=OfflineVoice(this)
   listening=OfflineListening(this)
