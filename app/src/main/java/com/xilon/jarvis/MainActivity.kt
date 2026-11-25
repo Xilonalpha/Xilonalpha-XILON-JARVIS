@@ -870,7 +870,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!user){
    val controls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
    fun action(label:String,run:()->Unit)=Button(this).apply{text=label;isAllCaps=false;textSize=12f;setTextColor(0xff69d4f2.toInt());background=null;minWidth=0;minimumWidth=0;setOnClickListener{run()}}
-   controls.addView(action("Copiază"){val clipboard=getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager;clipboard.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS",bubble.text));android.widget.Toast.makeText(this,"Text copiat",android.widget.Toast.LENGTH_SHORT).show()})
+   controls.addView(action("Copiază"){com.openjarvis.intelligence.ClipboardIntelligence(this@MainActivity).write(bubble.text.toString());android.widget.Toast.makeText(this,"Text copiat",android.widget.Toast.LENGTH_SHORT).show()})
    controls.addView(action("Ascultă"){speakReply(bubble.text.toString().removePrefix("JARVIS:").trim(),manual=true)})
    messageRow.addView(controls)
   }
