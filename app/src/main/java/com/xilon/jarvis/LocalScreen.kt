@@ -20,6 +20,24 @@ class LocalScreen:AccessibilityService(){
  override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
  override fun onInterrupt(){com.jarvis.mobile.core.skills.SkillRecorder.stop()}
  override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
+ internal fun editFocused(pkg:String,mode:String,value:String):Boolean {
+  val root=rootInActiveWindow?:return false
+  try {
+   if(root.packageName?.toString()!=pkg)return false
+   val n=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?:return false
+   try {
+    if(!n.refresh()||!n.isEditable||!n.isFocused||!n.isVisibleToUser||!n.isEnabled||n.isPassword||n.packageName?.toString()!=pkg)return false
+    val hint= listOf(n.viewIdResourceName,n.contentDescription,n.hintText,n.text).joinToString(" ").lowercase()
+    if(listOf("password","passcode","otp","verification","one time","one-time","pin code","parol","cod de verificare").any{hint.contains(it)})return false
+    return when(mode){
+     "type","clear" -> n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,android.os.Bundle().apply{putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,if(mode=="clear")"" else value)})
+     "copy" -> { val length=n.text?.length?:0; if(length==0)false else n.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,android.os.Bundle().apply{putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,0);putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,length)}) && n.performAction(AccessibilityNodeInfo.ACTION_COPY) }
+     "paste" -> n.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+     else -> false
+    }
+   }finally{n.recycle()}
+  }finally{root.recycle()}
+ }
  internal fun elementGesture(x:Int,y:Int,mode:String,pkg:String?,fingerprint:String):Boolean {
   val obs=structuredScreen()?:return false
   if(pkg==null||obs.packageName!=pkg||obs.fingerprint()!=fingerprint)return false
