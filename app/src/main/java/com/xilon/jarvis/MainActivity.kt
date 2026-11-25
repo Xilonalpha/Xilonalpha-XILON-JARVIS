@@ -182,8 +182,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     else {
      busy=true
      nativeModel?.resetCancellation()
-     val prefix=transcript.text.toString()+"JARVIS: "
-     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { transcript.text=prefix+partial; scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
+     val previous=android.text.SpannableString(transcript.text)
+     val prefix=android.text.SpannableStringBuilder(previous).append("JARVIS: ")
+     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { transcript.text=android.text.SpannableStringBuilder(prefix).append(partial); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
      worker.execute {
       val answer=try { nativeModel?.let { model ->
        val info=android.app.ActivityManager.MemoryInfo()
@@ -208,7 +209,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        sourced
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
-      runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=prefix.removeSuffix("JARVIS: "); append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""); if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
+      runOnUiThread { if(!isDestroyed) { busy=false; transcript.text=previous; append("JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""); if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
      }
     }
    }
@@ -255,7 +256,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
-  append("Comenzi locale: ora, baterie, ram, stocare, memorează cheie=valoare, amintește cheie.")
+  append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
  private fun startMicrophone(){
   if(busy || wake!=null)return
@@ -287,7 +288,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   history.forEach { (role,text) -> array.put(org.json.JSONObject().put("role",role).put("text",text)) }
   getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("turns",array.toString()).apply()
  }
- private fun append(s: String) { transcript.append(s+"\n\n"); scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } }
+ private fun append(s:String){
+  val line=android.text.SpannableString(s+"\n\n")
+  val color=if(s.startsWith("Tu:"))0xff19384a.toInt() else 0xff142437.toInt()
+  line.setSpan(android.text.style.BackgroundColorSpan(color),0,s.length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+  val colon=s.indexOf(':')
+  if(colon in 1..8)line.setSpan(android.text.style.ForegroundColorSpan(0xff65dcff.toInt()),0,colon+1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+  transcript.append(line)
+  scroll.post{scroll.fullScroll(ScrollView.FOCUS_DOWN)}
+ }
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
  private fun runTracked(steps:List<String>):String{
