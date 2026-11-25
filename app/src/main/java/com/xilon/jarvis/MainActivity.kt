@@ -38,6 +38,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
+  stopLiveVision()
   if(!java.io.File(filesDir,"hand_landmarker.task").isFile){append("Importă modelul MediaPipe.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return}
   cursor.visibility=android.view.View.VISIBLE
@@ -56,10 +57,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var sendControl: android.view.View
  private var autoVoiceSend=false
  private var continuousVoice=false
+ private var voiceInterrupt=false
+ private var liveVision:LiveVisionController?=null
+ private fun stopLiveVision(){liveVision?.close();liveVision=null}
+ private fun startLiveVision(){
+  if(busy || liveVision!=null)return
+  if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),59);return}
+  stopAirTouch()
+  liveVision=LiveVisionController(this,this,{report->if(conversationForeground && liveVision!=null){visualObservation.put(report,android.os.SystemClock.elapsedRealtime());modelStatus.text=report.take(300)}},{message->append(message);stopLiveVision()}).also{it.start()}
+ }
  private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
-  if(!busy && !omegaCore.speaking && !omegaCore.listening && wake==null)startMicrophone()
+  if(!busy && !omegaCore.listening && wake==null){
+   if(!omegaCore.speaking)startMicrophone()
+   else if(voiceInterrupt)listening.listen({text->if(conversationForeground){voice.stop();acceptVoice(text)}},{error->if(conversationForeground)modelStatus.text=error})
+  }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,2500L)
  }}
  private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop)}
@@ -143,6 +156,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   activityStatus=TextView(this).apply{text="Sistem local • În așteptare";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)}
   corePanel.addView(activityStatus)
   listening.onLevel={level->omegaCore.level=level}
+  listening.onSpeechStart={if(voiceInterrupt && continuousVoice && omegaCore.speaking)voice.stop()}
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
   voice.onSpeaking={enabled->omegaCore.speaking=enabled;refreshOmegaStatus()}
   chat.addView(corePanel)
@@ -708,7 +722,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision() } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -719,6 +733,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
+  settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală experimentală (poate capta ecoul)";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
@@ -1174,6 +1190,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
   if(requestCode==48){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startNeural() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
+  if(requestCode==59){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && conversationForeground)startLiveVision() else append("Camera live indisponibilă.")}
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
@@ -1860,6 +1877,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  override fun onPause(){
   stopVoiceLoop();listening.close()
   conversationForeground=false
+  stopLiveVision()
   conversationHandler.removeCallbacks(conversationTick)
   triggerActive=false
   triggerHandler.removeCallbacks(triggerTick)

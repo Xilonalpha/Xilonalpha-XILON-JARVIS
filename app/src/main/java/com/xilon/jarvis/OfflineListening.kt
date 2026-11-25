@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.*
 
 class OfflineListening(private val context: Context): AutoCloseable {
+ var onSpeechStart:()->Unit={}
  var onLevel:(Float)->Unit={}
  var onListening:(Boolean)->Unit={}
  private var engine: SpeechRecognizer?=null
@@ -19,7 +20,7 @@ class OfflineListening(private val context: Context): AutoCloseable {
    engine=recognizer
    recognizer.setRecognitionListener(object:RecognitionListener{
     override fun onReadyForSpeech(params:Bundle?){}
-    override fun onBeginningOfSpeech(){}
+    override fun onBeginningOfSpeech(){if(engine===recognizer)onSpeechStart()}
     override fun onRmsChanged(rmsdB:Float){if(engine===recognizer && rmsdB.isFinite())onLevel(((rmsdB+2f)/12f).coerceIn(0f,1f))}
     override fun onBufferReceived(buffer:ByteArray?){}
     override fun onEndOfSpeech(){}
