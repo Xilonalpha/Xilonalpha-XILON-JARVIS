@@ -39,7 +39,7 @@ object RomanianLexicon {
    val entry = Entry(PlannedAction(obj.getValue("tool").jsonPrimitive.content, obj.getValue("args").jsonObject), obj.getValue("english").jsonPrimitive.content)
    for (phrase in obj.getValue("phrases").jsonArray) map[normalize(phrase.jsonPrimitive.content)] = entry
   }
-  glossary = root.getValue("translations").jsonObject.mapValues { it.value.jsonPrimitive.content }
+  glossary = root.getValue("translations").jsonObject.entries.associate { normalize(it.key) to it.value.jsonPrimitive.content }
   reverseGlossary = glossary.entries.groupBy { normalize(it.value) }
    .mapValues { (_, values) -> values.map { it.key }.sorted().joinToString(" / ") }
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
@@ -55,7 +55,26 @@ object RomanianLexicon {
   warmUp()
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
- fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
+ fun negated(text: String): Boolean {
+  val key = normalize(clean(text))
+  return Regex("^(?:nu|sa nu|niciodata|fara sa|mai bine nu|te rog nu|as prefera sa nu|nu vreau sa|nu trebuie sa)\\b").containsMatchIn(key)
+ }
+ data class LanguageReview(val original: String, val normalized: String, val blocked: Boolean,
+  val spelling: List<String>, val synonyms: List<String>, val translation: String?, val dictionaryState: String)
+ // Read-only analysis, suitable for a conversation UI; never dispatches tools.
+ fun review(text: String): LanguageReview {
+  val blocked = negated(text) || split(text).any { negated(it) }
+  return LanguageReview(text, normalize(text), blocked,
+   if (blocked) emptyList() else spellingSuggestions(text),
+   if (blocked) emptyList() else suggestedPhrases(text),
+   translateKnown(text) ?: translateReverse(text), dictionaryStatus())
+ }
+ fun reviewAsync(text: String, callback: (LanguageReview) -> Unit) {
+  worker.execute {
+   val result = review(text)
+   android.os.Handler(android.os.Looper.getMainLooper()).post { callback(result) }
+  }
+ }
  private val conjugations = mapOf(
   "deschizi" to "deschide", "deschideti" to "deschide", "deschida" to "deschide",
   "pornesti" to "porneste", "porniti" to "porneste", "porneasca" to "porneste",
@@ -67,7 +86,11 @@ object RomanianLexicon {
   "activezi" to "activeaza", "activati" to "activeaza",
   "dezactivezi" to "dezactiveaza", "dezactivati" to "dezactiveaza",
   "reglezi" to "regleaza", "reglati" to "regleaza",
-  "lansezi" to "lanseaza", "lansati" to "lanseaza"
+  "lansezi" to "lanseaza", "lansati" to "lanseaza",
+  "navighezi" to "navigheaza", "navigati" to "navigheaza",
+  "derulezi" to "deruleaza", "derulati" to "deruleaza",
+  "listezi" to "listeaza", "listati" to "listeaza",
+  "arati" to "arata", "aratati" to "arata"
  )
  @Volatile private var corpusAssets: android.content.res.AssetManager? = null
  private data class Rule(val prefix: Boolean, val flag: String, val strip: String, val add: String, val condition: Regex)
@@ -228,7 +251,7 @@ object RomanianLexicon {
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {
-  if (negated(text)) return null
+  if (negated(text) || split(text).any { negated(it) }) return null
   return entries[normalize(clean(text))]?.action ?: entries[normalize(canonicalCommand(text))]?.action
  }
  fun translateReverse(text: String): String? {
