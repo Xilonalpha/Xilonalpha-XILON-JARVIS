@@ -1924,6 +1924,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
    worker.execute {
     val target=java.io.File(filesDir,"model-"+java.util.UUID.randomUUID()+".gguf")
     var candidate: NativeModel?=null
+    var verifiedCopy=false
+    var switched=false
+    val previous=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+    fun recover():String {
+     candidate?.close()
+     if(!verifiedCopy)target.delete()
+     if(!switched)return ""
+     nativeModel?.close();nativeModel=null
+     val old=previous?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile} ?: return ""
+     return runCatching{
+      val restored=NativeModel()
+      try{restored.load(old.absolutePath);nativeModel=restored}
+      catch(t:Throwable){restored.close();throw t}
+      " Modelul anterior a fost restaurat."
+     }.getOrElse{" Restaurarea modelului anterior a eșuat: "+it.message}
+    }
     val status=try {
      val reference=entry?.let{ModelDownloads(this).reference(it)}
      val size=contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.SIZE),null,null,null)?.use { c -> if(c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L } ?: -1L
@@ -1934,12 +1950,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
       while(true){val n=src.read(buffer);if(n<0)break;total+=n;require(total<=(reference?.bytes ?: 8L*1024*1024*1024)){"Fișier prea mare"};dst.write(buffer,0,n)}
      } } ?: error("Fișier inaccesibil")
      if(reference!=null)ModelIntegrity.verify(target.inputStream(),reference.sha256,reference.bytes,reference.algorithm)
+     if(size>0)require(target.length()==size){"Copiere incompletă"}
+     verifiedCopy=true
+     switched=true
      nativeModel?.close()
      nativeModel=null
      val next=NativeModel()
      candidate=next
      next.load(target.absolutePath)
      nativeModel=next
+     candidate=null
+     switched=false
      history.clear()
      persistHistory()
      candidate=null
@@ -1947,7 +1968,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      if(entry!=null)ModelInventory.recordGguf(this,entry,target)
      // Retain previously imported GGUF files for model switching.
      if(reference!=null)"Model GGUF verificat ("+reference.algorithm+") și încărcat." else "Model GGUF importat manual; SHA-256 neverificat."
-    } catch(e:Exception) { candidate?.close(); target.delete(); "Încărcare eșuată: "+e.message } catch(e:LinkageError) { target.delete(); "Biblioteca nativă indisponibilă: "+e.message }
+    } catch(e:Exception) { "Încărcare eșuată: "+e.message+recover()+(if(verifiedCopy)" Fișier păstrat local: "+target.name else "") } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message+recover() }
     runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
    }
   } catch(e:Exception) { modelStatus.text="Selectarea a eșuat: "+e.message }
