@@ -227,12 +227,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   val aiControls=setOf("Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
-  val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF")
+  val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
   settings.addView(panelTitle,0)
   settings.addView(panelInfo,1)
+  fun report(title:String,body:()->String){
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle(title).setMessage(runCatching{body()}.getOrElse{"Eroare: "+it.message}).setPositiveButton("Închide",null).show()
+  }
+  settings.addView(Button(this).apply{text="Jurnal execuții";setOnClickListener{report("Jurnal execuții"){TaskJournal(this@MainActivity).summary()}}})
+  settings.addView(Button(this).apply{text="Abilități salvate";setOnClickListener{report("Abilități salvate"){val store=SkillStore(this@MainActivity);store.names().joinToString("\n\n"){name->name+": "+store.load(name).orEmpty().joinToString(" → ")}.ifBlank{"Nicio abilitate salvată."}}}})
+  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{it.summary()}}}})
+  var currentPage="Chat"
+  settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
+
   fun showPage(page:String){
+   currentPage=page
    panelTitle.text=when(page){"AI"->"Modele și inteligență locală";"Agenți"->"Centrul de control";else->"Configurare OMEGA"}
    val memory=android.app.ActivityManager.MemoryInfo()
    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
@@ -247,7 +257,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    settingsScroll.visibility=if(page=="Chat")android.view.View.GONE else android.view.View.VISIBLE
    for(i in 0 until settings.childCount){
     val v=settings.getChildAt(i);val label=(v as? TextView)?.text?.toString()
-    v.visibility=if(v===panelTitle || v===panelInfo || page=="Setări" || page=="AI" && (label in aiControls || label=="Microfon neuronal Sherpa" || label=="Testează Kokoro (engleză)" || label?.startsWith("Voce neuronală EN:")==true) || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
+    v.visibility=if(v===panelTitle || v===panelInfo || page=="Setări" || page=="AI" && (label in aiControls || label=="Actualizează starea" || label=="Microfon neuronal Sherpa" || label=="Testează Kokoro (engleză)" || label?.startsWith("Voce neuronală EN:")==true) || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
    }
   }
   for(page in listOf("Chat","AI","Agenți","Setări")){
