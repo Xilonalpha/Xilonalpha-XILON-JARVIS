@@ -769,7 +769,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      runOnUiThread{if(!isDestroyed)append(step.action.tool+": "+step.result.status+" / "+step.result.verified+" — "+step.result.message)}
     }
    }}
-   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")"},{"Execuție eșuată: "+it.message}))}}
+   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
   }
  }
  private fun confirmTool(name:String,args:kotlinx.serialization.json.JsonObject){
