@@ -1284,7 +1284,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   voice.stop();kokoroVoice?.stop()
-  listening.listen({ text -> if(!isDestroyed){acceptVoice(text)} },{ error -> if(!isDestroyed) modelStatus.text=error })
+  listening.listen({ text -> if(!isDestroyed){acceptVoice(text)} },{ error -> if(!isDestroyed){modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română"))stopVoiceLoop()} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)

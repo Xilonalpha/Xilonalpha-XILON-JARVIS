@@ -26,7 +26,7 @@ class OfflineListening(private val context: Context): AutoCloseable {
     override fun onEndOfSpeech(){}
     override fun onPartialResults(partialResults:Bundle?){}
     override fun onEvent(eventType:Int,params:Bundle?){}
-    override fun onError(code:Int){if(engine===recognizer){close();error("Recunoaștere offline: eroare "+code)}}
+    override fun onError(code:Int){if(engine===recognizer){close();error(when(code){12->"Româna nu este acceptată de serviciul vocal offline Android. Instalează și activează Whisper/Sherpa din OMEGA Model Center.";13->"Modelul vocal offline pentru română nu este disponibil. Instalează modelul local Whisper/Sherpa.";else->"Recunoaștere offline: eroare "+code})}}
     override fun onResults(results:Bundle?){
      if(engine!==recognizer)return
      val text=results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()

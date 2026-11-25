@@ -13,7 +13,8 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
  private var provider:ProcessCameraProvider?=null
  private var analysis:ImageAnalysis?=null
  @Volatile private var closed=false
- private val engine=GestureEngine(context,{if(!closed)cursor.update(it)},{if(!closed)ContextCompat.getMainExecutor(context).execute{if(!closed)status(it)}})
+ private val failed=java.util.concurrent.atomic.AtomicBoolean(false)
+ private val engine=GestureEngine(context,{if(!closed && !failed.get())cursor.update(it)},{message->if(!closed && failed.compareAndSet(false,true))ContextCompat.getMainExecutor(context).execute{if(!closed){status("Air Touch oprit: "+message);close();onFailure()}}})
  fun start(){
   cursor.setTracking(true)
   worker.execute{

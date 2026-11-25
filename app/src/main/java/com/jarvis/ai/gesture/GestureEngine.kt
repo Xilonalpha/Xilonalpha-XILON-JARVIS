@@ -5,7 +5,7 @@ import android.graphics.PointF
 import android.os.SystemClock
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
-import com.google.mediapipe.framework.image.MediaImageBuilder
+import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -62,14 +62,20 @@ class GestureEngine(
     @OptIn(ExperimentalGetImage::class)
     fun process(imageProxy: ImageProxy) {
         val activeLandmarker = landmarker
-        val mediaImage = imageProxy.image
-        if (activeLandmarker == null || mediaImage == null) {
+        if (activeLandmarker == null) {
             imageProxy.close()
             return
         }
         var mpImage: com.google.mediapipe.framework.image.MPImage? = null
+        var bitmap: android.graphics.Bitmap? = null
         try {
-            mpImage = MediaImageBuilder(mediaImage).build()
+            val source = imageProxy.toBitmap()
+            bitmap = source
+            if (source.config != android.graphics.Bitmap.Config.ARGB_8888) {
+                bitmap = source.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                source.recycle()
+            }
+            mpImage = BitmapImageBuilder(checkNotNull(bitmap)).build()
             val timestamp = maxOf(SystemClock.uptimeMillis(), lastTimestampMs + 1)
             lastTimestampMs = timestamp
             val imageOptions = ImageProcessingOptions.builder()
@@ -93,6 +99,7 @@ class GestureEngine(
             onFailure(error.message ?: "Hand tracking could not process a camera frame.")
         } finally {
             runCatching { mpImage?.close() }
+            bitmap?.recycle()
             imageProxy.close()
         }
     }
