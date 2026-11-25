@@ -47,21 +47,34 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  }
  const char* tmpl=llama_model_chat_template(m,nullptr);
  std::string input;
- if(tmpl){
-  int size=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,nullptr,0);
-  if(size<0){fail(e,"Unsupported GGUF chat template");return nullptr;}
-  std::vector<char> formatted(size+1);
-  int written=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,formatted.data(),formatted.size());
-  if(written<0 || written>size){fail(e,"Chat formatting failed");return nullptr;}
-  input.assign(formatted.data(),written);
- }else{
-  for(int i=0;i<count;i++){input+=role[i]+": "+body[i]+"\n";}
-  input+="assistant: ";
+ std::vector<llama_token> tokens;
+ int n=0;
+ for(;;){
+  if(tmpl){
+   int size=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,nullptr,0);
+   if(size<0){fail(e,"Unsupported GGUF chat template");return nullptr;}
+   std::vector<char> formatted(size+1);
+   int written=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,formatted.data(),formatted.size());
+   if(written<0 || written>size){fail(e,"Chat formatting failed");return nullptr;}
+   input.assign(formatted.data(),written);
+  }else{
+   input.clear();
+   for(const auto& message:chat){input+=std::string(message.role)+": "+message.content+"\n";}
+   input+="assistant: ";
+  }
+  tokens.resize(input.size()+16);
+  n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,tmpl!=nullptr);
+  if(n<0){tokens.resize(-n);n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,tmpl!=nullptr);}
+  if(n>0 && n<=context-maxTokens)break;
+  if(n<=0){fail(e,"Tokenization failed");return nullptr;}
+  // Preserve system messages and the current user request; remove oldest complete turns.
+  auto first=chat.begin();
+  while(first!=chat.end() && std::string(first->role)=="system")++first;
+  if(first>=chat.end()-1){fail(e,"Current prompt exceeds supported token budget");return nullptr;}
+  auto end=first+1;
+  while(end<chat.end()-1 && std::string(end->role)!="user" && std::string(end->role)!="system")++end;
+  chat.erase(first,end);
  }
-
- std::vector<llama_token> tokens(input.size()+16);
- int n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,tmpl!=nullptr);
- if(n<=0 || n>context-maxTokens){fail(e,"Prompt exceeds supported token budget");return nullptr;}
  auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_ubatch=std::min<int>(context,256);cp.n_threads=threads;cp.n_threads_batch=threads;
  auto* ctx=llama_init_from_model(m,cp);if(!ctx){fail(e,"Context allocation failed");return nullptr;}
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
