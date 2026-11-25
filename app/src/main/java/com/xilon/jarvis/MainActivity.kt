@@ -351,6 +351,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
   fun report(title:String,body:()->String){
    android.app.AlertDialog.Builder(this@MainActivity).setTitle(title).setMessage(runCatching{body()}.getOrElse{"Eroare: "+it.message}).setPositiveButton("Închide",null).show()
   }
+  settings.addView(Button(this).apply{text="Caută în toate arhivele";setOnClickListener{
+   val field=EditText(this@MainActivity).apply{hint="Cuvinte de căutat"}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Memorie locală").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Caută"){_,_->
+    val query=field.text.toString().trim()
+    if(query.isNotBlank()&&!busy){busy=true;worker.execute{
+     val result=runCatching{ArchiveSearch.search(java.io.File(filesDir,"saved_chats"),query)}
+     runOnUiThread{if(!isDestroyed){busy=false;report("Rezultate din arhive"){result.fold({hits->hits.joinToString("\n\n"){it.title+" • "+it.text}.ifBlank{"Niciun rezultat."}},{ "Căutare eșuată: "+it.message })}}}
+    }}
+   }.show()
+  }})
   settings.addView(Button(this).apply{text="Caută în conversație";setOnClickListener{val field=EditText(this@MainActivity).apply{hint="Text de căutat"};android.app.AlertDialog.Builder(this@MainActivity).setTitle("Caută în istoricul local").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Caută"){_,_->val query=field.text.toString().trim();if(query.isNotEmpty())report("Rezultate"){visibleHistory.filter{it.contains(query,true)}.joinToString("\n\n").ifBlank{"Niciun rezultat."}}}.show()}})
   settings.addView(Button(this).apply{text="Salvează conversația";setOnClickListener{
    if(!busy){val field=EditText(this@MainActivity).apply{hint="Titlul conversației";setSingleLine(true)}
