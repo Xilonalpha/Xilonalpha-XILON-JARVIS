@@ -2,31 +2,68 @@ package com.xilon.jarvis
 import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
-import android.os.Environment
-class ModelDownloads(private val context:Context){
- private val dm=context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
- private val prefs=context.getSharedPreferences("model_downloads",Context.MODE_PRIVATE)
- fun start(entry:ModelCatalog.Entry):Long{
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+class ModelDownloads(context:Context){
+ private val context=context.applicationContext
+ private val prefs=this.context.getSharedPreferences("omega_private_downloads",Context.MODE_PRIVATE)
+ private val root=File(this.context.filesDir,"downloads").apply{mkdirs()}
+ companion object{
+  private val pool=Executors.newFixedThreadPool(2)
+  private val active=ConcurrentHashMap<String,Transfer>()
+  private val cancelled=ConcurrentHashMap.newKeySet<String>()
+ }
+ private fun file(e:ModelCatalog.Entry)=File(root,e.file)
+ private fun part(e:ModelCatalog.Entry)=File(root,e.file+".part")
+ @Synchronized fun start(entry:ModelCatalog.Entry):Long{
   require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+listOf(ModelCatalog.hand,ModelCatalog.kokoro)))
-  if(prefs.contains(entry.file)){
-   val previous=transfer(entry)
-   if(previous.state==DownloadManager.STATUS_FAILED||previous.state == -2)cancel(entry)
-   else error("Există deja o descărcare pentru acest model.")
-  }
-  check(context.filesDir.usableSpace>=if(entry==ModelCatalog.kokoro) 1024L*1024*1024 else entry.mb*2000000L+200000000L){"Spațiu insuficient"}
-  val reference=if(entry==ModelCatalog.kokoro)ModelMetadata.kokoro() else if(entry.directUrl==null && entry!=ModelCatalog.hand)ModelMetadata.fetch(entry) else null
-  val url=if(reference!=null && entry.directUrl==null)entry.copy(revision=reference.revision).url else entry.url
-  if(reference!=null)require(reference.bytes<= (context.filesDir.usableSpace-200000000L)/2){"Spațiu insuficient"}
-  val id=dm.enqueue(DownloadManager.Request(Uri.parse(url)).setTitle(entry.name)
-   .setAllowedOverMetered(false).setAllowedOverRoaming(false)
-   .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-   .setDestinationInExternalFilesDir(context,Environment.DIRECTORY_DOWNLOADS,entry.file))
-  check(id>=0){"Transferul nu a fost acceptat"}
-  val edit=prefs.edit().putLong(entry.file,id)
-  if(reference!=null)edit.putString(entry.file+".sha",reference.sha256).putLong(entry.file+".bytes",reference.bytes).putString(entry.file+".revision",reference.revision).putString(entry.file+".algorithm",reference.algorithm)
-  if(!edit.commit()){dm.remove(id);error("Metadatele nu au fost salvate")}
-
-  return id
+  check(active.putIfAbsent(entry.file,Transfer(DownloadManager.STATUS_PENDING,0,-1,0))==null){"Transfer deja activ"}
+  val id=System.currentTimeMillis()
+  try{
+   check(!file(entry).exists()){"Fișier deja descărcat"}
+   check(root.usableSpace>=entry.mb*2000000L+200000000L){"Spațiu insuficient"}
+   cancelled.remove(entry.file)
+   check(prefs.edit().putLong(entry.file,id).putInt(entry.file+".state",DownloadManager.STATUS_PENDING).commit())
+   pool.execute{download(entry)}
+   return id
+  }catch(e:Exception){active.remove(entry.file);throw e}
+ }
+ private fun download(entry:ModelCatalog.Entry){
+  var connection:HttpURLConnection?=null
+  try{
+   val ref=if(entry==ModelCatalog.kokoro)ModelMetadata.kokoro() else if(entry==ModelCatalog.hand)null else ModelMetadata.fetch(entry)
+   val url=if(ref!=null&&entry.directUrl==null)entry.copy(revision=ref.revision).url else entry.url
+   if(ref!=null){
+    require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
+    check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
+   }
+   connection=(URL(url).openConnection() as HttpURLConnection).apply{connectTimeout=20000;readTimeout=30000;instanceFollowRedirects=true;setRequestProperty("Accept-Encoding","identity")}
+   check(connection.responseCode==200){"HTTP "+connection.responseCode}
+   val total=ref?.bytes?:connection.contentLengthLong
+   val limit=ref?.bytes?:if(entry==ModelCatalog.hand)64L*1024*1024 else 512L*1024*1024
+   var bytes=0L
+   val started=android.os.SystemClock.elapsedRealtime()
+   connection.inputStream.use{src->part(entry).outputStream().use{dst->
+    val buffer=ByteArray(65536)
+    while(true){
+     check(!cancelled.contains(entry.file)){"Anulat"}
+     val n=src.read(buffer);if(n<0)break
+     bytes+=n;require(bytes<=limit){"Dimensiune depășită"};dst.write(buffer,0,n)
+     active[entry.file]=Transfer(DownloadManager.STATUS_RUNNING,bytes,total,0,bytes*1000/maxOf(1,android.os.SystemClock.elapsedRealtime()-started))
+    }
+   }}
+   require(bytes>0&&(total<=0||bytes==total)){"Transfer incomplet"}
+   if(ref!=null)ModelIntegrity.verify(part(entry).inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+   check(!cancelled.contains(entry.file)){"Anulat"}
+   check(part(entry).renameTo(file(entry))){"Salvare eșuată"}
+   prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).apply()
+  }catch(e:Exception){
+   part(entry).delete()
+   prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_FAILED).putString(entry.file+".error",e.message?:"Eroare").apply()
+  }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry)}
  }
  fun reference(entry:ModelCatalog.Entry):ModelMetadata.Reference{
   val hash=prefs.getString(entry.file+".sha",null)?:error("Lipsesc metadatele; descarcă din nou")
@@ -37,31 +74,27 @@ class ModelDownloads(private val context:Context){
   require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&(if(entry==ModelCatalog.kokoro)revision.matches(Regex("asset-[0-9]+")) else revision.matches(Regex("[0-9a-f]{40}")))&&bytes>0)
   return ModelMetadata.Reference(hash,bytes,revision,algorithm)
  }
+
  fun id(entry:ModelCatalog.Entry)=prefs.getLong(entry.file,-1)
- data class Transfer(val state:Int,val bytes:Long,val total:Long,val reason:Int){
+ data class Transfer(val state:Int,val bytes:Long,val total:Long,val reason:Int,val speed:Long=0,val error:String?=null){
   val percent:Int? get()=if(total>0)(bytes.toDouble()*100/total).toInt().coerceIn(0,100) else null
   val label:String get()=when(state){
    -1->"Nedescărcat"
-   -2->"Transfer indisponibil"
-   DownloadManager.STATUS_SUCCESSFUL->"Descărcat • integritate neverificată"
-   DownloadManager.STATUS_FAILED->"Eșuat • cod "+reason
-   DownloadManager.STATUS_PAUSED->"În așteptare rețea"
-   DownloadManager.STATUS_PENDING->"În coadă"
-   else->percent?.let{"Transfer: "+it+"%"}?:"Transfer: "+bytes/1048576+" MiB"
+   DownloadManager.STATUS_SUCCESSFUL->"Descărcat local"
+   DownloadManager.STATUS_FAILED->"Eșuat: "+(error?:"Transfer întrerupt")
+   DownloadManager.STATUS_PENDING->"Pregătire transfer"
+   else->(percent?.let{"Transfer: "+it+"%"}?:"Transfer: "+bytes/1048576+" MiB")+" • "+speed/1024+" KiB/s"
   }
  }
  fun transfer(entry:ModelCatalog.Entry):Transfer{
-  val id=id(entry);if(id<0)return Transfer(-1,0,-1,0)
-  return dm.query(DownloadManager.Query().setFilterById(id))?.use{c->
-   if(!c.moveToFirst())Transfer(-2,0,-1,0) else Transfer(
-    c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)),
-    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
-    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
-    c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)))
-  }?:Transfer(-2,0,-1,0)
+  active[entry.file]?.let{return it}
+  if(file(entry).isFile)return Transfer(DownloadManager.STATUS_SUCCESSFUL,file(entry).length(),file(entry).length(),0)
+  if(id(entry)<0)return Transfer(-1,0,-1,0)
+  return Transfer(DownloadManager.STATUS_FAILED,0,-1,0,error=prefs.getString(entry.file+".error",null))
  }
  fun status(entry:ModelCatalog.Entry)=transfer(entry).label
- fun canStart(entry:ModelCatalog.Entry):Boolean=transfer(entry).state in setOf(-1,-2,DownloadManager.STATUS_FAILED)
- fun cancel(entry:ModelCatalog.Entry){val id=id(entry);if(id>=0)dm.remove(id);prefs.edit().remove(entry.file).remove(entry.file+".sha").remove(entry.file+".bytes").remove(entry.file+".revision").remove(entry.file+".algorithm").apply()}
- fun uri(entry:ModelCatalog.Entry):Uri?=id(entry).takeIf{it>=0}?.let{dm.getUriForDownloadedFile(it)}
+ fun canStart(entry:ModelCatalog.Entry)=transfer(entry).state in setOf(-1,DownloadManager.STATUS_FAILED)
+ private fun clear(entry:ModelCatalog.Entry){file(entry).delete();part(entry).delete();val edit=prefs.edit();for(s in listOf("",".sha",".bytes",".revision",".algorithm",".state",".error"))edit.remove(entry.file+s);edit.apply()}
+ fun cancel(entry:ModelCatalog.Entry){if(active.containsKey(entry.file))cancelled.add(entry.file) else clear(entry)}
+ fun uri(entry:ModelCatalog.Entry):Uri?=file(entry).takeIf{it.isFile}?.let{Uri.fromFile(it)}
 }
