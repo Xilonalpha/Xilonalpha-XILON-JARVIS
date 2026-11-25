@@ -3,6 +3,17 @@ import com.jarvis.mobile.core.tools.*
 import kotlinx.serialization.json.*
 
 object RegistryPlanner {
+ // Constrain output syntax; semantic validation remains mandatory.
+ val grammar = """
+root ::= "[" ws (step (ws "," ws step)*)? ws "]"
+step ::= "{" ws "\"tool\"" ws ":" ws string ws "," ws "\"args\"" ws ":" ws args ws "}"
+args ::= "{" ws (pair (ws "," ws pair)*)? ws "}"
+pair ::= string ws ":" ws (string | integer | "true" | "false")
+integer ::= "-"? ("0" | [1-9] [0-9]*)
+string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\""
+ws ::= [ \t\n\r]*
+""".trimIndent()
+
  fun prompt(goal:String):String = "Return only a JSON array of objects with tool and args keys. Use only listed tools and exact argument types. Do not invent values. If impossible return []. Goal: "+goal.take(1000)+"\nTools:\n"+ToolRegistry.catalogPrompt()
  fun parse(raw:String):List<PlannedAction> {
   val array=Json.parseToJsonElement(raw.trim()) as? JsonArray ?: error("Plan invalid")
