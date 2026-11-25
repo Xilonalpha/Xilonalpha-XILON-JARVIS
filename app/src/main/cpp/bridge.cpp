@@ -67,13 +67,21 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(!sampler){llama_free(ctx);fail(e,"Sampler allocation failed");return nullptr;}
  const char* rules=e->GetStringUTFChars(grammar,nullptr);
  if(!rules){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
- if(*rules){
+ const bool constrainedOutput=*rules!=0;
+ if(constrainedOutput){
   auto* constrained=llama_sampler_init_grammar(v,rules,"root");
   if(!constrained){e->ReleaseStringUTFChars(grammar,rules);llama_sampler_free(sampler);llama_free(ctx);fail(e,"Invalid grammar");return nullptr;}
   llama_sampler_chain_add(sampler,constrained);
  }
  e->ReleaseStringUTFChars(grammar,rules);
- llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
+ if(constrainedOutput){
+  llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
+ }else{
+  llama_sampler_chain_add(sampler,llama_sampler_init_top_k(40));
+  llama_sampler_chain_add(sampler,llama_sampler_init_top_p(0.9f,1));
+  llama_sampler_chain_add(sampler,llama_sampler_init_temp(0.7f));
+  llama_sampler_chain_add(sampler,llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+ }
  std::string out;auto batch=llama_batch_get_one(tokens.data(),n);bool ok=true;
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");
  if(!cancel){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
