@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 class LocalScreen:AccessibilityService(){
  companion object {
   @Volatile private var active:LocalScreen?=null
+  fun connected():Boolean=active!=null
   fun snapshot():String?=active?.readScreen()
   internal fun clickConfirmed(target:ElementTarget):Boolean=active?.clickExact(target)?:false
   fun observe():ScreenObservation?=active?.structuredScreen()
@@ -16,7 +17,7 @@ class LocalScreen:AccessibilityService(){
  }
  override fun onServiceConnected(){active=this}
  override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
- override fun onInterrupt(){}
+ override fun onInterrupt(){com.jarvis.mobile.core.skills.SkillRecorder.stop()}
  override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
  private fun clickExact(target:ElementTarget):Boolean{
   if(target.pkg.isNullOrBlank()||!target.hasNode)return false
@@ -84,7 +85,7 @@ class LocalScreen:AccessibilityService(){
    while(queue.isNotEmpty() && count<200){
     val n=queue.removeFirst();count++
     try{
-     if(n.isPassword)continue
+     if(n.isPassword||n.isEditable)continue
      if(n.isVisibleToUser && !n.isEditable){
       val value=(n.text ?: n.contentDescription)?.toString()?.take(240)
       if(!value.isNullOrBlank()){
