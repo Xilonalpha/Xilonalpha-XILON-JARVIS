@@ -7,6 +7,7 @@ import com.jarvis.ai.wake.WakeWordEngine
 import kotlinx.coroutines.runBlocking
 class WakeController(private val context:Context,private val detected:()->Unit,private val status:(String)->Unit){
  @Volatile private var stopped=false
+ @Volatile private var capture:AudioRecord?=null
  private val worker=java.util.concurrent.Executors.newSingleThreadExecutor()
  fun start(){worker.execute{
   var recorder:AudioRecord?=null
@@ -18,8 +19,9 @@ class WakeController(private val context:Context,private val detected:()->Unit,p
    if(!stopped){
     val min=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
     check(min>0){"Format audio indisponibil"}
-    val rec=AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,maxOf(min,5120));recorder=rec
+    val rec=AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,maxOf(min,5120));recorder=rec;capture=rec
     check(rec.state==AudioRecord.STATE_INITIALIZED){"Microfon indisponibil"}
+    if(stopped)return@execute
     rec.startRecording()
     status("Ascultare locală Hey Jarvis activă.")
     val frame=ShortArray(1280)
@@ -36,10 +38,10 @@ class WakeController(private val context:Context,private val detected:()->Unit,p
   }catch(t:Exception){if(!stopped)status("WakeWord: "+t.message)}
    catch(t:LinkageError){if(!stopped)status("ONNX indisponibil: "+t.message)}
   finally{
-   runCatching{recorder?.stop()};runCatching{recorder?.release()};engine?.close()
+   capture=null;runCatching{recorder?.stop()};runCatching{recorder?.release()};runCatching{engine?.close()}
    if(!stopped){if(hit)detected() else status("Ascultare oprită.")}
    worker.shutdown()
   }
  }}
- fun stop(){stopped=true}
+ fun stop(){stopped=true;runCatching{capture?.stop()}}
 }
