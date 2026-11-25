@@ -10,6 +10,10 @@ object RegistryAgentEngine {
   require(plan.size in 1..20)
   val steps=mutableListOf<Step>()
   for(action in plan){
+   val invalid=ToolEnvironment.validate(action.tool,action.args)
+   if(invalid!=null)return Outcome("INVALID_PLAN",listOf(Step(action,invalid)))
+  }
+  for(action in plan){
    coroutineContext.ensureActive()
    if(cancelled())return Outcome("STOPPED",steps.toList())
    if(!confirm(action))return Outcome("STOPPED",steps.toList())
@@ -18,6 +22,7 @@ object RegistryAgentEngine {
    val step=Step(action,result)
    steps.add(step)
    onStep(step)
+   if(cancelled())return Outcome("STOPPED",steps.toList())
    if(result.status!=ToolStatus.SUCCESS)return Outcome("FAILED",steps.toList())
    if(result.verified!=Verification.VERIFIED)return Outcome("UNVERIFIED",steps.toList())
   }
