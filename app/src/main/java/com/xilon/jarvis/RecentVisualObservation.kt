@@ -1,7 +1,7 @@
 package com.xilon.jarvis
 internal class RecentVisualObservation {
  companion object {
-  fun relevant(question:String):Boolean=Regex("\\b(imagine|fotografie|poza|obiecte|fete|vizual|fotografia|vezi|vazut|ecran|captura|captură|text|scrie|scris|citeste|citește|ocr)\\b").containsMatchIn(RomanianLexicon.normalize(question))
+  fun relevant(question:String):Boolean=Regex("\\b(imagine|fotografie|poza|obiect|obiecte|fata|fete|persoane|persoana|oameni|camera|imprejur|vizual|fotografia|vezi|vazut|ecran|captura|captură|text|scrie|scris|citeste|citește|ocr)\\b").containsMatchIn(RomanianLexicon.normalize(question))
  }
  private var value:String?=null
  private var at=0L

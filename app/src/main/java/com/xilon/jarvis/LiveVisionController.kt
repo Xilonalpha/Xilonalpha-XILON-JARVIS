@@ -13,6 +13,7 @@ internal class LiveVisionController(private val context:Context,private val owne
  private var analysis:ImageAnalysis?=null
  @Volatile private var closed=false
  private var last=0L
+ private var lastOcr=0L
  fun start(){
   val future=ProcessCameraProvider.getInstance(context)
   future.addListener({
@@ -23,14 +24,16 @@ internal class LiveVisionController(private val context:Context,private val owne
     a.setAnalyzer(worker){frame->
      try{
       val now=android.os.SystemClock.elapsedRealtime()
-      if(!closed && now-last>=2000L){
+      if(!closed && now-last>=interval()){
        last=now
        val bitmap=frame.toBitmap()
        try{
         val matrix=android.graphics.Matrix().apply{postRotate(frame.imageInfo.rotationDegrees.toFloat())}
         val rotated=android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true)
         try{
-         val report=LocalVision.describe(context,rotated)
+         val includeText=lastOcr==0L || now-lastOcr>=12000L
+         if(includeText)lastOcr=now
+         val report=LocalVision.describeScene(context,rotated,includeText)
          main.execute{if(!closed)observation(report)}
         }finally{if(rotated!==bitmap)rotated.recycle()}
        }finally{bitmap.recycle()}
@@ -42,6 +45,13 @@ internal class LiveVisionController(private val context:Context,private val owne
     p.bindToLifecycle(owner,CameraSelector.DEFAULT_BACK_CAMERA,a)
    }catch(e:Exception){if(!closed)failure("Camera live: "+e.message)}
   },main)
+ }
+ private fun interval():Long{
+  val info=android.app.ActivityManager.MemoryInfo()
+  context.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+  val power=context.getSystemService(android.os.PowerManager::class.java)
+  val thermal=if(android.os.Build.VERSION.SDK_INT>=29)power.currentThermalStatus else 0
+  return ResourceBudget.visionInterval(info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode)
  }
  fun close(){
   if(closed)return
