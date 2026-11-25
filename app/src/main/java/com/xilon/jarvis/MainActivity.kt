@@ -134,7 +134,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   voiceInput=input
   val composer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL;background=rounded(0xff142437.toInt(),18);setPadding(dp(4),dp(4),dp(4),dp(4))}
   input.background=null
-  composer.addView(Button(this).apply{text="＋";contentDescription="Importă document";setTextColor(cyan);background=null;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(44),dp(48)))
+  composer.addView(Button(this).apply{text="";setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("attach",dp(24),cyan),null,null,null);setPadding(dp(10),0,0,0);minWidth=0;minimumWidth=0;contentDescription="Importă document";setTextColor(cyan);background=null;setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(44),dp(48)))
   composer.addView(input,LinearLayout.LayoutParams(0,-2,1f))
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
@@ -228,7 +228,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
-  for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f}}
+  for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   val aiControls=setOf("Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
@@ -242,7 +242,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }
   for(page in listOf("Chat","AI","Agenți","Setări")){
-   nav.addView(Button(this).apply{text=when(page){"Chat"->"◯\nChat";"AI"->"◇\nAI";"Agenți"->"▣\nAgenți";else->"⚙\nSetări"};isAllCaps=false;setTextColor(cyan);background=null;setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
+   nav.addView(Button(this).apply{text=page;setCompoundDrawablesWithIntrinsicBounds(null,OmegaIcon(page,dp(24),cyan),null,null);compoundDrawablePadding=dp(4);isAllCaps=false;setTextColor(cyan);background=null;setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
   }
   root.addView(android.view.View(this).apply{setBackgroundColor(0xff284357.toInt())},LinearLayout.LayoutParams(-1,dp(1)))
   root.addView(nav)
