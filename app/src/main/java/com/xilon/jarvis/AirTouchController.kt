@@ -11,6 +11,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
  private val worker=java.util.concurrent.Executors.newSingleThreadExecutor()
  private var lastVision=0L
  private var lastOcr=0L
+ private val tracker=SceneTracker()
  private var provider:ProcessCameraProvider?=null
  private var analysis:ImageAnalysis?=null
  @Volatile private var closed=false
@@ -37,7 +38,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
            try{
             val matrix=android.graphics.Matrix().apply{postRotate(frame.imageInfo.rotationDegrees.toFloat())}
             val rotated=android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true)
-            try{val includeText=lastOcr==0L || now-lastOcr>=12000L;if(includeText)lastOcr=now;LocalVision.describeScene(context,rotated,includeText)}finally{if(rotated!==bitmap)rotated.recycle()}
+            try{val includeText=lastOcr==0L || now-lastOcr>=12000L;if(includeText)lastOcr=now;LocalVision.describeScene(context,rotated,includeText,tracker)}finally{if(rotated!==bitmap)rotated.recycle()}
            }finally{bitmap.recycle()}
           }.getOrNull()
           if(report!=null)ContextCompat.getMainExecutor(context).execute{if(!closed)onObservation?.invoke(report)}

@@ -14,6 +14,7 @@ internal class LiveVisionController(private val context:Context,private val owne
  @Volatile private var closed=false
  private var last=0L
  private var lastOcr=0L
+ private val tracker=SceneTracker()
  fun start(){
   val future=ProcessCameraProvider.getInstance(context)
   future.addListener({
@@ -33,7 +34,7 @@ internal class LiveVisionController(private val context:Context,private val owne
         try{
          val includeText=lastOcr==0L || now-lastOcr>=12000L
          if(includeText)lastOcr=now
-         val report=LocalVision.describeScene(context,rotated,includeText)
+         val report=LocalVision.describeScene(context,rotated,includeText,tracker)
          main.execute{if(!closed)observation(report)}
         }finally{if(rotated!==bitmap)rotated.recycle()}
        }finally{bitmap.recycle()}
