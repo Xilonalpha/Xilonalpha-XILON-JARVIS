@@ -243,7 +243,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -392,6 +392,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
     android.app.AlertDialog.Builder(this@MainActivity).setTitle(file).setMessage("Set INT8 multilingv. Sunt necesare toate cele trei fișiere. Păstrează numele original.")
      .setPositiveButton("Descarcă"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/$file?download=true")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
      .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}.setNegativeButton("Anulează",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Catalog gesturi";setOnClickListener{
+   if(busy)return@setOnClickListener
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("MediaPipe Hand Landmarker").setMessage("7,82 MB • FP16 • "+if(java.io.File(filesDir,"hand_landmarker.task").isFile)"Fișier prezent" else "Fișier absent")
+    .setPositiveButton("Descarcă"){_,_->runCatching{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/Leo-TX/mediapipe-hand/resolve/main/hand_landmarker.task?download=true"))) }}
+    .setNeutralButton("Importă"){_,_->if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}.setNegativeButton("Închide",null).show()
+  }})
+  settings.addView(Button(this).apply{text="Catalog Hey Jarvis";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val components=listOf("hey_jarvis.onnx","melspectrogram.onnx","embedding_model.onnx")
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hey Jarvis • ONNX (compatibilitate de testat)").setItems(components.toTypedArray()){_,index->
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle(components[index]).setMessage("Importă toate cele trei componente. Compatibilitatea tensorilor trebuie verificată prin test vocal.")
+     .setPositiveButton("Descarcă"){_,_->runCatching{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/Soulcreek2/speechkit-wakeword-models/resolve/main/"+components[index]+"?download=true"))) }}
+     .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
   var currentPage="Chat"
