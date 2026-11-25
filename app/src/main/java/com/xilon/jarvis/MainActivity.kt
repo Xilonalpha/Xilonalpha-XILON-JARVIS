@@ -390,14 +390,29 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   settings.addView(Button(this).apply{text="Catalog voce Sherpa";setOnClickListener{
    if(busy)return@setOnClickListener
-   val files=listOf("tiny-encoder.int8.onnx","tiny-decoder.int8.onnx","tiny-tokens.txt")
+   val entries=ModelCatalog.whisper
+   val downloads=ModelDownloads(this@MainActivity)
    val root=java.io.File(filesDir,"models")
    val enabled=runCatching{Class.forName("com.xilon.jarvis.SherpaSpeech")}.isSuccess
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Whisper Tiny multilingual • "+if(enabled)"Sherpa inclus" else "Necesită APK Sherpa").setItems(files.map{it+if(java.io.File(root,it).isFile)" • prezent" else " • lipsește"}.toTypedArray()){_,index->
-    val file=files[index]
-    android.app.AlertDialog.Builder(this@MainActivity).setTitle(file).setMessage("Set INT8 multilingv. Sunt necesare toate cele trei fișiere. Păstrează numele original.")
-     .setPositiveButton("Descarcă"){_,_->try{startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/$file?download=true")))}catch(e:Exception){append("Browser indisponibil: "+e.message)}}
-     .setNeutralButton("Importă"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}.setNegativeButton("Anulează",null).show()
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Whisper Tiny • "+if(enabled)"Sherpa inclus" else "Necesită APK Sherpa").setItems(entries.map{it.file+" • "+downloads.status(it)+(if(java.io.File(root,it.file).isFile)" • instalat" else "")}.toTypedArray()){_,index->
+    val entry=entries[index];val uri=downloads.uri(entry)
+    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.file).setMessage(downloads.status(entry))
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
+     val result=runCatching{
+      check(root.isDirectory || root.mkdirs())
+      val temp=java.io.File.createTempFile("whisper-", ".part",root)
+      try{
+       contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=entry.mb*1100000L);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
+       require(temp.length()>1024)
+       check(temp.renameTo(java.io.File(root,entry.file)))
+       "Componentă instalată; inferența rămâne de testat."
+      }finally{temp.delete()}
+     }.getOrElse{"Import eșuat: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }}}
+    else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message})}
+    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+    dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Catalog gesturi";setOnClickListener{
