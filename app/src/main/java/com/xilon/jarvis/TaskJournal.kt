@@ -18,6 +18,17 @@ class TaskJournal(context:Context){
   next.put(JSONObject().put("time",System.currentTimeMillis()).put("steps",JSONArray(outcome.steps.map{it.action.tool})).put("status",outcome.status).put("remaining",outcome.remaining.size).put("evidence",JSONArray(outcome.steps.map{JSONObject().put("command",it.action.tool).put("status",it.result.status.name).put("verified",it.result.verified.name)})))
   check(prefs.edit().putString("runs",next.toString()).commit()){"Jurnal nesalvat"}
  }
+ fun planningFeedback():String=synchronized(lock){
+  val a=entries()
+  (maxOf(0,a.length()-8) until a.length()).mapNotNull{i->
+   val row=a.optJSONObject(i) ?: return@mapNotNull null
+   if(!row.has("remaining"))return@mapNotNull null
+   val status=row.optString("status")
+   val evidence=row.optJSONArray("evidence") ?: return@mapNotNull null
+   val last=evidence.optJSONObject(evidence.length()-1)
+   "status="+status+"; last tool="+(last?.optString("command") ?: "none")+"; verification="+(last?.optString("verified") ?: "none")+"; remaining="+row.optInt("remaining")
+  }.joinToString("\n").takeLast(600)
+ }
  fun summary():String=synchronized(lock){
   val a=entries()
   (0 until a.length()).reversed().joinToString("\n"){i->val x=a.getJSONObject(i);java.util.Date(x.getLong("time")).toString()+" "+x.getString("status")+" "+x.getJSONArray("steps")+(if(x.has("remaining"))" • pași rămași: "+x.getInt("remaining") else "")+(x.optJSONArray("evidence")?.let{" • dovezi: "+it.toString()}?:"")}.ifBlank{"Jurnal gol."}

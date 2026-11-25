@@ -184,6 +184,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   corePanel.addView(activityStatus)
   listening.onLevel={level->omegaCore.level=level}
   listening.onSpeechStart={}
+  listening.onPartialText={partial->if(continuousVoice && conversationForeground && !omegaCore.speaking && !busy){modelStatus.text=partial.take(200)}}
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
   voice.onSpeaking={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
   chat.addView(corePanel)
@@ -1313,7 +1314,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   voice.stop();kokoroVoice?.stop()
-  listening.listen({ text -> if(!isDestroyed){acceptVoice(text)} },{ error -> if(!isDestroyed){modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română"))stopVoiceLoop()} })
+  listening.listen({ text -> if(!isDestroyed){acceptVoice(text)} },{ error -> if(!isDestroyed){modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română")||error.startsWith("Recunoașterea offline nu este disponibilă"))stopVoiceLoop()} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
@@ -1722,7 +1723,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
    val thermal=if(android.os.Build.VERSION.SDK_INT>=29)getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
    val context=ResourceBudget.planningContext(info.availMem/1048576,info.lowMemory,thermal)
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(800)}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.grammar))}
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(400)+"\n"+TaskJournal(this@MainActivity).planningFeedback()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.activeGrammar()))}
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
