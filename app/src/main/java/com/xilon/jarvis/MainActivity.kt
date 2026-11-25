@@ -1111,6 +1111,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun saveLogicKnowledge(items:List<String>){
   getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("logicKnowledge",org.json.JSONArray(items.distinct().take(80)).toString()).apply()
  }
+ private fun naturalLogicStatement(text:String):String?{
+  val value=text.trim().trimEnd('.')
+  val conditional=Regex("^dac[ăa]\\s+(.+?),?\\s+atunci\\s+(.+)$",RegexOption.IGNORE_CASE).matchEntire(value)
+  fun literal(raw:String):String{
+   val v=raw.trim().trimEnd(',').trim()
+   return if(v.startsWith("nu ",true))"!"+v.substring(3).trim() else v
+  }
+  if(conditional!=null){
+   val premises=conditional.groupValues[1].split(Regex("\\s+(?:și|si)\\s+",RegexOption.IGNORE_CASE)).map{literal(it)}
+   return premises.joinToString(" & ")+" -> "+literal(conditional.groupValues[2])
+  }
+  if(value.contains(';') || value.contains('?') || value.contains("->"))return null
+  return literal(value)
+ }
  private fun logicMemoryCommand(text:String):String?{
   val normalized=RomanianLexicon.normalize(text)
   val items=logicKnowledge()
@@ -1121,6 +1135,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val index=normalized.substringAfter("uita regula ").toIntOrNull()?.minus(1)
    if(index==null || index !in items.indices)return "Indică numărul unei reguli din lista de cunoștințe."
    saveLogicKnowledge(items.filterIndexed{i,_->i!=index});return "Cunoștință eliminată."
+  }
+  val natural=Regex("^re[tț]ine premisa\\s*:\\s*",RegexOption.IGNORE_CASE)
+  if(natural.containsMatchIn(text)){
+   val statement=naturalLogicStatement(text.replaceFirst(natural,"")) ?: return "Premisă ambiguă. Folosește formatul dacă A și B, atunci C."
+   return logicMemoryCommand("Reține logic: "+statement)
+  }
+  val hypothetical=Regex("^presupune\\s*:\\s*",RegexOption.IGNORE_CASE)
+  if(hypothetical.containsMatchIn(text)){
+   val parts=text.replaceFirst(hypothetical,"").split(";").map{it.trim()}
+   if(parts.size !in 2..20 || !parts.last().startsWith("?"))return "Format: Presupune: A; dacă A, atunci B; ? B"
+   val extra=parts.dropLast(1).map{naturalLogicStatement(it) ?: return "Premisă ambiguă."}
+   if(items.size+extra.size>100)return "Prea multe premise pentru o simulare."
+   return symbolicQuery("Deduce: "+(items+extra).joinToString("; ")+"; "+parts.last())
   }
   val add=Regex("^re[tț]ine logic\\s*:\\s*",RegexOption.IGNORE_CASE)
   if(add.containsMatchIn(text)){
