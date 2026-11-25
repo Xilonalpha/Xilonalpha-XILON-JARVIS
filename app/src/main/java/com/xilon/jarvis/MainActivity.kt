@@ -94,7 +94,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!busy && !omegaCore.listening && wake==null){
-   if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=800L)startMicrophone()}
+   if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
    else if(voiceInterrupt && !omegaCore.listening)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){voice.stop();append("Răspuns vocal întrerupt.")}},{_->})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)

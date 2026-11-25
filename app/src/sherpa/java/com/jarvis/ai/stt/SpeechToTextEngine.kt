@@ -144,6 +144,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var started = false
         var silentSamples = 0
         var totalSamples = 0
+        var zeroReads = 0
         val aec=runCatching { if(android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId) else null }.getOrNull()
         val ns=runCatching { if(android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId) else null }.getOrNull()
         try {
@@ -157,14 +158,17 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     error("Android microphone capture failed ($count).")
                 }
                 if (count == 0) continue
+                // Digital silence detection adapted from judejulius/jarvis VoiceInput.kt.
+                if (isDigitalSilence(pcm, count)) { if (++zeroReads >= 30) error("Microfon blocat sau dezactivat de Android.") } else zeroReads = 0
                 totalSamples += count
                 val chunk = FloatArray(count) { index -> pcm[index] / 32768.0f }
                 micGain.process(chunk, learn = !started)
                 val rms = MicGain.rms(chunk)
+                val threshold = maxOf(SPEECH_RMS_THRESHOLD, micGain.noiseFloor * micGain.gain * 3f)
                 if (!started) {
                     preRoll.addLast(chunk)
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
-                    if (rms >= SPEECH_RMS_THRESHOLD) {
+                    if (rms >= threshold) {
                         started = true
                         preRoll.forEach { captured.addAll(it.asIterable()) }
                         preRoll.clear()
@@ -172,7 +176,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     }
                 } else {
                     captured.addAll(chunk.asIterable())
-                    if (rms >= SPEECH_RMS_THRESHOLD) silentSamples = 0 else silentSamples += count
+                    if (rms >= threshold) silentSamples = 0 else silentSamples += count
                     if (silentSamples >= SILENCE_SAMPLES) break
                 }
             }
@@ -188,12 +192,17 @@ class SpeechToTextEngine(context: Context) : Closeable {
         return captured.toFloatArray()
     }
 
+    private fun isDigitalSilence(pcm: ShortArray, n: Int): Boolean {
+        for (i in 0 until n) if (pcm[i].toInt() != 0) return false
+        return true
+    }
+
     private companion object {
         const val SAMPLE_RATE = 16_000
         const val FEATURE_DIM = 80
         const val FRAME_SAMPLES = 1_600 // 100 ms
-        const val PRE_ROLL_FRAMES = 3
-        const val SILENCE_SAMPLES = 12_800 // 800 ms
+        const val PRE_ROLL_FRAMES = 6
+        const val SILENCE_SAMPLES = 19_200 // 1200 ms
         const val MAX_RECORDING_SECONDS = 20
         const val SPEECH_RMS_THRESHOLD = 0.012f
     }
