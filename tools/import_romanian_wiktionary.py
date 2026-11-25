@@ -18,6 +18,7 @@ def convert(source, output):
     opener = gzip.open if source.suffix == ".gz" else open
     output.parent.mkdir(parents=True, exist_ok=True)
     count = 0
+    distinct_words = set()
     fd, tmp = tempfile.mkstemp(dir=output.parent)
     try:
         with opener(source, "rt", encoding="utf-8") as src, os.fdopen(fd, "w", encoding="utf-8") as dst:
@@ -29,15 +30,21 @@ def convert(source, output):
                 if not isinstance(word, str) or not word.strip():
                     continue
                 glosses = sorted({g for sense in obj.get("senses", []) for g in sense.get("glosses", []) if isinstance(g, str) and g.strip()})
-                forms = sorted({f["form"] for f in obj.get("forms", []) if isinstance(f.get("form"), str) and f["form"].strip()})
+                forms = sorted({f["form"] for f in obj.get("forms", []) if isinstance(f.get("form"), str) and f["form"].strip() and f["form"] != "-" and not set(f.get("tags", [])) & {"table-tags", "inflection-template", "romanization"}})
+                grammar = [{"form": f["form"], "tags": f.get("tags", [])} for f in obj.get("forms", []) if f.get("form") in forms]
+                senses = [{"glosses": sense.get("glosses", []), "tags": sense.get("tags", []),
+                           "form_of": sense.get("form_of", []), "alt_of": sense.get("alt_of", []),
+                           "synonyms": [x["word"] for x in sense.get("synonyms", []) if x.get("word")]}
+                          for sense in obj.get("senses", [])]
                 if not glosses:
                     continue
                 row = {"word": word, "pos": obj.get("pos"), "english_glosses": glosses,
-                       "forms": forms, "source": "https://en.wiktionary.org/wiki/" + word.replace(" ", "_") + "#Romanian"}
+                       "forms": forms, "grammar": grammar, "senses": senses, "source": "https://en.wiktionary.org/wiki/" + word.replace(" ", "_") + "#Romanian"}
                 dst.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
                 count += 1
-            if count < 10000:
-                raise ValueError(f"Incomplete corpus: {count} records")
+                distinct_words.add(word.casefold())
+            if len(distinct_words) < 10000:
+                raise ValueError(f"Incomplete corpus: {len(distinct_words)} distinct words")
         os.replace(tmp, output)
     finally:
         if os.path.exists(tmp):
