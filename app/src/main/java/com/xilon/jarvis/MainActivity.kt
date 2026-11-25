@@ -226,6 +226,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
+    if(q.startsWith("execută sarcina ",true)){
+     startRegistryPlan(q.substringAfter(" ").substringAfter(" "))
+     return@setOnClickListener
+    }
     val naturalTool=NaturalToolCommands.parse(q)
     if(naturalTool!=null){
      confirmTool(naturalTool.tool,naturalTool.args)
@@ -735,6 +739,39 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun append(s:String){messageBubble(s)}
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
+ private fun startRegistryPlan(goal:String){
+  if(busy)return
+  val model=nativeModel ?: run{append("Încarcă un model GGUF.");return}
+  agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
+  append("JARVIS: Planific sarcina local...")
+  worker.execute{
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal),2,4096,512,emptyList()))}
+   runOnUiThread{
+    if(!isDestroyed){
+     busy=false;refreshOmegaStatus()
+     if(agentCancelled||model.isCancelled())append("Planificare oprită.")
+     else plan.fold({steps->
+      android.app.AlertDialog.Builder(this@MainActivity).setTitle("Verifică planul JARVIS")
+       .setMessage(steps.mapIndexed{i,a->"${i+1}. ${a.tool} ${a.args}"}.joinToString("\n"))
+       .setNegativeButton("Anulează",null)
+       .setPositiveButton("Execută"){_,_->runRegistryPlan(steps)}.show()
+     },{append("Plan neexecutat: "+it.message)})
+    }
+   }
+  }
+ }
+ private fun runRegistryPlan(steps:List<com.jarvis.mobile.core.tools.PlannedAction>){
+  if(busy||agentCancelled)return
+  busy=true;refreshOmegaStatus()
+  worker.execute{
+   val result=runCatching{kotlinx.coroutines.runBlocking{
+    RegistryAgentEngine.run(steps,{agentCancelled||isDestroyed},{!agentCancelled&&!isDestroyed}){step->
+     runOnUiThread{if(!isDestroyed)append(step.action.tool+": "+step.result.status+" / "+step.result.verified+" — "+step.result.message)}
+    }
+   }}
+   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")"},{"Execuție eșuată: "+it.message}))}}
+  }
+ }
  private fun confirmTool(name:String,args:kotlinx.serialization.json.JsonObject){
      android.app.AlertDialog.Builder(this@MainActivity).setTitle("Execută instrumentul")
       .setMessage(name+"\n"+args.toString())
