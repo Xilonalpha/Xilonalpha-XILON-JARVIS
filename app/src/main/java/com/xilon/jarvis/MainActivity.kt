@@ -230,6 +230,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
      startRegistryPlan(q.substringAfter(" ").substringAfter(" "))
      return@setOnClickListener
     }
+    if(q.equals("continuă sarcina",true)||q.equals("continua sarcina",true)){
+     val pending=pendingRegistry.toList()
+     if(pending.isEmpty())append("Nu există o sarcină întreruptă care poate fi reluată.")
+     else android.app.AlertDialog.Builder(this@MainActivity).setTitle("Reia pașii rămași")
+      .setMessage(pending.joinToString("\n"){it.tool+" "+it.args})
+      .setNegativeButton("Anulează",null)
+      .setPositiveButton("Continuă"){_,_->pendingRegistry=emptyList();agentCancelled=false;runRegistryPlan(pending)}.show()
+     return@setOnClickListener
+    }
     val naturalTool=NaturalToolCommands.parse(q)
     if(naturalTool!=null){
      confirmTool(naturalTool.tool,naturalTool.args)
@@ -335,7 +344,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
-  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
+  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nInstrumente agent verificate:\n"+it.registrySummary()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
   settings.addView(Button(this).apply{text="Detalii model local";setOnClickListener{report("Model local"){
    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
    val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
@@ -739,10 +748,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun append(s:String){messageBubble(s)}
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
+ private var pendingRegistry:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()
  private fun startRegistryPlan(goal:String){
   if(busy)return
   val model=nativeModel ?: run{append("Încarcă un model GGUF.");return}
-  agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
+  pendingRegistry=emptyList();agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
    val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal),2,4096,512,emptyList(),RegistryPlanner.grammar))}
@@ -769,7 +779,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
      runOnUiThread{if(!isDestroyed)append(step.action.tool+": "+step.result.status+" / "+step.result.verified+" — "+step.result.message)}
     }
    }}
-   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
+   val saved=result.getOrNull()?.let{outcome->
+    val journal=runCatching{TaskJournal(this@MainActivity).recordRegistry(outcome)}
+    val graph=runCatching{LocalGraph(this@MainActivity).use{it.recordRegistry(outcome)}}
+    journal.isSuccess && graph.isSuccess
+   } ?: false
+   runOnUiThread{if(!isDestroyed){
+    pendingRegistry=result.getOrNull()?.takeIf{it.status=="STOPPED" && it.steps.all{step->step.result.status==com.jarvis.mobile.core.tools.ToolStatus.SUCCESS && step.result.verified==com.jarvis.mobile.core.tools.Verification.VERIFIED}}?.remaining.orEmpty()
+    busy=false;refreshOmegaStatus()
+    if(!saved)append("Jurnalul sau graful nu a putut fi actualizat.")
+    append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
   }
  }
  private fun confirmTool(name:String,args:kotlinx.serialization.json.JsonObject){
