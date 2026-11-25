@@ -29,6 +29,8 @@ class GestureCursorView(
     private var cursorVisible = true
     var onFistHold:()->Unit={}
     var onScroll: (Int)->Unit={}
+    var onHorizontal: (Int)->Unit={}
+    private var palmX:Float?=null
     var onPointTap: ((Float,Float)->Unit)?=null
     var smoothing=0.22f
     private var palmAnchor:Float?=null
@@ -42,7 +44,7 @@ class GestureCursorView(
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
-            if(frame.point==null){palmAnchor=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val mirrorX = 1f - normalized.x
@@ -56,7 +58,7 @@ class GestureCursorView(
                     cursor.y += smoothing.coerceIn(0.1f,0.65f) * (targetY - cursor.y)
                 }
             }
-            if(frame.gesture!=HandGesture.OPEN_PALM)palmAnchor=null
+            if(frame.gesture!=HandGesture.OPEN_PALM){palmAnchor=null;palmX=null}
             when (frame.gesture) {
                 HandGesture.FIST -> {
                     cursorVisible=false
@@ -70,9 +72,15 @@ class GestureCursorView(
                     if(y!=null){
                         val anchor=palmAnchor
                         val now=android.os.SystemClock.elapsedRealtime()
-                        if(anchor==null)palmAnchor=y
+                        if(anchor==null){palmAnchor=y;palmX=frame.point?.x}
                         else if(kotlin.math.abs(y-anchor)>0.18f && now-lastScroll>700L){
-                            onScroll(if(y<anchor)1 else -1);lastScroll=now;palmAnchor=y
+                            onScroll(if(y<anchor)1 else -1);lastScroll=now;palmAnchor=y;palmX=frame.point?.x
+                        }else{
+                            val x=frame.point?.x
+                            val ax=palmX
+                            if(x!=null && ax!=null && kotlin.math.abs(x-ax)>0.22f && now-lastScroll>900L){
+                                onHorizontal(if(x<ax)1 else -1);lastScroll=now;palmX=x;palmAnchor=y
+                            }
                         }
                     }
                 }

@@ -38,6 +38,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
  private var combinedAirVision=false
  private var gestureSelect=false
+ private var gestureMedia=false
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
   stopLiveVision()
@@ -747,6 +748,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";setOnCheckedChangeListener{_,checked->gestureSelect=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch multimedia: palmă orizontal = melodie; vertical = volum";setOnCheckedChangeListener{_,checked->gestureMedia=checked}})
   settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
   settings.addView(android.widget.SeekBar(this).apply{max=55;progress=12;setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
    override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f}
@@ -1185,7 +1187,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
-  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}
+  cursor.onHorizontal={direction->if(conversationForeground && airTouch!=null && !busy && gestureMedia){MediaActions(this).execute(if(direction>0)"următoarea melodie" else "melodia anterioară")?.let{modelStatus.text=it}}}
+  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){if(gestureMedia){MediaActions(this).execute(if(direction>0)"crește volumul" else "scade volumul")?.let{modelStatus.text=it}}else{val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}}
   cursor.onFistHold={if(conversationForeground && airTouch!=null){voice.stop();kokoroVoice?.stop();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
