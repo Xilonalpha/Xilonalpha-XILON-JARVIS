@@ -1,7 +1,7 @@
 package com.xilon.jarvis
 object ModelCatalog {
- data class Entry(val name:String,val role:String,val repo:String,val file:String,val mb:Long,val revision:String="main"){
-  val url:String get()="https://huggingface.co/$repo/resolve/$revision/$file?download=true"
+ data class Entry(val name:String,val role:String,val repo:String,val file:String,val mb:Long,val revision:String="main",val directUrl:String?=null){
+  val url:String get()=directUrl ?: "https://huggingface.co/$repo/resolve/$revision/$file?download=true"
  }
  val entries=listOf(
  Entry("SmolLM2 360M","Conversație ușoară","bartowski/SmolLM2-360M-Instruct-GGUF","SmolLM2-360M-Instruct-Q4_K_M.gguf",271),
@@ -12,4 +12,5 @@ object ModelCatalog {
  val whisper=listOf("tiny-encoder.int8.onnx" to 13L,"tiny-decoder.int8.onnx" to 90L,"tiny-tokens.txt" to 1L).map{(file,mb)->Entry(file,"Whisper Tiny","csukuangfj/sherpa-onnx-whisper-tiny",file,mb,"65176e2")}
  val wake=listOf("hey_jarvis.onnx","melspectrogram.onnx","embedding_model.onnx").map{Entry(it,"Hey Jarvis experimental","Soulcreek2/speechkit-wakeword-models",it,2,"0795387053f80d32bcebbd3bf7f7009ef0e32db5")}
  val hand=Entry("Hand Landmarker","MediaPipe FP16","Leo-TX/mediapipe-hand","hand_landmarker.task",8,"6ed55322affd263688b9dfffda68a10545f15b95")
+ val kokoro=Entry("Kokoro INT8","Voce engleză","k2-fsa/sherpa-onnx","kokoro-int8-en-v0_19.tar.bz2",256,directUrl=KokoroArchive.URL)
 }
