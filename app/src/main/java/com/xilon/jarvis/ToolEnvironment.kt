@@ -9,7 +9,7 @@ object ToolEnvironment {
  private set
  fun initialize(ctx:Context) {
   context=ctx.applicationContext
-  ToolRegistry.registerAll(listOf(ControlBrightnessTool(),ControlVolumeTool(),ControlFlashlightTool(),ControlWifiTool(),ControlBluetoothTool(),OpenUrlTool(),YoutubeSearchTool(),MapsNavigateTool(),SetAlarmTool(),SetTimerTool(),MediaPlayPauseTool(),ToggleDndTool(),OpenAppTool(),LaunchIntentTool(),ShareContentTool()))
+  ToolRegistry.registerAll(listOf(ControlBrightnessTool(),ControlVolumeTool(),ControlFlashlightTool(),ControlWifiTool(),ControlBluetoothTool(),OpenUrlTool(),YoutubeSearchTool(),MapsNavigateTool(),SetAlarmTool(),SetTimerTool(),MediaPlayPauseTool(),ToggleDndTool(),OpenAppTool(),LaunchIntentTool(),ShareContentTool(),CallContactTool(),SendSmsTool(),WhatsAppMessageTool(),TelegramMessageTool(),SendEmailTool()))
  }
  suspend fun execute(name:String,args:JsonObject,confirmed:Boolean=false):ToolResult {
   val tool=ToolRegistry.get(name) ?: return ToolResult.unavailable("Instrument necunoscut")
