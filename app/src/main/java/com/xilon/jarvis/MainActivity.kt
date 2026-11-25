@@ -170,6 +170,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
   settings.addView(Button(this).apply { text="Vision: importă proiector GGUF";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},191)} })
+  settings.addView(Button(this).apply { text="Vision: analizează camera (VLM)";setOnClickListener{openVlmCamera()} })
   settings.addView(Button(this).apply { text="Vision: întreabă despre imagine (VLM)";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="image/*";addCategory(Intent.CATEGORY_OPENABLE)},192)} })
   settings.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
   transcript = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(8),dp(12),dp(8),dp(12)) }
@@ -1853,10 +1854,36 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else -> null
   }
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
+ private fun openVlmCamera(){
+  if(busy)return
+  if(nativeModel==null){append("Încarcă întâi modelul multimodal.");return}
+  if(vlmProjector()==null){append("Importă întâi proiectorul VLM.");return}
+  stopAirTouch();stopLiveVision()
+  runCatching{startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),193)}.onFailure{append("Camera indisponibilă: "+it.message)}
+ }
+ private fun vlmProjector():java.io.File? {
+  val name=getSharedPreferences("jarvis_vlm",MODE_PRIVATE).getString("projector",null)?:return null
+  if(!name.matches(Regex("vision-projector-[a-f0-9-]+\\.gguf")))return null
+  return java.io.File(filesDir,name).takeIf{it.isFile}
+ }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   if(requestCode==190){super.onActivityResult(requestCode,resultCode,data);val uri=data?.data;if(resultCode==RESULT_OK && uri!=null && !busy){stopAirTouch();stopLiveVision();busy=true;worker.execute{val message=runCatching{LocalPose.install(this,uri);"Model poziție corporală instalat și validat."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=message}}}};return}
 
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==193){
+   if(resultCode!=RESULT_OK || busy)return
+   @Suppress("DEPRECATION")
+   val bitmap=data?.extras?.get("data") as? android.graphics.Bitmap ?: run{append("Camera nu a returnat imaginea.");return}
+   val model=nativeModel
+   val projector=vlmProjector()
+   if(model==null || projector==null){bitmap.recycle();append("Modelul sau proiectorul lipsește.");return}
+   busy=true;agentCancelled=false;model.resetCancellation();refreshOmegaStatus()
+   worker.execute{
+    val result=runCatching{try{model.describeImage(projector.absolutePath,bitmap,"Descrie obiectele și scena vizibilă în limba română. Menționează incertitudinile.")}finally{bitmap.recycle()}}
+    runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();if(!agentCancelled && !model.isCancelled())append(result.fold({"VLM (interpretare AI): "+it},{"VLM: "+it.message}))}}
+   }
+   return
+  }
   if(requestCode==191 || requestCode==192){
    if(resultCode!=RESULT_OK || busy)return
    val uri=data?.data?:return
@@ -1881,8 +1908,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
     }
    }else{
-    val name=getSharedPreferences("jarvis_vlm",MODE_PRIVATE).getString("projector",null)
-    val projector=name?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
+    val projector=vlmProjector()
     if(projector==null){append("Importă întâi proiectorul VLM.");return}
     val question=EditText(this).apply{setText("Descrie imaginea în limba română.")}
     android.app.AlertDialog.Builder(this).setTitle("Întrebare despre imagine").setView(question).setNegativeButton("Anulează",null).setPositiveButton("Analizează"){_,_->
