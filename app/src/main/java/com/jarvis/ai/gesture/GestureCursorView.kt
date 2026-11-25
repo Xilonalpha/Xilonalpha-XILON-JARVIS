@@ -28,6 +28,9 @@ class GestureCursorView(
     private var hasPosition = false
     private var cursorVisible = true
     var onFistHold:()->Unit={}
+    var onScroll: (Int)->Unit={}
+    private var palmAnchor:Float?=null
+    private var lastScroll=0L
     private var fistSince=0L
     private var fistFired=false
     private var active=false
@@ -37,7 +40,7 @@ class GestureCursorView(
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
-            if(frame.point==null){hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){palmAnchor=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val mirrorX = 1f - normalized.x
@@ -51,6 +54,7 @@ class GestureCursorView(
                     cursor.y += LOW_PASS_ALPHA * (targetY - cursor.y)
                 }
             }
+            if(frame.gesture!=HandGesture.OPEN_PALM)palmAnchor=null
             when (frame.gesture) {
                 HandGesture.FIST -> {
                     cursorVisible=false
@@ -58,7 +62,18 @@ class GestureCursorView(
                     if(fistSince==0L)fistSince=now
                     if(!fistFired && now-fistSince>=900L){fistFired=true;onFistHold()}
                 }
-                HandGesture.OPEN_PALM -> cursorVisible = true
+                HandGesture.OPEN_PALM -> {
+                    cursorVisible=true
+                    val y=frame.point?.y
+                    if(y!=null){
+                        val anchor=palmAnchor
+                        val now=android.os.SystemClock.elapsedRealtime()
+                        if(anchor==null)palmAnchor=y
+                        else if(kotlin.math.abs(y-anchor)>0.18f && now-lastScroll>700L){
+                            onScroll(if(y<anchor)1 else -1);lastScroll=now;palmAnchor=y
+                        }
+                    }
+                }
                 HandGesture.PINCH_TAP -> {
                     cursorVisible = true
                     onPinchTap()

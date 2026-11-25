@@ -7,8 +7,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.jarvis.ai.gesture.GestureEngine
 import com.jarvis.ai.gesture.GestureCursorView
-class AirTouchController(private val context:Context,private val owner:LifecycleOwner,private val cursor:GestureCursorView,private val status:(String)->Unit,private val onFailure:()->Unit){
+class AirTouchController(private val context:Context,private val owner:LifecycleOwner,private val cursor:GestureCursorView,private val status:(String)->Unit,private val onFailure:()->Unit,private val onObservation:((String)->Unit)?=null){
  private val worker=java.util.concurrent.Executors.newSingleThreadExecutor()
+ private var lastVision=0L
  private var provider:ProcessCameraProvider?=null
  private var analysis:ImageAnalysis?=null
  @Volatile private var closed=false
@@ -24,7 +25,23 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
       if(!closed)try{
        val p=future.get();provider=p
        val a=ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
-       analysis=a;a.setAnalyzer(worker,engine::process)
+       analysis=a;a.setAnalyzer(worker){frame->
+        try{
+         val now=android.os.SystemClock.elapsedRealtime()
+         if(!closed && onObservation!=null && now-lastVision>=3000L){
+          lastVision=now
+          val report=runCatching{
+           val bitmap=frame.toBitmap()
+           try{
+            val matrix=android.graphics.Matrix().apply{postRotate(frame.imageInfo.rotationDegrees.toFloat())}
+            val rotated=android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true)
+            try{LocalVision.describe(context,rotated)}finally{if(rotated!==bitmap)rotated.recycle()}
+           }finally{bitmap.recycle()}
+          }.getOrNull()
+          if(report!=null)ContextCompat.getMainExecutor(context).execute{if(!closed)onObservation?.invoke(report)}
+         }
+        }finally{engine.process(frame)}
+       }
        p.bindToLifecycle(owner,CameraSelector.DEFAULT_FRONT_CAMERA,a)
        status("Air Touch activ.")
       }catch(e:Exception){status("Camera indisponibilă: "+e.message);close();onFailure()}

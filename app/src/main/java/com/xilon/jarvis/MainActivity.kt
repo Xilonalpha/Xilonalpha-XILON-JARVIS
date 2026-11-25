@@ -36,13 +36,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var airTouch:AirTouchController?=null
  private lateinit var cursor:com.jarvis.ai.gesture.GestureCursorView
  private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
+ private var combinedAirVision=false
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
   stopLiveVision()
   if(!java.io.File(filesDir,"hand_landmarker.task").isFile){append("Importă modelul MediaPipe.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return}
   cursor.visibility=android.view.View.VISIBLE
-  airTouch=AirTouchController(this,this,cursor,{append(it)},{stopAirTouch()}).also{it.start()}
+  airTouch=AirTouchController(this,this,cursor,{append(it)},{stopAirTouch()},if(combinedAirVision){{report:String->if(conversationForeground && airTouch!=null){visualObservation.put(report,android.os.SystemClock.elapsedRealtime());modelStatus.text=report.take(300)}}}else null).also{it.start()}
  }
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
  @Volatile private var nativeModel: NativeModel? = null
@@ -744,6 +745,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch + vedere frontală (local)";setOnCheckedChangeListener{_,checked->combinedAirVision=checked;if(airTouch!=null){stopAirTouch();startAirTouch()}}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn 1s: oprire)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
@@ -1161,6 +1163,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(android.view.View(this).apply{setBackgroundColor(0xff284357.toInt())},LinearLayout.LayoutParams(-1,dp(1)))
   root.addView(nav)
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy && conversationForeground && airTouch!=null)startMicrophone()}
+  cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){(voiceInput.parent as? android.view.View)?.let{var node:android.view.View?=it;while(node!=null && node !is android.widget.ScrollView)node=node.parent as? android.view.View;(node as? android.widget.ScrollView)?.smoothScrollBy(0,direction*240)}}}
   cursor.onFistHold={if(conversationForeground && airTouch!=null){voice.stop();kokoroVoice?.stop();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
