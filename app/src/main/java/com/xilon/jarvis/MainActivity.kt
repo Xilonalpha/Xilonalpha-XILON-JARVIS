@@ -745,7 +745,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal),2,4096,512,emptyList()))}
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal),2,4096,512,emptyList(),RegistryPlanner.grammar))}
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
