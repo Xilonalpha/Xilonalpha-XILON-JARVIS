@@ -11,9 +11,8 @@ object ToolEnvironment {
   context=ctx.applicationContext
   ToolRegistry.registerAll(listOf(ControlBrightnessTool(),ControlVolumeTool(),ControlFlashlightTool(),ControlWifiTool(),ControlBluetoothTool(),OpenUrlTool(),YoutubeSearchTool(),MapsNavigateTool(),SetAlarmTool(),SetTimerTool(),MediaPlayPauseTool(),ToggleDndTool(),OpenAppTool(),LaunchIntentTool(),ShareContentTool(),CallContactTool(),SendSmsTool(),WhatsAppMessageTool(),TelegramMessageTool(),SendEmailTool(),GetLocationTool(),ReadCalendarTool(),FindFileTool(),OpenFileTool(),ShareFileTool(),ListAppsTool(),ReadScreenTool(),FindElementTool(),PressBackTool(),PressHomeTool(),PressRecentsTool(),PressNotificationsTool(),WaitTool(),WaitForChangeTool(),SwipeTool(),ScrollTool(),CloseAppTool(),TakeScreenshotTool(),CreateCalendarEventTool(),TapTool(),DoubleTapTool(),LongPressTool(),TypeTextTool(),ClearTextTool(),CopyTextTool(),PasteTool(),ReadNotificationsTool()))
  }
- suspend fun execute(name:String,args:JsonObject,confirmed:Boolean=false):ToolResult {
+ fun validate(name:String,args:JsonObject):ToolResult? {
   val tool=ToolRegistry.get(name) ?: return ToolResult.unavailable("Instrument necunoscut")
-  if(!tool.available()) return ToolResult.unavailable("Instrument indisponibil")
   val specs=tool.spec.params.associateBy{it.name}
   if(args.keys.any{it !in specs}) return ToolResult.fail("Argument necunoscut")
   for(p in tool.spec.params){
@@ -23,6 +22,12 @@ object ToolEnvironment {
    val valid=when(p.type){"string"->j.isString && !j.content.isBlank(); "int"->!j.isString && (if(name=="create_calendar_event" && p.name=="startEpochMs") j.longOrNull!=null else j.intOrNull!=null); "bool"->!j.isString && j.booleanOrNull!=null; else->false}
    if(!valid)return ToolResult.fail("Tip invalid: "+p.name)
   }
+  return null
+ }
+ suspend fun execute(name:String,args:JsonObject,confirmed:Boolean=false):ToolResult {
+  val tool=ToolRegistry.get(name) ?: return ToolResult.unavailable("Instrument necunoscut")
+  if(!tool.available()) return ToolResult.unavailable("Instrument indisponibil")
+  validate(name,args)?.let{return it}
   val obs=LocalScreen.observe()
   val risk=RiskClassifier.classify(tool.spec,args,obs?.packageName)
   if(!confirmed && (risk!=Risk.LOW || name=="launch_intent")) return ToolResult(ToolStatus.REQUIRES_CONFIRMATION,"Confirmare necesară",Verification.COULD_NOT_VERIFY)
