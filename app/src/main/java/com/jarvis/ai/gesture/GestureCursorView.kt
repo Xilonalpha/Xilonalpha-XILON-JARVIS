@@ -75,12 +75,12 @@ class GestureCursorView(
                         val anchor=palmAnchor
                         val now=android.os.SystemClock.elapsedRealtime()
                         if(anchor==null){palmAnchor=y;palmX=frame.point?.x}
-                        else if(kotlin.math.abs(y-anchor)>0.18f && now-lastScroll>700L){
+                        else if(kotlin.math.abs(y-anchor)>profile.getFloat("vertical_threshold",0.18f).coerceIn(0.08f,0.40f) && now-lastScroll>700L){
                             onScroll(if(y<anchor)1 else -1);lastScroll=now;palmAnchor=y;palmX=frame.point?.x
                         }else{
                             val x=frame.point?.x
                             val ax=palmX
-                            if(x!=null && ax!=null && kotlin.math.abs(x-ax)>0.22f && now-lastScroll>900L){
+                            if(x!=null && ax!=null && kotlin.math.abs(x-ax)>profile.getFloat("horizontal_threshold",0.22f).coerceIn(0.08f,0.40f) && now-lastScroll>900L){
                                 onHorizontal(if(x<ax)1 else -1);lastScroll=now;palmX=x;palmAnchor=y
                             }
                         }

@@ -791,6 +791,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val editor=prefs.edit();GestureBindings.keys.forEachIndexed{index,key->editor.putString(key,GestureBindings.actions[selectors[index].selectedItemPosition])};editor.apply()
    }.show()
   }})
+  settings.addView(Button(this).apply{text="Air Touch: calibrare deplasări";setOnClickListener{
+   val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
+   val panel=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL}
+   fun slider(label:String,key:String,default:Float):SeekBar{
+    panel.addView(TextView(this@MainActivity).apply{text=label})
+    return SeekBar(this@MainActivity).apply{max=32;progress=((prefs.getFloat(key,default).coerceIn(0.08f,0.40f)-0.08f)*100).toInt();panel.addView(this)}
+   }
+   val horizontal=slider("Deplasare orizontală","horizontal_threshold",0.22f)
+   val vertical=slider("Deplasare verticală","vertical_threshold",0.18f)
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Calibrare deplasări").setMessage("Valori mici: gesturi mai sensibile.").setView(panel).setNegativeButton("Anulează",null).setPositiveButton("Salvează"){_,_->prefs.edit().putFloat("horizontal_threshold",(8+horizontal.progress)/100f).putFloat("vertical_threshold",(8+vertical.progress)/100f).apply()}.show()
+  }})
   settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
   settings.addView(android.widget.SeekBar(this).apply{max=55;progress=getPreferences(MODE_PRIVATE).getInt("air_smoothing",12).coerceIn(0,55);setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
    override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f;if(fromUser)getPreferences(MODE_PRIVATE).edit().putInt("air_smoothing",value).apply()}
@@ -1135,7 +1146,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     center.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})
    }
    val handler=android.os.Handler(android.os.Looper.getMainLooper())
-   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,bar,entry) in states){val transfer=runCatching{manager.transfer(entry)}.getOrNull();view.text=entry.name+" · "+(transfer?.label?:"Stare indisponibilă")+"\n"+ModelInventory.presence(this@MainActivity,entry);val percent=transfer?.percent;bar.visibility=if(percent!=null&&transfer?.state==android.app.DownloadManager.STATUS_RUNNING)android.view.View.VISIBLE else android.view.View.GONE;bar.progress=percent?:0};handler.postDelayed(this,1500)}}
+   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,bar,entry) in states){val transfer=runCatching{manager.transfer(entry)}.getOrNull();view.text=entry.name+" · "+ModelInventory.display(ModelInventory.installed(this@MainActivity,entry),transfer);val percent=transfer?.percent;bar.visibility=if(percent!=null&&transfer?.state==android.app.DownloadManager.STATUS_RUNNING)android.view.View.VISIBLE else android.view.View.GONE;bar.progress=percent?:0};handler.postDelayed(this,1500)}}
    dialog.setOnDismissListener{handler.removeCallbacks(refresh)}
    dialog.show();refresh.run()
   }})
