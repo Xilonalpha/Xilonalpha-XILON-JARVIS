@@ -398,7 +398,11 @@ object RomanianLexicon {
   worker.execute {
    var db: android.database.sqlite.SQLiteDatabase? = null
    try {
-    val input = context.assets.open("ro_wiktionary/lexicon.jsonl")
+    val input = try {
+     java.util.zip.GZIPInputStream(context.assets.open("ro_wiktionary/lexicon.jsonl.gz"), 65536)
+    } catch (_: java.io.FileNotFoundException) {
+     context.assets.open("ro_wiktionary/lexicon.jsonl")
+    }
     input.bufferedReader(Charsets.UTF_8).useLines { lines ->
      val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
       java.io.File(context.noBackupFilesDir,"romanian-definitions-v5.db"),null)
