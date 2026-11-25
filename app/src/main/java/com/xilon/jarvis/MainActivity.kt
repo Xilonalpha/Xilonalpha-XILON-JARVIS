@@ -432,10 +432,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
      val result=runCatching{
       check(root.isDirectory || root.mkdirs())
+      val ref=downloads.reference(entry)
       val temp=java.io.File.createTempFile("whisper-", ".part",root)
       try{
-       contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=entry.mb*1100000L);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
-       val ref=downloads.reference(entry);ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+       contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=ref.bytes);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
+       ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
        check(temp.renameTo(java.io.File(root,entry.file)))
        "Componentă instalată; inferența rămâne de testat."
       }finally{temp.delete()}
@@ -478,9 +479,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val result=runCatching{
       val root=java.io.File(filesDir,"models");check(root.isDirectory||root.mkdirs())
       val target=java.io.File(root,if(entry.file=="hey_jarvis.onnx")"jarvis_wake_word.onnx" else entry.file)
+      val ref=downloads.reference(entry)
       val temp=java.io.File.createTempFile("wake-", ".part",root)
-      try{contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=2000000L);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
-       val ref=downloads.reference(entry);ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm);check(temp.renameTo(target));"Componentă instalată; inferență neverificată."
+      try{contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=ref.bytes);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
+       ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm);check(temp.renameTo(target));"Componentă instalată; inferență neverificată."
       }finally{temp.delete()}
      }.getOrElse{"Import eșuat: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
@@ -499,7 +501,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm);KokoroArchive.install(this@MainActivity,uri);"Pachet extras și instalat; sinteza vocală rămâne de testat."}.getOrElse{"Instalare eșuată: "+it.message}
     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
    }}}
-   else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy)if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+   else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
    dialog.setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
    if(downloads.id(entry)>=0)dialog.setNegativeButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi arhiva descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
    else dialog.setNegativeButton("Închide",null)
@@ -515,10 +517,26 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val total=memory.totalMem/1048576
    val recommendation=if(memory.lowMemory || available<1600)"SmolLM2 360M (verifică memoria înainte de încărcare)" else "Qwen 2.5 1.5B sau SmolLM2"
    val labels=catalogLabels.filter{catalogButtons.containsKey(it)}
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center")
-    .setItems(labels.toTypedArray()){_,index->catalogButtons[labels[index]]?.performClick()}
-    .setNeutralButton("Resurse"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setTitle("Resurse reale").setMessage("RAM disponibilă: "+available+" MiB / "+total+" MiB\nSpațiu intern: "+filesDir.usableSpace/1048576+" MiB\nRecomandare orientativă: "+recommendation).setPositiveButton("OK",null).show()}
-    .setNegativeButton("Închide",null).show()
+   val center=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(12),dp(16),dp(12));setBackgroundColor(bg)}
+   val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
+   center.addView(resources)
+   val manager=ModelDownloads(this@MainActivity)
+   val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val states=mutableListOf<Pair<TextView,List<ModelCatalog.Entry>>>()
+   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
+   for(label in labels){
+    val entries=categories[label].orEmpty()
+    val card=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL;background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(14),dp(16),dp(14));isClickable=true;isFocusable=true}
+    card.addView(TextView(this@MainActivity).apply{text=label.removePrefix("Catalog ");textSize=17f;setTextColor(cyan)})
+    val status=TextView(this@MainActivity).apply{textSize=12f;setTextColor(0xffa7bdcf.toInt())}
+    card.addView(status);states.add(status to entries)
+    card.setOnClickListener{dialog.dismiss();catalogButtons[label]?.performClick()}
+    center.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})
+   }
+   val handler=android.os.Handler(android.os.Looper.getMainLooper())
+   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,entries) in states)view.text=entries.joinToString("\n"){it.name+" · "+runCatching{manager.status(it)}.getOrDefault("Stare indisponibilă")};handler.postDelayed(this,1500)}}
+   dialog.setOnDismissListener{handler.removeCallbacks(refresh)}
+   dialog.show();refresh.run()
   }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
