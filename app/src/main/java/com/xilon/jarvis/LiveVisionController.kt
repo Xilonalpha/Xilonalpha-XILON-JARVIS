@@ -12,10 +12,12 @@ internal class LiveVisionController(private val context:Context,private val owne
  private var provider:ProcessCameraProvider?=null
  private var analysis:ImageAnalysis?=null
  @Volatile private var closed=false
+ private val started=java.util.concurrent.atomic.AtomicBoolean(false)
  private var last=0L
  private var lastOcr=0L
  private val tracker=SceneTracker()
  fun start(){
+  if(closed || !started.compareAndSet(false,true))return
   val future=ProcessCameraProvider.getInstance(context)
   future.addListener({
    if(!closed)try{
@@ -46,7 +48,7 @@ internal class LiveVisionController(private val context:Context,private val owne
      finally{frame.close()}
     }
     p.bindToLifecycle(owner,CameraSelector.DEFAULT_BACK_CAMERA,a)
-   }catch(e:Exception){if(!closed)failure("Camera live: "+e.message)}
+   }catch(e:Exception){if(!closed){failure("Camera live: "+e.message);close()}}
   },main)
  }
  private fun interval():Long{

@@ -71,7 +71,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
   cursor.setTracking(false)
   analysis?.clearAnalyzer()
   analysis?.let{provider?.unbind(it)}
-  worker.execute{engine.close()}
+  runCatching{worker.execute{engine.close()}}
   worker.shutdown()
  }
 }

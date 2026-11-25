@@ -7,7 +7,7 @@ internal object ResourceBudget {
  fun adaptiveBatchSize(availableMiB:Long,lowMemory:Boolean,thermal:Int):Int =
   when {lowMemory || thermal>=3 || availableMiB<1024 -> 1;thermal>=2 || availableMiB<3072 -> 2;else -> 4}
  fun speechThreads(cpus:Int,availableMiB:Long,lowMemory:Boolean,thermal:Int):Int = when {lowMemory || availableMiB<768 || thermal>=3 -> 1;thermal>=2 || availableMiB<1536 -> minOf(2,cpus.coerceAtLeast(1));else -> (cpus/2).coerceIn(1,4)}
- fun allowOptionalVision(availableMiB:Long,lowMemory:Boolean,thermal:Int):Boolean = !lowMemory && availableMiB>=512 && thermal<4
+ fun allowOptionalVision(availableMiB:Long,lowMemory:Boolean,thermal:Int):Boolean = maxConcurrentOptionalVision(availableMiB,lowMemory,thermal,false)>0
  fun visionInterval(availableMiB:Long, lowMemory:Boolean, thermal:Int, powerSave:Boolean):Long =
   when { lowMemory || thermal>=3 -> 10000L
    powerSave || thermal>=2 || availableMiB<768 -> 6000L
