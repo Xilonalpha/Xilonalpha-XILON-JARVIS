@@ -23,4 +23,9 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
-      - run: gradle :app:compileDebugKotlin -PenableSherpa=true --stacktrace
+      - run: gradle :app:testDebugUnitTest :app:assembleDebug -PenableSherpa=true --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xilon-jarvis-full-sherpa-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
