@@ -133,7 +133,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   fun rounded(color:Int,radius:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=dp(radius).toFloat()}
   val input = EditText(this).apply {
-   hint="Scrie un mesaj...";textSize=17f;minWidth=0;minLines=2;maxLines=5
+   hint="Scrie un mesaj...";textSize=17f;minWidth=0;minLines=1;maxLines=6
    inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
    setSingleLine(false);setHorizontallyScrolling(false);gravity=android.view.Gravity.TOP or android.view.Gravity.START
    setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY)
@@ -141,16 +141,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   voiceInput=input
   window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-  val composer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;background=rounded(0xff142437.toInt(),18);setPadding(dp(6),dp(4),dp(6),dp(4))}
-  composer.addView(input,LinearLayout.LayoutParams(-1,-2))
-  val toolbar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL}
-  composer.addView(toolbar,LinearLayout.LayoutParams(-1,-2))
+  val composer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.BOTTOM;background=rounded(0xff142437.toInt(),28);setPadding(dp(4),dp(2),dp(4),dp(2))}
+  val toolbar=composer
   fun composerIcon(name:String,description:String)=android.widget.ImageButton(this).apply{
    setImageDrawable(OmegaIcon(name,dp(24),cyan));scaleType=android.widget.ImageView.ScaleType.CENTER
    background=null;setPadding(0,0,0,0);contentDescription=description
   }
   toolbar.addView(composerIcon("attach","Importă document").apply{setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(48),dp(48)))
-  toolbar.addView(android.view.View(this),LinearLayout.LayoutParams(0,1,1f))
+  toolbar.addView(input,LinearLayout.LayoutParams(0,-2,1f))
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   toolbar.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer,LinearLayout.LayoutParams(-1,-2))
@@ -197,7 +195,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  actions.addView(composerIcon("send","Trimite").apply { sendControl=this; setOnClickListener {
+  actions.addView(composerIcon("send","Trimite").apply { background=rounded(0xff225c80.toInt(),24);sendControl=this; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
     append("Tu: "+q); input.text.clear()
@@ -327,7 +325,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  actions.addView(composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(48),dp(48)))
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { agentCancelled=true; screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } }
+  actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
+  stopControl.visibility=android.view.View.GONE
+  val composerState=object:Runnable{override fun run(){if(isDestroyed)return;stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE;composer.postDelayed(this,200)}}
+  composer.post(composerState)
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
@@ -750,11 +752,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val density=resources.displayMetrics.density
   fun dp(n:Int)=(n*density).toInt()
   val bubble=TextView(this).apply{
-   text=s;textSize=16f;setTextColor(0xffdcebf7.toInt());setTextIsSelectable(true)
+   text=if(user)s.removePrefix("Tu:").trimStart() else s;textSize=17f;setTextColor(0xffdcebf7.toInt());setTextIsSelectable(true)
    setPadding(dp(14),dp(10),dp(14),dp(10))
-   maxWidth=(resources.displayMetrics.widthPixels*0.82f).toInt()
+   maxWidth=(resources.displayMetrics.widthPixels*(if(user)0.82f else 0.94f)).toInt()
    background=android.graphics.drawable.GradientDrawable().apply{
-    setColor(if(user)0xff19384a.toInt() else 0xff142437.toInt());cornerRadius=dp(16).toFloat()
+    setColor(if(user)0xff174b79.toInt() else android.graphics.Color.TRANSPARENT);cornerRadius=dp(22).toFloat()
    }
   }
   val params=LinearLayout.LayoutParams(-2,-2).apply{gravity=if(user)android.view.Gravity.END else android.view.Gravity.START;bottomMargin=dp(10)}
