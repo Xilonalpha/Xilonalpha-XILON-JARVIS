@@ -3,11 +3,23 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.content.ContentValues
-class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null,1){
+class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null,2){
  override fun onCreate(db:SQLiteDatabase){
+  createDemonstrationEdges(db)
   db.execSQL("CREATE TABLE edges (source TEXT NOT NULL, target TEXT NOT NULL, count INTEGER NOT NULL, last_seen INTEGER NOT NULL, PRIMARY KEY(source,target))")
  }
- override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){error("Unsupported graph migration")}
+ private fun createDemonstrationEdges(db:SQLiteDatabase){db.execSQL("CREATE TABLE IF NOT EXISTS demo_edges(source TEXT NOT NULL,target TEXT NOT NULL,count INTEGER NOT NULL,last_seen INTEGER NOT NULL,PRIMARY KEY(source,target))")}
+ override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){if(oldVersion==1&&newVersion==2)createDemonstrationEdges(db) else error("Unsupported graph migration")}
+ fun recordDemonstration(steps:List<com.jarvis.mobile.core.skills.ElementTarget>){
+  require(steps.isNotEmpty()&&steps.all{!it.pkg.isNullOrBlank()&&!it.viewId.isNullOrBlank()})
+  val db=writableDatabase;db.beginTransaction()
+  try{for((a,b) in steps.map{it.pkg+" / "+it.viewId}.zipWithNext()){
+   val now=System.currentTimeMillis()
+   db.execSQL("INSERT OR IGNORE INTO demo_edges(source,target,count,last_seen) VALUES(?,?,0,?)",arrayOf(a,b,now))
+   db.execSQL("UPDATE demo_edges SET count=count+1,last_seen=? WHERE source=? AND target=?",arrayOf(now,a,b))
+  };db.setTransactionSuccessful()}finally{db.endTransaction()}
+ }
+ fun demonstrationSummary():String=readableDatabase.rawQuery("SELECT source,target,count FROM demo_edges ORDER BY count DESC,source,target LIMIT 50",null).use{c->buildList{while(c.moveToNext())add(c.getString(0)+" → "+c.getString(1)+" : "+c.getLong(2))}.joinToString("\n").ifBlank{"Nicio tranziție demonstrată."}}
  fun record(steps:List<String>){
   require(steps.size in 1..5 && steps.all{ToolCatalog.permits(it.lowercase(java.util.Locale.ROOT))})
   val db=writableDatabase
@@ -35,5 +47,5 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
    rows.joinToString("\n").ifBlank{"Date insuficiente pentru recomandare."}
   }
  }
- fun clear(){writableDatabase.delete("edges",null,null)}
+ fun clear(){val db=writableDatabase;db.beginTransaction();try{db.delete("edges",null,null);db.delete("demo_edges",null,null);db.setTransactionSuccessful()}finally{db.endTransaction()}}
 }
