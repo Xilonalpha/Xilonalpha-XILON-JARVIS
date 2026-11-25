@@ -1105,36 +1105,58 @@ class MainActivity : androidx.activity.ComponentActivity() {
   return conversationInterests().filter{topic->RomanianLexicon.normalize(topic).split(Regex("\\W+")).any{it in words}}.take(3).joinToString("; ").take(240)
  }
  private fun symbolicQuery(text:String):String?{
-  val source=text.trim()
   val prefix=Regex("^deduce\\s*:\\s*",RegexOption.IGNORE_CASE)
+  val source=text.trim()
   if(!prefix.containsMatchIn(source))return null
+  if(source.length>12000)return "Cererea logică este prea lungă."
   val parts=source.replaceFirst(prefix,"").split(";").map{it.trim()}
   if(parts.size !in 2..101)return "Format: Deduce: A; A -> B; B -> C; ? C"
+  val atom=Regex("!?[\\p{L}\\p{N}_ -]{1,80}")
+  fun key(s:String):String=(if(s.startsWith("!"))"!" else "")+RomanianLexicon.normalize(s.removePrefix("!").trim())
+  fun opposite(s:String)=if(s.startsWith("!"))s.removePrefix("!") else "!"+s
   val query=parts.last().removePrefix("?").trim()
-  val atom=Regex("[\\p{L}\\p{N}_ -]{1,80}")
   if(!parts.last().startsWith("?") || !atom.matches(query))return "Ultimul element trebuie să fie întrebarea: ? C"
-  fun key(s:String)=RomanianLexicon.normalize(s.trim())
   val facts=linkedSetOf<String>()
   val rules=mutableListOf<Pair<List<String>,String>>()
-  val proof=mutableMapOf<String,String>()
+  val proof=linkedMapOf<String,List<String>>()
   for(part in parts.dropLast(1)){
    val sides=part.split("->").map{it.trim()}
    if(sides.size==1 && atom.matches(sides[0]))facts.add(key(sides[0]))
    else if(sides.size==2 && atom.matches(sides[1])){
     val premises=sides[0].split("&").map{it.trim()}
-    if(premises.isEmpty() || premises.any{!atom.matches(it)})return "Premisă invalidă."
-    rules.add(premises.map(::key) to key(sides[1]))
+    if(premises.any{!atom.matches(it)})return "Premisă invalidă."
+    rules.add(premises.map(::key).distinct() to key(sides[1]))
    }else return "Regulă invalidă: "+part.take(80)
   }
-  val target=key(query)
+  val initial=facts.toSet()
   repeat(rules.size+1){
    var changed=false
    for((premises,conclusion) in rules){
     if(conclusion !in facts && premises.all{it in facts}){
-     facts.add(conclusion);proof[conclusion]=premises.joinToString(" și ")+" → "+conclusion;changed=true
+     facts.add(conclusion);proof[conclusion]=premises;changed=true
     }
    }
-   if(!changed)return if(target in facts) "Concluzie derivabilă din premisele declarate: "+query+"\n"+proof.values.joinToString("\n") else "Concluzia nu poate fi derivată din premise. Nu înseamnă că este falsă."
+   if(!changed){
+    val target=key(query)
+    val neg=opposite(target)
+    val relevant=linkedSetOf<String>()
+    fun trace(node:String){
+     if(!relevant.add(node))return
+     proof[node]?.forEach{trace(it)}
+    }
+    if(target in facts)trace(target)
+    if(neg in facts)trace(neg)
+    val status=when{
+     target in facts && neg in facts -> "Contradicție: sunt derivabile atât concluzia, cât și negația ei."
+     target in facts -> "Concluzie derivabilă din premise: "+query
+     neg in facts -> "Negația concluziei este derivabilă din premise: "+neg
+     else -> "Nici concluzia, nici negația ei nu sunt derivabile. Informații insuficiente."
+    }
+    val steps=relevant.toList().asReversed().mapNotNull{node->if(node in initial)"Premisă: "+node else proof[node]?.joinToString(" și ")?.plus(" → "+node)}
+    val conflicts=facts.filter{!it.startsWith("!") && opposite(it) in facts}
+    val missing=if(target !in facts && neg !in facts)rules.filter{it.second==target}.take(5).map{it.first.filterNot{p->p in facts}.joinToString(" și ")}.filter{it.isNotBlank()} else emptyList()
+    return listOf(status,steps.joinToString("\n"),if(conflicts.isEmpty())"" else "Contradicții în baza de premise: "+conflicts.joinToString(", "),if(missing.isEmpty())"" else "Premise încă nedemonstrate (alternative): "+missing.joinToString(" / "),"Rezultatul este logic, nu o verificare a faptelor din lumea reală.").filter{it.isNotBlank()}.joinToString("\n")
+   }
   }
   return "Limită de deducție atinsă."
  }
