@@ -139,13 +139,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   actions.addView(Button(this).apply { text="🎙";contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } })
   settings.addView(Button(this).apply { text="Înregistrează demonstrație";setOnClickListener{
    if(!busy){
-    val field=EditText(this@MainActivity).apply{hint="Pachet Android (ex. com.example.app)";setSingleLine(true)}
-    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație locală").setMessage("Înregistrează numai identificatorii butoanelor din aplicația aleasă, timp de 60 secunde. Revino aici pentru oprire.").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Pornește"){_,_->
-     val pkg=field.text.toString().trim()
-     if(!pkg.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))||pkg==packageName){append("Pachet invalid.");return@setPositiveButton}
+    val field=EditText(this@MainActivity).apply{hint="Pachete Android separate prin virgulă";setSingleLine(true)}
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație locală").setMessage("Înregistrează identificatorii butoanelor din aplicațiile alese până la oprire sau 200 de acțiuni. Revino aici pentru oprire.").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Pornește"){_,_->
+     val packages=field.text.toString().split(',').map{it.trim()}.filter{it.isNotEmpty()}.toSet()
+     if(packages.isEmpty()||packages.any{!it.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))||it==packageName}){append("Pachet invalid.");return@setPositiveButton}
      if(LocalScreen.observe()==null){append("Activează serviciul de accesibilitate.");return@setPositiveButton}
-     com.jarvis.mobile.core.skills.SkillRecorder.start(pkg)
-     append("Înregistrare pornită pentru "+pkg+". Revino în maximum 60 secunde.")
+     com.jarvis.mobile.core.skills.SkillRecorder.start(packages)
+     append("Înregistrare pornită pentru "+packages.joinToString()+". Revino pentru oprire.")
     }.show()
    }
   } })
