@@ -4,19 +4,19 @@ import android.os.SystemClock
 /** Adapted from ansaribilal14/jarvis MIT SkillRecorder event feed and deduplication. */
 object SkillRecorder {
  const val MAX_STEPS=200
- private var pkg:String?=null
- private var deadline=0L
+ private var packages:Set<String> = emptySet()
  private var lastStepKey:Pair<ElementTarget,Long>?=null
  private val steps=mutableListOf<ElementTarget>()
- @Synchronized fun start(packageName:String){
-  require(packageName.isNotBlank())
-  steps.clear();lastStepKey=null;pkg=packageName;deadline=SystemClock.elapsedRealtime()+60000
+ @Synchronized fun start(packageNames:Set<String>){
+  require(packageNames.isNotEmpty()&&packageNames.none{it.isBlank()})
+  steps.clear();lastStepKey=null;packages=packageNames.toSet()
  }
- @Synchronized fun stop():List<ElementTarget>{pkg=null;return steps.toList().also{steps.clear();lastStepKey=null}}
+ @Synchronized fun stop():List<ElementTarget>{packages=emptySet();return steps.toList().also{steps.clear();lastStepKey=null}}
  @Synchronized fun onAccessibilityEvent(e:AccessibilityEvent,selfPkg:String){
-  val selected=pkg?:return
+  val selected=e.packageName?.toString()?:return
+  if(selected !in packages)return
   val now=SystemClock.elapsedRealtime()
-  if(now>=deadline||steps.size>=MAX_STEPS){pkg=null;return}
+  if(steps.size>=MAX_STEPS){packages=emptySet();return}
   if(e.eventType!=AccessibilityEvent.TYPE_VIEW_CLICKED||e.packageName?.toString()!=selected||selected==selfPkg)return
   val src=e.source?:return
   try{
