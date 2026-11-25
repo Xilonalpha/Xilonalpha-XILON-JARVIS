@@ -16,6 +16,8 @@ object RegistryPlanner {
    val specs=tool.spec.params.associateBy{it.name}
    require(args.keys.all{it in specs})
    require(tool.spec.params.all{!it.required || args.containsKey(it.name)})
+   require(tool.available()){"Instrument indisponibil: "+name}
+   ToolEnvironment.validate(name,args)?.let{error(it.message)}
    PlannedAction(name,args)
   }
  }
