@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "locale": "ro-RO",
+  "commands": [
+    {
+      "tool": "list_apps",
+      "english": "list apps",
+      "phrases": [
+        "listează aplicațiile",
+        "arată aplicațiile instalate",
+        "ce aplicații am",
+        "afișează aplicațiile"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_home",
+      "english": "home screen",
+      "phrases": [
+        "ecran principal",
+        "mergi acasă",
+        "du-mă acasă",
+        "revino la ecranul principal"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_back",
+      "english": "go back",
+      "phrases": [
+        "înapoi",
+        "mergi înapoi",
+        "revino",
+        "dă înapoi"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_recents",
+      "english": "recent apps",
+      "phrases": [
+        "aplicații recente",
+        "arată aplicațiile recente",
+        "deschide aplicațiile recente"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "press_notifications",
+      "english": "show notifications",
+      "phrases": [
+        "arată notificările",
+        "deschide notificările",
+        "afișează notificările"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "take_screenshot",
+      "english": "take screenshot",
+      "phrases": [
+        "captură de ecran",
+        "fă o captură de ecran",
+        "fotografiază ecranul",
+        "screenshot"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "control_flashlight",
+      "english": "turn flashlight on",
+      "phrases": [
+        "aprinde lanterna",
+        "pornește lanterna",
+        "activează lanterna",
+        "dă drumul la lanternă"
+      ],
+      "args": {
+        "on": true
+      }
+    },
+    {
+      "tool": "control_flashlight",
+      "english": "turn flashlight off",
+      "phrases": [
+        "stinge lanterna",
+        "oprește lanterna",
+        "dezactivează lanterna",
+        "închide lanterna"
+      ],
+      "args": {
+        "on": false
+      }
+    },
+    {
+      "tool": "youtube_search",
+      "english": "search YouTube for music",
+      "phrases": [
+        "pune muzică",
+        "pune muzica",
+        "bagă muzică",
+        "bagă muzica",
+        "dă drumul la muzică",
+        "pornește muzica",
+        "deschide youtube și pune muzica",
+        "deschide youtube și pune muzică",
+        "caută muzică pe youtube",
+        "vreau să ascult muzică"
+      ],
+      "args": {
+        "query": "muzică"
+      }
+    },
+    {
+      "tool": "media_play_pause",
+      "english": "toggle playback",
+      "phrases": [
+        "redare pauză",
+        "comută redarea",
+        "play pauză"
+      ],
+      "args": {}
+    },
+    {
+      "tool": "scroll",
+      "english": "scroll down",
+      "phrases": [
+        "derulează în jos",
+        "dă mai jos",
+        "coboară pagina"
+      ],
+      "args": {
+        "direction": "down"
+      }
+    },
+    {
+      "tool": "scroll",
+      "english": "scroll up",
+      "phrases": [
+        "derulează în sus",
+        "dă mai sus",
+        "urcă pagina"
+      ],
+      "args": {
+        "direction": "up"
+      }
+    },
+    {
+      "tool": "scroll",
+      "english": "scroll left",
+      "phrases": [
+        "derulează la stânga",
+        "glisează la stânga"
+      ],
+      "args": {
+        "direction": "left"
+      }
+    },
+    {
+      "tool": "scroll",
+      "english": "scroll right",
+      "phrases": [
+        "derulează la dreapta",
+        "glisează la dreapta"
+      ],
+      "args": {
+        "direction": "right"
+      }
+    },
+    {
+      "tool": "control_wifi",
+      "english": "enable wifi",
+      "phrases": [
+        "activează wifi",
+        "pornește wifi"
+      ],
+      "args": {
+        "on": true
+      }
+    },
+    {
+      "tool": "control_wifi",
+      "english": "disable wifi",
+      "phrases": [
+        "dezactivează wifi",
+        "oprește wifi"
+      ],
+      "args": {
+        "on": false
+      }
+    },
+    {
+      "tool": "control_bluetooth",
+      "english": "enable bluetooth",
+      "phrases": [
+        "activează bluetooth",
+        "pornește bluetooth"
+      ],
+      "args": {
+        "on": true
+      }
+    },
+    {
+      "tool": "control_bluetooth",
+      "english": "disable bluetooth",
+      "phrases": [
+        "dezactivează bluetooth",
+        "oprește bluetooth"
+      ],
+      "args": {
+        "on": false
+      }
+    },
+    {
+      "tool": "toggle_dnd",
+      "english": "enable nu deranja",
+      "phrases": [
+        "activează nu deranja",
+        "pornește nu deranja"
+      ],
+      "args": {
+        "on": true
+      }
+    },
+    {
+      "tool": "toggle_dnd",
+      "english": "disable nu deranja",
+      "phrases": [
+        "dezactivează nu deranja",
+        "oprește nu deranja"
+      ],
+      "args": {
+        "on": false
+      }
+    }
+  ],
+  "verbs": [
+    "deschide",
+    "lanseaza",
+    "seteaza",
+    "activeaza",
+    "dezactiveaza",
+    "cauta",
+    "porneste",
+    "arata",
+    "citeste",
+    "trimite",
+    "creeaza",
+    "apeleaza",
+    "navigheaza",
+    "opreste",
+    "inchide",
+    "pune",
+    "baga",
+    "reda",
+    "asculta",
+    "aprinde",
+    "stinge",
+    "regleaza",
+    "deruleaza",
+    "afiseaza",
+    "listeaza",
+    "gliseaza",
+    "fa",
+    "da drumul",
+    "revino",
+    "mergi"
+  ],
+  "translations": {
+    "deschide": "open",
+    "inchide": "close",
+    "cauta": "search",
+    "muzica": "music",
+    "videoclip": "video",
+    "telefon": "phone",
+    "aplicatie": "application",
+    "joc": "game",
+    "volum": "volume",
+    "luminozitate": "brightness",
+    "lanterna": "flashlight",
+    "notificari": "notifications",
+    "alarma": "alarm",
+    "temporizator": "timer",
+    "trimite": "send",
+    "citeste": "read",
+    "scrie": "write",
+    "sterge": "delete",
+    "salveaza": "save",
+    "fisier": "file",
+    "document": "document",
+    "redare": "playback",
+    "pauza": "pause",
+    "inapoi": "back",
+    "acasa": "home",
+    "porneste": "start",
+    "opreste": "stop",
+    "ajutor": "help",
+    "setari": "settings"
+  }
+}
