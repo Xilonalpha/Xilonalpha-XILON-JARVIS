@@ -467,7 +467,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
-  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nInstrumente agent verificate:\n"+it.registrySummary()+"\n\nTipare repetate verificate:\n"+it.registryPatterns()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
+  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nInstrumente agent verificate:\n"+it.registrySummary()+"\n\nTipare repetate verificate:\n"+it.registryPatterns()+"\n\nTipare după ora locală:\n"+it.temporalPatterns()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
   settings.addView(Button(this).apply{text="Detalii model local";setOnClickListener{report("Model local"){
    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
    val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
