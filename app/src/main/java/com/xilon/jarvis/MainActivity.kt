@@ -751,18 +751,23 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
-  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";setOnCheckedChangeListener{_,checked->gestureSelect=checked}})
-  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch multimedia: palmă orizontal = melodie; vertical = volum";setOnCheckedChangeListener{_,checked->gestureMedia=checked}})
-  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch navigare Android: palmă orizontală = Înapoi / Acasă";setOnCheckedChangeListener{_,checked->gestureNavigation=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_select",false);gestureSelect=isChecked;setOnCheckedChangeListener{_,checked->gestureSelect=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_select",checked).apply()}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch multimedia: palmă orizontal = melodie; vertical = volum";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_media",false);gestureMedia=isChecked;setOnCheckedChangeListener{_,checked->gestureMedia=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_media",checked).apply()}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch navigare Android: palmă orizontală = Înapoi / Acasă";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_navigation",false);gestureNavigation=isChecked;setOnCheckedChangeListener{_,checked->gestureNavigation=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_navigation",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: înlocuiește Acasă cu Aplicații recente";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_recent",false);gestureRecent=isChecked;setOnCheckedChangeListener{_,checked->gestureRecent=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_recent",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: inversează direcțiile";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_reverse",false);gestureReverse=isChecked;setOnCheckedChangeListener{_,checked->gestureReverse=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_reverse",checked).apply()}})
+  settings.addView(Button(this).apply{text="Air Touch: calibrare ciupire";setOnClickListener{
+   val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
+   val slider=SeekBar(this@MainActivity).apply{max=40;progress=((prefs.getFloat("pinch_ratio",0.32f).coerceIn(0.15f,0.55f)-0.15f)*100).toInt()}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Calibrare ciupire").setMessage("Spre dreapta: detectare mai sensibilă. Testează cu mâna după salvare.").setView(slider).setNegativeButton("Anulează",null).setNeutralButton("Implicit"){_,_->prefs.edit().putFloat("pinch_ratio",0.32f).apply()}.setPositiveButton("Salvează"){_,_->prefs.edit().putFloat("pinch_ratio",(15+slider.progress)/100f).apply()}.show()
+  }})
   settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
-  settings.addView(android.widget.SeekBar(this).apply{max=55;progress=12;setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
-   override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f}
+  settings.addView(android.widget.SeekBar(this).apply{max=55;progress=getPreferences(MODE_PRIVATE).getInt("air_smoothing",12).coerceIn(0,55);setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
+   override fun onProgressChanged(bar:android.widget.SeekBar?,value:Int,fromUser:Boolean){if(::cursor.isInitialized)cursor.smoothing=(10+value)/100f;if(fromUser)getPreferences(MODE_PRIVATE).edit().putInt("air_smoothing",value).apply()}
    override fun onStartTrackingTouch(bar:android.widget.SeekBar?){}
    override fun onStopTrackingTouch(bar:android.widget.SeekBar?){}
   })})
-  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch + vedere frontală (local)";setOnCheckedChangeListener{_,checked->combinedAirVision=checked;if(airTouch!=null){stopAirTouch();startAirTouch()}}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch + vedere frontală (local)";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_combined",false);combinedAirVision=isChecked;setOnCheckedChangeListener{_,checked->combinedAirVision=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_combined",checked).apply();if(airTouch!=null){stopAirTouch();startAirTouch()}}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn 1s: oprire)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
@@ -1180,6 +1185,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(android.view.View(this).apply{setBackgroundColor(0xff284357.toInt())},LinearLayout.LayoutParams(-1,dp(1)))
   root.addView(nav)
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy && conversationForeground && airTouch!=null)startMicrophone()}
+  cursor.smoothing=(10+getPreferences(MODE_PRIVATE).getInt("air_smoothing",12).coerceIn(0,55))/100f
   cursor.onPointTap={x,y->
    if(conversationForeground && airTouch!=null && !busy){
     if(!gestureSelect)startMicrophone()
