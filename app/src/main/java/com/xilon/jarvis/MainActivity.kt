@@ -330,6 +330,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian.startsWith("propune planul ")){startRegistryPlan(q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""},true);return@setOnClickListener}
+    if(normalizedRomanian=="anuleaza planul propus"){previewRegistry=emptyList();previewRegistryAt=0L;append("Planul propus a fost eliminat.");return@setOnClickListener}
+    if(normalizedRomanian=="executa planul propus"){
+     val steps=previewRegistry
+     if(steps.isEmpty() || android.os.SystemClock.elapsedRealtime()-previewRegistryAt>300000L){previewRegistry=emptyList();append("Nu există un plan propus valabil.");return@setOnClickListener}
+     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Execută planul propus?").setMessage(steps.joinToString("\n"){it.tool+" "+it.args.toString()}).setPositiveButton("Pornește"){_,_->if(!busy&&!isDestroyed&&previewRegistry==steps&&android.os.SystemClock.elapsedRealtime()-previewRegistryAt<=300000L){previewRegistry=emptyList();previewRegistryAt=0L;agentCancelled=false;runRegistryPlan(steps)}}.setNegativeButton("Anulează",null).show()
+     return@setOnClickListener
+    }
     if(normalizedRomanian=="lectii invatate"){
      append(dialogueLessons().mapIndexed{i,l->"${i+1}. "+l.question+" → "+l.correction}.joinToString("\n").ifBlank{"Nu există lecții salvate."})
      return@setOnClickListener
@@ -1418,9 +1426,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
  private var pendingRegistry:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()
- private fun startRegistryPlan(goal:String){
+ private var previewRegistry:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()
+ private var previewRegistryAt=0L
+ private fun startRegistryPlan(goal:String,previewOnly:Boolean=false){
   if(busy)return
   val model=nativeModel ?: run{append("Încarcă un model GGUF.");return}
+  if(goal.isBlank() || goal.length>2000){append("Introdu un obiectiv de maximum 2000 de caractere.");return}
+  previewRegistry=emptyList();previewRegistryAt=0L
   agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
@@ -1432,8 +1444,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
      busy=false;refreshOmegaStatus()
      if(agentCancelled||model.isCancelled())append("Planificare oprită.")
      else plan.fold({steps->
-      if(!busy && !agentCancelled && !isDestroyed)runRegistryPlan(steps)
-      else append("Planul nu a fost pornit.")
+      if(!busy && !agentCancelled && !isDestroyed){
+       if(previewOnly){
+        previewRegistry=steps.toList();previewRegistryAt=android.os.SystemClock.elapsedRealtime()
+        append("Plan propus (neexecutat):\n"+steps.mapIndexed{i,step->(i+1).toString()+". "+step.tool+" "+step.args.toString()}.joinToString("\n")+"\nScrie «execută planul propus» pentru a porni. Confirmările critice rămân obligatorii.")
+       }else runRegistryPlan(steps)
+      }else append("Planul nu a fost pornit.")
      },{append("Plan neexecutat: "+it.message)})
     }
    }
