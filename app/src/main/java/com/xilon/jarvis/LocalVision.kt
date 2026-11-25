@@ -38,7 +38,14 @@ internal object LocalVision {
   var sample=1
   while(maxOf(bounds.outWidth,bounds.outHeight)/sample>1600)sample*=2
   val bitmap=context.contentResolver.openInputStream(uri)?.use{BitmapFactory.decodeStream(it,null,BitmapFactory.Options().apply{inSampleSize=sample;inPreferredConfig=android.graphics.Bitmap.Config.ARGB_8888})}?:error("Imagine inaccesibilă")
-  try{
+  try{return detectBitmap(context,bitmap,face)}finally{bitmap.recycle()}
+ }
+ fun describe(context:Context,bitmap:android.graphics.Bitmap):String = listOf(false,true).joinToString("\n"){face->
+  (if(face)"Fețe: " else "Obiecte: ")+runCatching{detectBitmap(context,bitmap,face)}.getOrElse{"indisponibil: "+it.message}
+ }
+ private fun detectBitmap(context:Context,bitmap:android.graphics.Bitmap,face:Boolean):String{
+  val model=File(context.filesDir,if(face)"face_detector.tflite" else "object_detector.tflite")
+  require(model.isFile){"Importă întâi modelul MediaPipe compatibil."}
    val image=BitmapImageBuilder(bitmap).build()
    try{
     val base=BaseOptions.builder().setModelAssetBuffer(java.io.RandomAccessFile(model,"r").use{it.channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY,0,it.length())}).build()
@@ -51,6 +58,5 @@ internal object LocalVision {
     }
     return if(face)"Fețe detectate: "+detections.size+" (fără identificare personală)" else detections.joinToString("\n"){d->d.categories().joinToString(", "){c->c.categoryName()+" — "+(c.score()*100).toInt()+"%"}}.ifBlank{"Niciun obiect detectat peste prag."}
    }finally{image.close()}
-  }finally{bitmap.recycle()}
  }
 }

@@ -79,6 +79,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
+ private val visualObservation=RecentVisualObservation()
  private var ocrText:String?=null
  private var ocrAt=0L
  private var observedScreen:String?=null
@@ -261,7 +262,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     if(normalizedRomanian=="sterge toate observatiile"){
-     screenHandler.removeCallbacksAndMessages(null);observedScreen=null;ocrText=null
+     screenHandler.removeCallbacksAndMessages(null);observedScreen=null;ocrText=null;visualObservation.clear()
      append("Observațiile temporare au fost eliminate.");return@setOnClickListener
     }
     if(normalizedRomanian.startsWith("compara observatiile ")){
@@ -365,6 +366,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian=="fotografiaza si analizeaza"){
+     if(!busy)runCatching{startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),57)}.onFailure{append("Camera indisponibilă: "+it.message)}
+     return@setOnClickListener
+    }
+    if(normalizedRomanian=="ultima analiza vizuala"){
+     append(visualObservation.get(android.os.SystemClock.elapsedRealtime())?:"Nicio analiză vizuală recentă.");return@setOnClickListener
+    }
+    if(normalizedRomanian=="sterge analiza vizuala"){
+     visualObservation.clear();append("Analiza vizuală a fost eliminată.");return@setOnClickListener
+    }
     if(normalizedRomanian=="stare vedere"){
      append(LocalVision.status(this@MainActivity));return@setOnClickListener
     }
@@ -1672,6 +1683,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
  } catch(e: Exception) { "Eroare: "+(e.message ?: e.javaClass.simpleName) }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==57){
+   if(resultCode!=RESULT_OK||busy)return
+   @Suppress("DEPRECATION")
+   val bitmap=data?.extras?.get("data") as? android.graphics.Bitmap
+   if(bitmap==null){append("Camera nu a returnat imaginea.");return}
+   busy=true
+   worker.execute{
+    val result=runCatching{LocalVision.describe(this,bitmap)}.getOrElse{"Analiză eșuată: "+it.message}
+    bitmap.recycle()
+    runOnUiThread{if(!isDestroyed){busy=false;visualObservation.put(result,android.os.SystemClock.elapsedRealtime());append(result)}}
+   };return
+  }
   if(requestCode in 53..56){
    if(resultCode!=RESULT_OK||busy)return
    val uri=data?.data?:return
@@ -1822,7 +1845,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onStop(){kokoroVoice?.stop();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
-  agentCancelled=true;invalidatePreview();ocrText=null
+  agentCancelled=true;invalidatePreview();ocrText=null;visualObservation.clear()
   conversationHandler.removeCallbacks(conversationTick);triggerHandler.removeCallbacks(triggerTick)
   com.jarvis.mobile.core.skills.SkillRecorder.stop()
   screenHandler.removeCallbacksAndMessages(null);observedScreen=null
