@@ -1757,6 +1757,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     busy=false;refreshOmegaStatus()
     if(!saved)append("Jurnalul sau graful nu a putut fi actualizat.")
     append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))
+    result.getOrNull()?.let{outcome->
+     AgentRecovery.guidance(outcome.status,outcome.remaining.size)?.let{append("Recuperare JARVIS: "+it)}
+    }
     val remainingCritical=result.getOrNull()?.takeIf{it.status=="REQUIRES_CONFIRMATION"}?.remaining.orEmpty()
     val critical=remainingCritical.firstOrNull()
     if(critical!=null && !agentCancelled && !busy){
