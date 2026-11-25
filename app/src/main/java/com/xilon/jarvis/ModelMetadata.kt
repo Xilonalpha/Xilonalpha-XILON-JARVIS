@@ -3,7 +3,7 @@ import org.json.JSONObject
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 object ModelMetadata {
- data class Reference(val sha256:String,val bytes:Long,val revision:String)
+ data class Reference(val sha256:String,val bytes:Long,val revision:String,val algorithm:String="SHA-256")
  fun fetch(entry:ModelCatalog.Entry):Reference {
   require(entry.directUrl==null)
   val url=URL("https://huggingface.co/api/models/"+entry.repo+"/revision/"+entry.revision+"?blobs=true")
@@ -26,7 +26,8 @@ object ModelMetadata {
    for(i in 0 until files.length()){
     val file=files.getJSONObject(i)
     if(file.getString("rfilename")!=entry.file)continue
-    val lfs=file.getJSONObject("lfs")
+    val lfs=file.optJSONObject("lfs")
+    if(lfs==null){val hash=file.getString("blobId");val size=file.getLong("size");require(hash.matches(Regex("[0-9a-f]{40}"))&&size>0);return Reference(hash,size,revision,"git-blob-sha1")}
     val hash=lfs.getString("sha256")
     val size=lfs.getLong("size")
     require(hash.matches(Regex("[0-9a-fA-F]{64}"))&&size>0)
