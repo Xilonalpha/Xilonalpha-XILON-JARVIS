@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 class LocalScreen:AccessibilityService(){
  companion object {
   @Volatile private var active:LocalScreen?=null
+  internal fun service():LocalScreen?=active
   fun connected():Boolean=active!=null
   fun snapshot():String?=active?.readScreen()
   internal fun clickConfirmed(target:ElementTarget):Boolean=active?.clickExact(target)?:false
