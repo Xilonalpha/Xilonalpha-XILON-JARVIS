@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.speech.*
 
 class OfflineListening(private val context: Context): AutoCloseable {
+ var onLevel:(Float)->Unit={}
+ var onListening:(Boolean)->Unit={}
  private var engine: SpeechRecognizer?=null
  fun listen(result:(String)->Unit,error:(String)->Unit){
   close()
@@ -18,7 +20,7 @@ class OfflineListening(private val context: Context): AutoCloseable {
    recognizer.setRecognitionListener(object:RecognitionListener{
     override fun onReadyForSpeech(params:Bundle?){}
     override fun onBeginningOfSpeech(){}
-    override fun onRmsChanged(rmsdB:Float){}
+    override fun onRmsChanged(rmsdB:Float){if(engine===recognizer && rmsdB.isFinite())onLevel(((rmsdB+2f)/12f).coerceIn(0f,1f))}
     override fun onBufferReceived(buffer:ByteArray?){}
     override fun onEndOfSpeech(){}
     override fun onPartialResults(partialResults:Bundle?){}
@@ -31,6 +33,7 @@ class OfflineListening(private val context: Context): AutoCloseable {
      if(text.isNullOrBlank())error("Nu am detectat un mesaj.") else result(text)
     }
    })
+   onListening(true)
    recognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{
     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
     putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO")
@@ -38,5 +41,5 @@ class OfflineListening(private val context: Context): AutoCloseable {
    })
   }catch(e:Exception){close();error("Microfon: "+e.message)}
  }
- override fun close(){val previous=engine;engine=null;previous?.destroy()}
+ override fun close(){val previous=engine;engine=null;previous?.destroy();onLevel(0f);onListening(false)}
 }
