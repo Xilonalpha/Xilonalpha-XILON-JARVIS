@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.io.File
 import java.util.ArrayDeque
-import kotlin.math.sqrt
+import com.jarvis.assistant.voice.MicGain
 
 /** Captures a short utterance and transcribes it offline with Sherpa-ONNX SenseVoice or Whisper. */
 class SpeechToTextEngine(context: Context) : Closeable {
@@ -140,6 +140,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val captured = ArrayList<Float>(SAMPLE_RATE * MAX_RECORDING_SECONDS)
         val preRoll = ArrayDeque<FloatArray>()
         val pcm = ShortArray(FRAME_SAMPLES)
+        val micGain = MicGain()
         var started = false
         var silentSamples = 0
         var totalSamples = 0
@@ -153,13 +154,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 }
                 if (count == 0) continue
                 totalSamples += count
-                var energy = 0.0
-                val chunk = FloatArray(count) { index ->
-                    val sample = pcm[index] / 32768.0f
-                    energy += sample * sample
-                    sample
-                }
-                val rms = sqrt(energy / count).toFloat()
+                val chunk = FloatArray(count) { index -> pcm[index] / 32768.0f }
+                micGain.process(chunk, learn = !started)
+                val rms = MicGain.rms(chunk)
                 if (!started) {
                     preRoll.addLast(chunk)
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
