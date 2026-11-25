@@ -45,6 +45,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
  @Volatile private var nativeModel: NativeModel? = null
+ private val visibleHistory=mutableListOf<String>()
  private val history=mutableListOf<Pair<String,String>>()
  private lateinit var voice: OfflineVoice
  private var speakReplies=false
@@ -322,7 +323,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        sourced
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
-      runOnUiThread { if(!isDestroyed) { busy=false; streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""; if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
+      runOnUiThread { if(!isDestroyed) { busy=false; streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""; archiveMessage(streamingBubble.text.toString()); if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
      }
     }
    }
@@ -350,6 +351,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   fun report(title:String,body:()->String){
    android.app.AlertDialog.Builder(this@MainActivity).setTitle(title).setMessage(runCatching{body()}.getOrElse{"Eroare: "+it.message}).setPositiveButton("Închide",null).show()
   }
+  settings.addView(Button(this).apply{text="Caută în conversație";setOnClickListener{val field=EditText(this@MainActivity).apply{hint="Text de căutat"};android.app.AlertDialog.Builder(this@MainActivity).setTitle("Caută în istoricul local").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Caută"){_,_->val query=field.text.toString().trim();if(query.isNotEmpty())report("Rezultate"){visibleHistory.filter{it.contains(query,true)}.joinToString("\n\n").ifBlank{"Niciun rezultat."}}}.show()}})
+  settings.addView(Button(this).apply{text="Conversație nouă";setOnClickListener{if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ștergi conversația curentă?").setMessage("Istoricul vizibil și contextul AI vor fi șterse.").setNegativeButton("Anulează",null).setPositiveButton("Șterge"){_,_->if(!busy){visibleHistory.clear();history.clear();persistHistory();getSharedPreferences("chat_archive",MODE_PRIVATE).edit().remove("messages").apply();transcript.removeAllViews();append("JARVIS: Cu ce te pot ajuta?")}}.show()}})
   settings.addView(Button(this).apply{text="Jurnal execuții";setOnClickListener{report("Jurnal execuții"){TaskJournal(this@MainActivity).summary()}}})
   settings.addView(Button(this).apply{text="Abilități salvate";setOnClickListener{
    if(busy)return@setOnClickListener
@@ -702,7 +705,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
-  append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
+  val restored=runCatching{org.json.JSONArray(getSharedPreferences("chat_archive",MODE_PRIVATE).getString("messages","[]"))}.getOrNull()
+  if(restored!=null){for(i in maxOf(0,restored.length()-150) until restored.length()){val item=restored.optString(i);if(item.isNotBlank()){visibleHistory.add(item);messageBubble(item)}}}
+  if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
  private fun startMicrophone(){
   if(busy)return
@@ -776,7 +781,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   scroll.post{scroll.fullScroll(ScrollView.FOCUS_DOWN)}
   return bubble
  }
- private fun append(s:String){messageBubble(s)}
+ private fun archiveMessage(s:String){
+  visibleHistory.add(s.take(32000));while(visibleHistory.size>150)visibleHistory.removeAt(0)
+  getSharedPreferences("chat_archive",MODE_PRIVATE).edit().putString("messages",org.json.JSONArray(visibleHistory).toString()).apply()
+ }
+ private fun append(s:String){messageBubble(s);archiveMessage(s)}
  private val recorder=OmegaRecorder()
  private var lastSuccessfulPlan:List<String>?=null
  private var pendingRegistry:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()
