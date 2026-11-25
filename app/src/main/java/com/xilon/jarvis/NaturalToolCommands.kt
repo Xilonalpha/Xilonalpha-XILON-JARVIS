@@ -34,9 +34,28 @@ object NaturalToolCommands {
   }
 
   if(q.equals("redare pauză",true)||q.equals("redare pauza",true))return call("media_play_pause")
+  when(q.lowercase(java.util.Locale.ROOT)){
+   "înapoi","inapoi" -> return call("press_back")
+   "ecran principal","mergi acasă","mergi acasa" -> return call("press_home")
+   "aplicații recente","aplicatii recente" -> return call("press_recents")
+   "arată notificările","arata notificarile" -> return call("press_notifications")
+   "captură de ecran","captura de ecran" -> return call("take_screenshot")
+   "derulează în jos","deruleaza in jos" -> return call("scroll","direction" to JsonPrimitive("down"))
+   "derulează în sus","deruleaza in sus" -> return call("scroll","direction" to JsonPrimitive("up"))
+  }
   // Map only supported upstream commands to existing confirmed Android tools.
   if(q.contains(Regex("\\b(and|then|aur|not|never|don.t)\\b",RegexOption.IGNORE_CASE)))return null
   return when(val cmd=com.jarvis.assistant.router.FastCommandRouter.parse(q)){
+   is com.jarvis.assistant.router.FastCommand.Press -> when(cmd.key){
+    "back" -> call("press_back")
+    "home" -> call("press_home")
+    "recents" -> call("press_recents")
+    "notifications" -> call("press_notifications")
+    else -> null
+   }
+   is com.jarvis.assistant.router.FastCommand.Scroll ->
+    call("scroll","direction" to JsonPrimitive(cmd.direction))
+   com.jarvis.assistant.router.FastCommand.Screenshot -> call("take_screenshot")
    is com.jarvis.assistant.router.FastCommand.OpenApp ->
     call("open_app","app" to JsonPrimitive(cmd.query))
    is com.jarvis.assistant.router.FastCommand.Flashlight ->
