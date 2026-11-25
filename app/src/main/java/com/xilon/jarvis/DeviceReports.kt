@@ -38,6 +38,19 @@ internal object DeviceReports {
     val status=when(power.currentThermalStatus){0->"normală";1->"ușoară";2->"moderată";3->"severă";4->"critică";5->"urgență";6->"oprire";else->"necunoscută"}
     return "Stare termică raportată de Android: "+status
    }
+   "stare energie" -> {
+    val p=context.getSystemService(android.os.PowerManager::class.java)
+    return "Economisire energie: "+p.isPowerSaveMode+"\nEcran interactiv: "+p.isInteractive+"\nMod inactivitate: "+p.isDeviceIdleMode+"\nExceptare optimizare baterie JARVIS: "+p.isIgnoringBatteryOptimizations(context.packageName)
+   }
+   "stare audio iesire" -> {
+    val audio=context.getSystemService(android.media.AudioManager::class.java)
+    return audio.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).map{it.productName.toString()+" (tip Android "+it.type+")"}.distinct().take(30).joinToString("\n").ifBlank{"Nicio ieșire audio detectată."}
+   }
+   "stare aplicatie" -> {
+    val manager=context.packageManager
+    val info=manager.getPackageInfo(context.packageName,0)
+    return "Versiune: "+info.versionName+"\nAndroid SDK: "+android.os.Build.VERSION.SDK_INT+"\nABI: "+android.os.Build.SUPPORTED_ABIS.joinToString(", ")+"\nSpațiu disponibil: "+android.os.StatFs(context.filesDir.path).availableBytes/1048576+" MiB"
+   }
    else -> return null
   }
  }

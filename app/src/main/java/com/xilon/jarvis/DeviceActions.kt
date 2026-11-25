@@ -35,6 +35,10 @@ class DeviceActions(private val activity:Activity) {
    "deschide setări sunet" -> Intent(Settings.ACTION_SOUND_SETTINGS)
    "deschide setări stocare" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
    "deschide setări accesibilitate" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+   "deschide setări notificări" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,activity.packageName)
+   "deschide setări limbă" -> Intent(Settings.ACTION_LOCALE_SETTINGS)
+   "deschide setări dată" -> Intent(Settings.ACTION_DATE_SETTINGS)
+   "deschide setări locație" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
    "deschide alarme" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
    else -> when {
     q.startsWith("alarmă ") -> {

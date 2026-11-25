@@ -357,7 +357,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
-    DeviceReports.execute(this@MainActivity,normalizedRomanian)?.let{append(it);return@setOnClickListener}
+    runCatching{DeviceReports.execute(this@MainActivity,normalizedRomanian)}.getOrElse{"Diagnostic indisponibil: "+it.javaClass.simpleName}?.let{append(it);return@setOnClickListener}
     if(normalizedRomanian=="raport performanta"){
      val records=getSharedPreferences("model_benchmarks",MODE_PRIVATE).all.entries.mapNotNull{entry->runCatching{entry.key to org.json.JSONObject(entry.value as String)}.getOrNull()}.sortedByDescending{it.second.optLong("timestamp")}.take(10)
      append(records.joinToString("\n\n"){(name,row)->
@@ -1512,7 +1512,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val appTips=com.jarvis.assistant.agent.AppTips(getSharedPreferences("app_tips",MODE_PRIVATE).getString("notes","").orEmpty()) { name -> runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(name,0)).toString() }.getOrNull() }
    val hints=runCatching { appTips.forForeground(LocalScreen.observe()?.packageName).orEmpty() }.getOrDefault("").take(400)
    val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
-   val context=if(info.lowMemory || info.availMem<768L*1048576)1024 else if(info.availMem<2048L*1048576)2048 else 4096
+   val thermal=if(android.os.Build.VERSION.SDK_INT>=29)getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
+   val context=if(info.lowMemory || thermal>=3 || info.availMem<768L*1048576)1024 else if(thermal>=2 || info.availMem<2048L*1048576)2048 else 4096
    val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(800)}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.grammar))}
    runOnUiThread{
     if(!isDestroyed){
