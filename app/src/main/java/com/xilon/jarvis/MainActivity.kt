@@ -35,12 +35,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  private var airTouch:AirTouchController?=null
  private lateinit var cursor:com.jarvis.ai.gesture.GestureCursorView
- private fun stopAirTouch(){airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
+ private fun stopAirTouch(){gestureDialog?.dismiss();gestureDialog=null;airTouch?.close();airTouch=null;if(::cursor.isInitialized)cursor.visibility=android.view.View.GONE}
  private var combinedAirVision=false
  private var gestureSelect=false
  private var gestureMedia=false
  private var gestureNavigation=false
  private var gestureReverse=false
+ private var gestureRecent=false
+ private var gestureDialog:android.app.AlertDialog?=null
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
   stopLiveVision()
@@ -78,9 +80,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!busy && !omegaCore.listening && wake==null){
    if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=800L)startMicrophone()}
-   else if(voiceInterrupt)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){voice.stop();append("Răspuns vocal întrerupt.")}},{_->})
+   else if(voiceInterrupt && !omegaCore.listening)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){voice.stop();append("Răspuns vocal întrerupt.")}},{_->})
   }
-  if(continuousVoice)voiceLoopHandler.postDelayed(this,2500L)
+  if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
  private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop)}
  private fun acceptVoice(text:String){voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length);if((autoVoiceSend||continuousVoice)&&text.isNotBlank()&&::sendControl.isInitialized&&!busy)sendControl.performClick()}
@@ -752,6 +754,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";setOnCheckedChangeListener{_,checked->gestureSelect=checked}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch multimedia: palmă orizontal = melodie; vertical = volum";setOnCheckedChangeListener{_,checked->gestureMedia=checked}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch navigare Android: palmă orizontală = Înapoi / Acasă";setOnCheckedChangeListener{_,checked->gestureNavigation=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: înlocuiește Acasă cu Aplicații recente";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_recent",false);gestureRecent=isChecked;setOnCheckedChangeListener{_,checked->gestureRecent=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_recent",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: inversează direcțiile";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_reverse",false);gestureReverse=isChecked;setOnCheckedChangeListener{_,checked->gestureReverse=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_reverse",checked).apply()}})
   settings.addView(android.widget.TextView(this).apply{text="Sensibilitate cursor Air Touch"})
   settings.addView(android.widget.SeekBar(this).apply{max=55;progress=12;setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
@@ -1194,9 +1197,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   cursor.onHorizontal={raw->if(conversationForeground && airTouch!=null && !busy){
    val direction=if(gestureReverse)-raw else raw
    if(gestureNavigation){
-    val action=if(direction>0)android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME else android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
-    val label=if(direction>0)"Acasă" else "Înapoi"
-    if(LocalScreen.connected())android.app.AlertDialog.Builder(this).setTitle("Navigare prin gest").setMessage(label).setNegativeButton("Anulează",null).setPositiveButton("Confirmă"){_,_->if(conversationForeground && airTouch!=null && !busy){modelStatus.text=if(LocalScreen.service()?.performGlobalAction(action)==true)"Navigare solicitată." else "Navigare indisponibilă."}}.show()
+    val action=if(direction>0 && gestureRecent)android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS else if(direction>0)android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME else android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+    val label=if(direction>0 && gestureRecent)"Aplicații recente" else if(direction>0)"Acasă" else "Înapoi"
+    if(gestureDialog?.isShowing==true)Unit else if(LocalScreen.connected())gestureDialog=android.app.AlertDialog.Builder(this).setTitle("Navigare prin gest").setMessage(label).setNegativeButton("Anulează",null).setPositiveButton("Confirmă"){_,_->if(conversationForeground && airTouch!=null && !busy){modelStatus.text=if(LocalScreen.service()?.performGlobalAction(action)==true)"Navigare solicitată." else "Navigare indisponibilă."}}.show()
     else modelStatus.text="Activează accesibilitatea JARVIS."
    }else if(gestureMedia)MediaActions(this).execute(if(direction>0)"următoarea melodie" else "melodia anterioară")?.let{modelStatus.text=it}
   }}
