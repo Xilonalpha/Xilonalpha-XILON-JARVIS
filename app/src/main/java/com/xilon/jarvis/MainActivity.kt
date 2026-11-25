@@ -371,14 +371,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     if(normalizedRomanian=="stare memorie conversationala"){
-     append("Mesaje AI păstrate local: "+history.size+" / 80. Recuperare lexicală și morfologică; fără index vectorial.")
+     append("Mesaje AI păstrate local: "+history.size+" / 80. Recuperare lexicală, morfologică și vectori rari de trigrame; fără embeddings neuronale.")
      return@setOnClickListener
     }
     if(normalizedRomanian.startsWith("cauta in conversatie ")){
      val term=q.trim().split(Regex("\\s+"),limit=4).getOrElse(3){""}
      busy=true
      worker.execute{
-      val result=runCatching{relevantDialogue(term,5).joinToString("\n\n"){(u,a)->"Tu: "+u+"\nJARVIS: "+a}.ifBlank{"Nu există potriviri în conversațiile mai vechi."}}.getOrElse{"Căutarea locală a eșuat."}
+      val result=runCatching{relevantDialogue(term,5,true).joinToString("\n\n"){(u,a)->"Tu: "+u+"\nJARVIS: "+a}.ifBlank{"Nu există potriviri în conversațiile mai vechi."}}.getOrElse{"Căutarea locală a eșuat."}
       runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
      }
      return@setOnClickListener
@@ -1061,11 +1061,35 @@ class MainActivity : androidx.activity.ComponentActivity() {
   items.takeLast(30).forEach{a.put(org.json.JSONObject().put("question",it.question).put("answer",it.answer).put("correction",it.correction))}
   getSharedPreferences("conversation",MODE_PRIVATE).edit().putString("lessons",a.toString()).apply()
  }
+ // Sparse character n-gram cosine retrieval; not a neural embedding.
+ private fun lexicalVector(text:String):Map<String,Int>{
+  val normalized=RomanianLexicon.normalize(text.take(2000))
+  val counts=HashMap<String,Int>()
+  Regex("[\\p{L}\\p{N}]+").findAll(normalized).take(120).forEach{match->
+   val word=match.value
+   if(word.length>=3){
+    val padded="^"+word+"$"
+    for(i in 0..padded.length-3){
+     val gram=padded.substring(i,i+3)
+     counts[gram]=(counts[gram]?:0)+1
+    }
+   }
+  }
+  return counts
+ }
+ private fun lexicalCosine(a:Map<String,Int>,b:Map<String,Int>):Double{
+  if(a.isEmpty() || b.isEmpty())return 0.0
+  val dot=a.entries.sumOf{(k,v)->v.toDouble()*(b[k]?:0)}
+  val normA=kotlin.math.sqrt(a.values.sumOf{it.toDouble()*it})
+  val normB=kotlin.math.sqrt(b.values.sumOf{it.toDouble()*it})
+  return (dot/(normA*normB)).coerceIn(0.0,1.0)
+ }
  private fun lessonContext(question:String):String{
   fun words(value:String)=RomanianLexicon.normalize(value).split(Regex("\\W+")).filter{it.length>=4}.toSet()
   val query=words(question)
   if(query.isEmpty())return ""
-  return dialogueLessons().map{it to query.intersect(words(it.question)).size}.filter{it.second>=2}.sortedByDescending{it.second}.take(2).joinToString("\n"){(lesson,_)->"Subiect: "+lesson.question.take(100)+"; corecție declarată: "+lesson.correction.take(180)}.take(360)
+  val vector=lexicalVector(question)
+  return dialogueLessons().map{it to lexicalCosine(vector,lexicalVector(it.question))}.filter{it.second>=0.62}.sortedByDescending{it.second}.take(2).joinToString("\n"){(lesson,_)->"Subiect: "+lesson.question.take(100)+"; corecție declarată: "+lesson.correction.take(180)}.take(360)
  }
  private fun conversationInterests():List<String>{
   val raw=getSharedPreferences("conversation",MODE_PRIVATE).getString("interests","[]") ?: "[]"
@@ -1134,19 +1158,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }
  }
- private fun relevantDialogue(question:String, limit:Int):List<Pair<String,String>> {
+ private fun relevantDialogue(question:String, limit:Int, includeRecent:Boolean=false):List<Pair<String,String>> {
   fun tokens(value:String):Set<String> = Regex("[\\p{L}\\p{M}\\p{N}]+").findAll(RomanianLexicon.normalize(value.take(2000))).map{it.value}.filter{it.length>=4}.take(80).toSet()
   val query=tokens(question)
   if(query.isEmpty())return emptyList()
   val expanded=query.flatMap{word->RomanianLexicon.grammarMatches(word).take(3).map{RomanianLexicon.normalize(it.lemma)} + word}.toSet()
-  val pairs=history.dropLast(minOf(6,history.size)).zipWithNext().filter{it.first.first=="user" && it.second.first=="assistant"}
+  val pairs=(if(includeRecent)history.toList() else history.dropLast(minOf(6,history.size))).zipWithNext().filter{it.first.first=="user" && it.second.first=="assistant"}
   val documents=pairs.map{tokens(it.first.second)}
+  val vector=lexicalVector(question)
   val frequency=documents.flatten().groupingBy{it}.eachCount()
   return pairs.mapIndexed{index,pair->
    val words=documents[index]
    val exact=query.intersect(words)
    val related=expanded.intersect(words)-exact
-   val score=exact.sumOf{1.0+kotlin.math.ln((documents.size+1.0)/((frequency[it]?:0)+1.0))}+related.size*0.65
+   val score=exact.sumOf{1.0+kotlin.math.ln((documents.size+1.0)/((frequency[it]?:0)+1.0))}+related.size*0.65+2.0*lexicalCosine(vector,lexicalVector(pair.first.second))
    Triple(score,index,pair.first.second.take(200) to pair.second.second.take(280))
   }.filter{it.first>=1.8}.sortedWith(compareByDescending<Triple<Double,Int,Pair<String,String>>>{it.first}.thenByDescending{it.second}).take(limit).map{it.third}
  }
