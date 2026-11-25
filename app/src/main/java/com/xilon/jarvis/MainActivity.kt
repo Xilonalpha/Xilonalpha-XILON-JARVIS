@@ -348,7 +348,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      append(translation ?: "Traducere indisponibilă în dicționarul local.")
      return@setOnClickListener
     }
-    if(RomanianLexicon.negated(q) || (RegistryIntent.compound(q) && RomanianLexicon.split(q).any{RomanianLexicon.negated(it)})){
+    if(RomanianLexicon.negated(q) || RomanianLexicon.split(q).any{RomanianLexicon.negated(it)}){
      append("Comandă cu negație: nu execut acțiuni.")
      return@setOnClickListener
     }
@@ -401,7 +401,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val streamingBubble=messageBubble("JARVIS: …")
      nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { streamingBubble.text="JARVIS: "+partial; scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
      worker.execute {
-      val answer=try { nativeModel?.let { model ->
+      val lexicalHint=runCatching {
+       if(q.length > 160 || q.contains('?') || RegistryIntent.compound(q) || RomanianLexicon.negated(q)) null
+       else {
+        val suggestions=RomanianLexicon.spellingSuggestions(q).distinct().take(5)
+        // Only exact registered command corrections, never automatic dispatch.
+        if(suggestions.isEmpty()) null else "Nu am identificat sigur comanda. Ai vrut să spui: "+suggestions.joinToString(" / ")+"? Scrie comanda dorită. Nu am executat nicio acțiune."
+       }
+      }.getOrNull()
+      val answer=lexicalHint ?: try { nativeModel?.let { model ->
        val info=android.app.ActivityManager.MemoryInfo()
        getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
        val mib=info.availMem/1048576
