@@ -61,6 +61,13 @@ jobs:
               raise SystemExit("Incomplete Romanian corpus")
           print(f"Validated {len(words)} distinct Romanian words")
           PY
+      - name: Compress validated corpus before Android packaging
+        run: |
+          set -euo pipefail
+          dest=app/src/main/assets/ro_wiktionary
+          gzip -n -6 "$dest/lexicon.jsonl"
+          gzip -t "$dest/lexicon.jsonl.gz"
+          ls -lh "$dest/lexicon.jsonl.gz"
       - run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
