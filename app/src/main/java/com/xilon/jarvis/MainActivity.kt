@@ -424,10 +424,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val result=runCatching{
      val temp=java.io.File.createTempFile("hand-", ".part",filesDir)
      try{
-      val digest=java.security.MessageDigest.getInstance("SHA-256")
-      contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=7819105L);digest.update(buf,0,n);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
-      require(temp.length()==7819105L){"Dimensiune incorectă"}
-      require(digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}=="fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"){"SHA-256 diferit"}
+      contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=7819105L);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
+      ModelIntegrity.verify(temp.inputStream(),"fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L)
       check(temp.renameTo(target));"Model gesturi instalat, SHA-256 verificat. Testează Air Touch."
      }finally{temp.delete()}
     }.getOrElse{"Instalare eșuată: "+it.message}
