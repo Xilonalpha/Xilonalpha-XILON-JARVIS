@@ -61,6 +61,7 @@ object RomanianLexicon {
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean {
   val key = normalize(clean(text))
+  if (Regex("\\b(?:dar|insa|totusi|ci)\\s+(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(key)) return true
   return Regex("^(?:nu|sa nu|niciodata|fara sa|mai bine nu|te rog nu|as prefera sa nu|nu vreau sa|nu trebuie sa)\\b").containsMatchIn(key)
  }
  data class LanguageReview(val original: String, val normalized: String, val blocked: Boolean,
@@ -533,7 +534,7 @@ object RomanianLexicon {
  fun grammarReport(text: String): List<String> =
   Regex("[\\p{L}\\p{M}]+").findAll(text.take(500)).map { it.value }.distinct().take(24).mapNotNull { word ->
    val matches = grammarMatches(word)
-   if (matches.isEmpty()) null else word + ": " + matches.take(4).joinToString(" / ") { it.lemma + " [" + (listOf(it.partOfSpeech) + it.tags).filter { tag -> tag.isNotBlank() }.joinToString(", ") + "]" }
+   if (matches.isEmpty()) morphologicalRoots(word).takeIf { it.isNotEmpty() }?.let { word + ": rădăcini posibile " + it.take(4).joinToString(" / ") } else word + ": " + matches.take(4).joinToString(" / ") { it.lemma + " [" + (listOf(it.partOfSpeech) + it.tags).filter { tag -> tag.isNotBlank() }.joinToString(", ") + "]" }
   }.toList()
  fun englishDefinitions(word: String): List<String> {
   if (definitionsState != "ready" || word.length !in 1..160) return emptyList()
@@ -562,8 +563,42 @@ object RomanianLexicon {
   val key = normalize(text)
   return reverseGlossary[key] ?: romanianDefinitionMatches(text).takeIf { it.isNotEmpty() }?.joinToString(" / ")?.let { "Potriviri lexicale RO: " + it }
  }
- fun split(text: String): List<String> = clean(text).split(Regex("\\s+(?:și|si|apoi|după aceea|dupa aceea)\\s+|;\\s*", RegexOption.IGNORE_CASE)).map { it.trim() }.filter { it.isNotEmpty() }
+ // Preserve quoted arguments and split only outside quotation marks.
+ private val separators = Regex("\\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\\s+|;\\s*", RegexOption.IGNORE_CASE)
+ fun split(text: String): List<String> {
+  val source = clean(text)
+  val parts = ArrayList<String>()
+  var quote: Char? = null
+  var start = 0
+  var i = 0
+  while (i < source.length) {
+   val ch = source[i]
+   if (quote != null) {
+    if (ch == quote && (i == 0 || source[i-1] != '\\')) quote = null
+   } else if (ch == '"' || ch == '„' || ch == '“' || ch == '«') {
+    quote = when(ch) { '„' -> '”'; '“' -> '”'; '«' -> '»'; else -> '"' }
+   } else {
+    val match = separators.matchAt(source,i)
+    if (match != null) {
+     parts.add(source.substring(start,i).trim())
+     i = match.range.last + 1
+     start = i
+     continue
+    }
+   }
+   i++
+  }
+  parts.add(source.substring(start).trim())
+  return parts.filter { it.isNotEmpty() }
+ }
+ data class ClauseAnalysis(val text: String, val negated: Boolean, val recognized: Boolean, val grammar: List<String>)
+ fun analyzeClauses(text: String): List<ClauseAnalysis> =
+  split(text.take(2000)).take(20).map { clause ->
+   val blocked = negated(clause)
+   ClauseAnalysis(clause,blocked,!blocked && parse(clause)!=null,grammarReport(clause))
+  }
  fun compoundPlan(text: String): List<PlannedAction>? {
+  if (text.length > 2000 || text.count { it == '"' } % 2 != 0) return null
   val parts = split(text)
   if (parts.size !in 2..20 || parts.any { negated(it) }) return null
   return parts.map { parse(it) ?: NaturalToolCommands.parse(it) ?: return null }
