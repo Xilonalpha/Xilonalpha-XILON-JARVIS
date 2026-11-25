@@ -223,3 +223,30 @@ class ListAppsTool : Tool(
         return ToolResult.ok("${apps.size} visible launchable apps.", Verification.VERIFIED, detail = det + if (apps.size > 25) " …" else "")
     }
 }
+
+class CreateCalendarEventTool : Tool(
+    ToolSpec(
+        "create_calendar_event", "Create a calendar event.",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("title", "string", true, "event title"),
+            com.jarvis.mobile.core.tools.ParamSpec("startEpochMs", "int", true, "start time (epoch ms)"),
+            com.jarvis.mobile.core.tools.ParamSpec("durationMin", "int", false, "duration minutes (default 30)"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+    ),
+) {
+    override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
+        val context = com.xilon.jarvis.ToolEnvironment.context
+        val title = T.str(args,"title") ?: return ToolResult.fail("Missing title")
+        val start = (args["startEpochMs"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: return ToolResult.fail("Invalid epoch milliseconds")
+        val duration = (T.int(args,"durationMin") ?: 30).coerceIn(5,720)
+        if(start <= 0 || start > Long.MAX_VALUE-duration*60000L) return ToolResult.fail("Invalid start")
+        val intent = android.content.Intent(android.content.Intent.ACTION_INSERT, android.provider.CalendarContract.Events.CONTENT_URI)
+            .putExtra(android.provider.CalendarContract.Events.TITLE,title)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME,start)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME,start+duration*60000L)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try { context.startActivity(intent); ToolResult.ok("Calendar editor opened; save the event to complete.",Verification.UNVERIFIED) }
+        catch(e:Exception){ ToolResult.fail("Calendar editor unavailable") }
+    }
+}
