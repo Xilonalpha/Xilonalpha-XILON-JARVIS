@@ -243,7 +243,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   for(i in 0 until actions.childCount){val v=actions.getChildAt(i);v.layoutParams=LinearLayout.LayoutParams(dp(44),dp(48));if(v is Button){v.minWidth=0;v.minimumWidth=0;v.setPadding(0,0,0,0);v.background=null;v.setTextColor(cyan);v.textSize=20f;v.text="";v.setCompoundDrawablesWithIntrinsicBounds(OmegaIcon(listOf("mic","send","stop")[i],dp(24),cyan),null,null,null);v.setPadding(dp(10),0,0,0)}}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("OMEGA Model Center","Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -418,6 +418,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
     .setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
     .setNegativeButton("Închide",null).show()
   }})
+  val catalogLabels=listOf("Catalog Hugging Face","Catalog voce Sherpa","Catalog Hey Jarvis","Catalog Kokoro","Catalog gesturi","Catalog OCR")
+  val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
+  settings.addView(Button(this).apply{text="OMEGA Model Center";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val memory=android.app.ActivityManager.MemoryInfo()
+   (getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
+   val available=memory.availMem/1048576
+   val total=memory.totalMem/1048576
+   val recommendation=if(memory.lowMemory || available<1600)"SmolLM2 360M (verifică memoria înainte de încărcare)" else "Qwen 2.5 1.5B sau SmolLM2"
+   val labels=catalogLabels.filter{catalogButtons.containsKey(it)}
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center")
+    .setItems(labels.toTypedArray()){_,index->catalogButtons[labels[index]]?.performClick()}
+    .setNeutralButton("Resurse"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setTitle("Resurse reale").setMessage("RAM disponibilă: "+available+" MiB / "+total+" MiB\nSpațiu intern: "+filesDir.usableSpace/1048576+" MiB\nRecomandare orientativă: "+recommendation).setPositiveButton("OK",null).show()}
+    .setNegativeButton("Închide",null).show()
+  }})
   var currentPage="Chat"
   settings.addView(Button(this).apply{text="Actualizează starea";setOnClickListener{navigate(currentPage)}})
 
@@ -437,7 +452,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    settingsScroll.visibility=if(page=="Chat")android.view.View.GONE else android.view.View.VISIBLE
    for(i in 0 until settings.childCount){
     val v=settings.getChildAt(i);val label=(v as? TextView)?.text?.toString()
-    v.visibility=if(v===panelTitle || v===panelInfo || page=="Setări" || page=="AI" && (label in aiControls || label=="Actualizează starea" || label=="Microfon neuronal Sherpa" || label=="Testează Kokoro (engleză)" || label?.startsWith("Voce neuronală EN:")==true) || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
+    v.visibility=if(label in catalogLabels)android.view.View.GONE else if(v===panelTitle || v===panelInfo || page=="Setări" || page=="AI" && (label in aiControls || label=="Actualizează starea" || label=="Microfon neuronal Sherpa" || label=="Testează Kokoro (engleză)" || label?.startsWith("Voce neuronală EN:")==true) || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
    }
   }
   for(page in listOf("Chat","AI","Agenți","Setări")){
