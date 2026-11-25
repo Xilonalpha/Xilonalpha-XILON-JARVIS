@@ -53,6 +53,7 @@ object RomanianLexicon {
    indexState = "idle"
   }
   warmUp()
+  initializeDefinitions(context.applicationContext)
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean {
@@ -68,7 +69,7 @@ object RomanianLexicon {
   return LanguageReview(text, normalize(text), blocked,
    if (blocked) emptyList() else (spellingSuggestions(text) + lexical).distinct().take(12),
    if (blocked) emptyList() else suggestedPhrases(text),
-   translateKnown(text) ?: translateReverse(text), dictionaryStatus())
+   translateKnown(text) ?: translateReverse(text) ?: englishDefinitions(text).takeIf { it.isNotEmpty() }?.joinToString(" / ")?.let { "Definiții EN: " + it }, dictionaryStatus())
  }
  fun reviewAsync(text: String, callback: (LanguageReview) -> Unit) {
   worker.execute {
@@ -350,6 +351,69 @@ object RomanianLexicon {
     }
    }
    result.toList()
+  }
+ }
+ // Optional imported Wiktionary JSONL, indexed separately from command translations.
+ @Volatile private var definitionsDb: android.database.sqlite.SQLiteDatabase? = null
+ @Volatile private var definitionsState = "not_initialized"
+ fun definitionsStatus(): String = definitionsState
+ private fun initializeDefinitions(context: Context) {
+  definitionsState = "building"
+  worker.execute {
+   var db: android.database.sqlite.SQLiteDatabase? = null
+   try {
+    val input = context.assets.open("ro_wiktionary/lexicon.jsonl")
+    input.bufferedReader(Charsets.UTF_8).useLines { lines ->
+     val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
+      java.io.File(context.noBackupFilesDir,"romanian-definitions-v1.db"),null)
+     db = opened
+     if (opened.version != 1) {
+      opened.beginTransaction()
+      try {
+       opened.execSQL("CREATE TABLE IF NOT EXISTS definitions(key TEXT, lemma TEXT, gloss TEXT, PRIMARY KEY(key,lemma,gloss))")
+       val insert = opened.compileStatement("INSERT OR IGNORE INTO definitions VALUES (?,?,?)")
+       var count = 0
+       try {
+        for (line in lines) {
+         val row = Json.parseToJsonElement(line).jsonObject
+         val lemma = row.getValue("word").jsonPrimitive.content
+         val glosses = row.getValue("english_glosses").jsonArray.map { it.jsonPrimitive.content }
+         val forms = row.getValue("forms").jsonArray.map { it.jsonPrimitive.content }
+         for (form in (listOf(lemma) + forms).distinct()) {
+          for (gloss in glosses) {
+           insert.bindString(1,normalize(form)); insert.bindString(2,lemma)
+           insert.bindString(3,gloss); insert.executeInsert()
+          }
+         }
+         count++
+        }
+       } finally { insert.close() }
+       check(count >= 10000)
+       opened.version = 1
+       opened.setTransactionSuccessful()
+      } finally { opened.endTransaction() }
+     }
+     synchronized(this) {
+      definitionsDb?.close()
+      definitionsDb = opened
+      definitionsState = "ready"
+     }
+    }
+   } catch (_: Exception) {
+    db?.close()
+    definitionsState = "unavailable"
+   }
+  }
+ }
+ fun englishDefinitions(word: String): List<String> {
+  if (definitionsState != "ready" || word.length !in 1..160) return emptyList()
+  return synchronized(this) {
+   val db = definitionsDb ?: return@synchronized emptyList()
+   db.rawQuery("SELECT DISTINCT gloss FROM definitions WHERE key=? ORDER BY gloss LIMIT 12",arrayOf(normalize(word))).use { cursor ->
+    val result = ArrayList<String>()
+    while (cursor.moveToNext()) result.add(cursor.getString(0))
+    result
+   }
   }
  }
  fun translateReverse(text: String): String? {
