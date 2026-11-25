@@ -38,7 +38,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   int written=llama_chat_apply_template(tmpl,chat.data(),chat.size(),true,formatted.data(),formatted.size());
   if(written<0 || written>size){fail(e,"Chat formatting failed");return nullptr;}
   input.assign(formatted.data(),written);
- }else{input=body.back();}
+ }else{
+  for(int i=0;i<count;i++){input+=role[i]+": "+body[i]+"\n";}
+  input+="assistant: ";
+ }
 
  std::vector<llama_token> tokens(input.size()+16);
  int n=llama_tokenize(v,input.data(),input.size(),tokens.data(),tokens.size(),true,tmpl!=nullptr);
@@ -67,8 +70,9 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   if(llama_decode(ctx,batch)!=0){ok=false;break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
-  char piece[1024];int len=llama_token_to_piece(v,t,piece,sizeof(piece),0,false);
-  if(len<0){ok=false;break;}out.append(piece,len);
+  std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
+  if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
+  if(len<0){ok=false;break;}out.append(piece.data(),len);
   e->CallVoidMethod(self,tokenEvent);if(e->ExceptionCheck()){ok=false;break;}
   auto partial=e->NewByteArray(out.size());
   if(!partial){ok=false;break;}
