@@ -232,6 +232,28 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
+  settings.addView(Button(this).apply { text="Captură ecran și OCR local";setOnClickListener {
+   if(busy)return@setOnClickListener
+   if(!LocalScreen.connected()){append("Activează accesibilitatea pentru captură.");return@setOnClickListener}
+   append("Deschide ecranul dorit în 5 secunde. Captura este procesată local.")
+   screenHandler.postDelayed({
+    if(!isDestroyed && !busy) LocalScreen.capture { bitmap,error ->
+     if(bitmap==null){append(error?:"Captură indisponibilă.");return@capture}
+     busy=true
+     worker.execute {
+      val result=runCatching { try { LocalOcr.readBitmap(this@MainActivity,bitmap) } finally { bitmap.recycle() } }
+      runOnUiThread { if(!isDestroyed) {
+       busy=false
+       result.onSuccess { extracted ->
+        ocrText=extracted.take(12000)
+        ocrAt=android.os.SystemClock.elapsedRealtime()
+        append(if(extracted.isBlank())"OCR: nu s-a detectat text." else "OCR din ecran disponibil 2 minute: "+extracted.take(1500))
+       }.onFailure { append("OCR indisponibil: "+it.message) }
+      } }
+     }
+    }
+   },5000)
+  } })
   actions.addView(composerIcon("send","Trimite").apply { background=rounded(0xff225c80.toInt(),24);sendControl=this; setOnClickListener {
    val q = input.text.toString().trim()
    if(q.isNotEmpty() && !busy) {
