@@ -28,6 +28,7 @@ object RomanianLexicon {
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
   entries = map.toMap()
   corpusAssets = context.applicationContext.assets
+  synchronized(this) { synonymCache.clear(); corpus = null }
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
@@ -98,6 +99,47 @@ object RomanianLexicon {
   if (first.length < 5 || dictionaryContains(first)) return null
   val candidates = verbs.distinct().filter { oneEdit(normalize(first), it) && dictionaryContains(it) }
   return candidates.singleOrNull()
+ }
+ private val synonymCache = object : LinkedHashMap<String, List<String>>(64, 0.75f, true) {
+  override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean = size > 64
+ }
+ @Synchronized fun synonyms(word: String): List<String> {
+  val key = normalize(word)
+  if (key.isBlank() || key.length > 80) return emptyList()
+  synonymCache[key]?.let { return it }
+  val assets = corpusAssets ?: return emptyList()
+  val result = linkedSetOf<String>()
+  try {
+   assets.open("ro_hunspell/th_ro_RO_v2.dat").bufferedReader(Charsets.UTF_8).use { reader ->
+    val encoding = reader.readLine()?.trim()?.removePrefix("\uFEFF") ?: return emptyList()
+    if (!encoding.equals("UTF-8", true)) return emptyList()
+    while (true) {
+     val header = reader.readLine() ?: break
+     val count = header.substringAfterLast('|').toIntOrNull() ?: continue
+     if (count !in 0..1000) break
+     val matches = normalize(header.substringBefore('|')) == key
+     repeat(count) {
+      val line = reader.readLine() ?: return emptyList()
+      if (matches) line.split('|').drop(1).forEach { value ->
+       val term = value.trim()
+       if (term.isNotEmpty() && normalize(term) != key && result.size < 64) result.add(term)
+      }
+     }
+     if (matches) break
+    }
+   }
+  } catch (_: java.io.IOException) { return emptyList() }
+  return result.toList().also { synonymCache[key] = it }
+ }
+ // Synonyms are suggestions only: never silently execute a different action.
+ fun suggestedPhrases(text: String): List<String> {
+  if (negated(text) || split(text).size != 1) return emptyList()
+  val cleaned = normalize(canonicalCommand(text))
+  if (entries.containsKey(cleaned)) return emptyList()
+  val first = cleaned.substringBefore(' ')
+  val tail = cleaned.removePrefix(first)
+  return synonyms(first).map { normalize(it) + tail }
+   .filter { entries.containsKey(it) }.distinct().take(8)
  }
  private val typos = mapOf("deschde" to "deschide", "deshide" to "deschide",
   "pornste" to "porneste", "oprestee" to "opreste", "setaza" to "seteaza",
