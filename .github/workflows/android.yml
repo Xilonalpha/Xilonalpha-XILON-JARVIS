@@ -93,6 +93,18 @@ jobs:
           name: xilon-jarvis-vlm-debug
           path: vlm-apk/*.apk
           if-no-files-found: error
+      - name: Install Vulkan build dependencies
+        run: sudo apt-get update && sudo apt-get install -y glslc libvulkan-dev
+      - name: Build Vulkan and VLM APK
+        run: |
+          gradle :app:assembleDebug -PenableVlm=true -PenableVulkan=true --stacktrace
+          mkdir -p vulkan-apk
+          cp app/build/outputs/apk/debug/*.apk vulkan-apk/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xilon-jarvis-vulkan-vlm-debug
+          path: vulkan-apk/*.apk
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -20,7 +20,10 @@ object RegistryAgentEngine {
    val currentInvalid=ToolEnvironment.validate(action.tool,action.args)
    if(currentInvalid!=null)return Outcome("INVALID_PLAN",steps.toList(),plan.drop(index),currentInvalid.message)
    if(!confirm(action))return Outcome("STOPPED",steps.toList(),plan.drop(index))
+   coroutineContext.ensureActive()
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
+   val afterConfirmation=ToolEnvironment.validate(action.tool,action.args)
+   if(afterConfirmation!=null)return Outcome("INVALID_PLAN",steps.toList(),plan.drop(index),afterConfirmation.message)
    val result=try { kotlinx.coroutines.withTimeoutOrNull(45000L){ToolEnvironment.execute(action.tool,action.args,false)} ?: return Outcome("EXECUTION_UNKNOWN",steps.toList(),plan.drop(index+1),"Timp depășit; efectul acțiunii este necunoscut. Nu relua automat.") }
    catch(e:CancellationException){throw e}
    catch(e:Exception){return Outcome("EXECUTION_UNKNOWN",steps.toList(),plan.drop(index+1),"Rezultatul pasului ${index+1} (${action.tool}) este necunoscut: ${e.javaClass.simpleName}. Nu relua automat.")}

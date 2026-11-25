@@ -9,6 +9,7 @@ import com.jarvis.ai.gesture.GestureEngine
 import com.jarvis.ai.gesture.GestureCursorView
 class AirTouchController(private val context:Context,private val owner:LifecycleOwner,private val cursor:GestureCursorView,private val status:(String)->Unit,private val onFailure:()->Unit,private val onObservation:((String)->Unit)?=null){
  private val worker=java.util.concurrent.Executors.newSingleThreadExecutor()
+ private val started=java.util.concurrent.atomic.AtomicBoolean(false)
  private var lastVision=0L
  private var lastOcr=0L
  private val tracker=SceneTracker()
@@ -18,6 +19,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
  private val failed=java.util.concurrent.atomic.AtomicBoolean(false)
  private val engine=GestureEngine(context,{if(!closed && !failed.get())cursor.update(it)},{message->if(!closed && failed.compareAndSet(false,true))ContextCompat.getMainExecutor(context).execute{if(!closed){status("Air Touch oprit: "+message);close();onFailure()}}})
  fun start(){
+  if(closed || !started.compareAndSet(false,true))return
   cursor.setTracking(true)
   worker.execute{
    val result=runCatching{engine.initialize()}
@@ -58,6 +60,7 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
   val info=android.app.ActivityManager.MemoryInfo()
   manager.getMemoryInfo(info)
   val thermal=if(android.os.Build.VERSION.SDK_INT>=29)context.getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
+  if(!ResourceBudget.allowOptionalVision(info.availMem/1048576,info.lowMemory,thermal))return Long.MAX_VALUE
   return ResourceBudget.visionInterval(info.availMem/1048576,info.lowMemory,thermal,context.getSystemService(android.os.PowerManager::class.java).isPowerSaveMode)
  }
  fun close(){
