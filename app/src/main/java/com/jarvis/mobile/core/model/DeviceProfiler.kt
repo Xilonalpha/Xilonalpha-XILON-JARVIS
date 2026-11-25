@@ -37,7 +37,7 @@ class DeviceProfiler(private val context: Context) {
         am.getMemoryInfo(mem)
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            when (pm.getCurrentThermalStatus()) {
+            when (pm.currentThermalStatus) {
                 0 -> "none"; 1 -> "light"; 2 -> "moderate"; 3 -> "severe"; else -> "critical"
             }
         } else "unknown"

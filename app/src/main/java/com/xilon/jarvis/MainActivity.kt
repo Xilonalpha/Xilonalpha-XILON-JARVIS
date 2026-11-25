@@ -58,6 +58,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var autoVoiceSend=false
  private var continuousVoice=false
  private var voiceInterrupt=false
+ private val echoGate=VoiceEchoGate()
+ private var voiceEndedAt=0L
  private var liveVision:LiveVisionController?=null
  private fun stopLiveVision(){liveVision?.close();liveVision=null}
  private fun startLiveVision(){
@@ -70,8 +72,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!busy && !omegaCore.listening && wake==null){
-   if(!omegaCore.speaking)startMicrophone()
-   else if(voiceInterrupt)listening.listen({text->if(conversationForeground){voice.stop();acceptVoice(text)}},{error->if(conversationForeground)modelStatus.text=error})
+   if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=800L)startMicrophone()}
+   else if(voiceInterrupt)listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){voice.stop();append("Răspuns vocal întrerupt.")}},{_->})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,2500L)
  }}
@@ -156,9 +158,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   activityStatus=TextView(this).apply{text="Sistem local • În așteptare";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)}
   corePanel.addView(activityStatus)
   listening.onLevel={level->omegaCore.level=level}
-  listening.onSpeechStart={if(voiceInterrupt && continuousVoice && omegaCore.speaking)voice.stop()}
+  listening.onSpeechStart={}
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
-  voice.onSpeaking={enabled->omegaCore.speaking=enabled;refreshOmegaStatus()}
+  voice.onSpeaking={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
@@ -451,6 +453,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val report=listOf("RAM: "+info.availMem/1048576+" MiB din "+info.totalMem/1048576+" MiB","Memorie redusă: "+info.lowMemory,"Stocare disponibilă: "+StatFs(filesDir.path).availableBytes/1048576+" MiB","Baterie: "+(if(battery in 0..100)battery.toString()+"%" else "indisponibilă"),"Rețea validată: "+connected,"GGUF încărcat: "+(nativeModel!=null),"Profil: "+com.jarvis.mobile.core.model.DeviceProfiler(this@MainActivity).profile().toString()).joinToString("\n")
      append(report);return@setOnClickListener
     }
+    if(normalizedRomanian=="profil dispozitiv"){
+     val p=com.jarvis.mobile.core.model.DeviceProfiler(this).profile()
+     append("Profil local: "+p.model+" | "+p.deviceClass+" | RAM disponibil: "+p.availRamGb+" GB | CPU: "+p.cores+" | temperatură: "+p.thermalStatus+" | stocare: "+p.storageFreeGb+" GB");return@setOnClickListener
+    }
     if(normalizedRomanian=="stare agent"){
      append("Agent ocupat: "+busy+"\nOprire solicitată: "+agentCancelled+"\nPași suspendați în memorie: "+pendingRegistry.size+"\n"+previewStatus());return@setOnClickListener
     }
@@ -734,7 +740,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
-  settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală experimentală (poate capta ecoul)";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
@@ -1204,6 +1210,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun speakReply(text:String,manual:Boolean=false){
+  echoGate.remember(text)
   if((!manual && !speakReplies && !continuousVoice) || text.isBlank())return
   val neural=kokoroVoice
   if(!continuousVoice && englishNeuralVoice && neural!=null && neural.installed()){

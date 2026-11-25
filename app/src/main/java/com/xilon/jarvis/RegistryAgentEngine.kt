@@ -19,7 +19,7 @@ object RegistryAgentEngine {
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
    if(!confirm(action))return Outcome("STOPPED",steps.toList(),plan.drop(index))
    if(cancelled())return Outcome("STOPPED",steps.toList(),plan.drop(index))
-   val result=try { ToolEnvironment.execute(action.tool,action.args,false) }
+   val result=try { kotlinx.coroutines.withTimeoutOrNull(45000L){ToolEnvironment.execute(action.tool,action.args,false)} ?: return Outcome("EXECUTION_UNKNOWN",steps.toList(),plan.drop(index+1),"Timp depășit; efectul acțiunii este necunoscut. Nu relua automat.") }
    catch(e:CancellationException){throw e}
    catch(e:Exception){return Outcome("EXECUTION_UNKNOWN",steps.toList(),plan.drop(index+1),"Rezultatul pasului ${index+1} (${action.tool}) este necunoscut: ${e.javaClass.simpleName}. Nu relua automat.")}
    if(result.status==ToolStatus.REQUIRES_CONFIRMATION)return Outcome("REQUIRES_CONFIRMATION",steps.toList(),plan.drop(index),result.message)
