@@ -12,6 +12,24 @@ class LocalScreen:AccessibilityService(){
   internal fun service():LocalScreen?=active
   fun connected():Boolean=active!=null
   fun snapshot():String?=active?.readScreen()
+  fun capture(onResult:(android.graphics.Bitmap?,String?)->Unit) {
+   val svc=active
+   if(svc==null){onResult(null,"Serviciul de accesibilitate nu este activ.");return}
+   if(android.os.Build.VERSION.SDK_INT<30){onResult(null,"Captura necesită Android 11 sau mai nou.");return}
+   svc.takeScreenshot(android.view.Display.DEFAULT_DISPLAY,svc.mainExecutor,object:AccessibilityService.TakeScreenshotCallback {
+    override fun onSuccess(result:AccessibilityService.ScreenshotResult) {
+     var bitmap:android.graphics.Bitmap?=null
+     try {
+      val buffer=result.hardwareBuffer
+      try {
+       bitmap=android.graphics.Bitmap.wrapHardwareBuffer(buffer,result.colorSpace)?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
+      } finally {buffer.close()}
+      onResult(bitmap,if(bitmap==null)"Captura nu poate fi decodificată." else null)
+     } catch(e:Exception){bitmap?.recycle();onResult(null,"Captură eșuată: "+e.javaClass.simpleName)}
+    }
+    override fun onFailure(errorCode:Int){onResult(null,"Android a refuzat captura (cod "+errorCode+").")}
+   })
+  }
   internal fun clickConfirmed(target:ElementTarget):Boolean=active?.clickExact(target)?:false
   fun observe():ScreenObservation?=active?.structuredScreen()
   fun resolve(target:ElementTarget):ScreenElement? { val svc=active?:return null;val obs=svc.structuredScreen()?:return null;if(target.pkg!=null&&target.pkg!=obs.packageName)return null;return ElementResolver.resolve(obs,target,svc.resources.displayMetrics.widthPixels,svc.resources.displayMetrics.heightPixels) }
