@@ -10,8 +10,8 @@ class ModelDownloads(private val context:Context){
   require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+listOf(ModelCatalog.hand,ModelCatalog.kokoro)))
   check(!prefs.contains(entry.file)){"Există deja o descărcare pentru acest model."}
   check(context.filesDir.usableSpace>=if(entry==ModelCatalog.kokoro) 1024L*1024*1024 else entry.mb*2000000L+200000000L){"Spațiu insuficient"}
-  val reference=if(entry.directUrl==null && entry!=ModelCatalog.hand)ModelMetadata.fetch(entry) else null
-  val url=if(reference!=null)entry.copy(revision=reference.revision).url else entry.url
+  val reference=if(entry==ModelCatalog.kokoro)ModelMetadata.kokoro() else if(entry.directUrl==null && entry!=ModelCatalog.hand)ModelMetadata.fetch(entry) else null
+  val url=if(reference!=null && entry.directUrl==null)entry.copy(revision=reference.revision).url else entry.url
   if(reference!=null)require(reference.bytes<= (context.filesDir.usableSpace-200000000L)/2){"Spațiu insuficient"}
   val id=dm.enqueue(DownloadManager.Request(Uri.parse(url)).setTitle(entry.name)
    .setAllowedOverMetered(false).setAllowedOverRoaming(false)
@@ -30,7 +30,7 @@ class ModelDownloads(private val context:Context){
   val bytes=prefs.getLong(entry.file+".bytes",-1)
   val algorithm=prefs.getString(entry.file+".algorithm","SHA-256")?:error("Algoritm absent")
   require(algorithm in setOf("SHA-256","git-blob-sha1"))
-  require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&revision.matches(Regex("[0-9a-f]{40}"))&&bytes>0)
+  require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&(if(entry==ModelCatalog.kokoro)revision.matches(Regex("asset-[0-9]+")) else revision.matches(Regex("[0-9a-f]{40}")))&&bytes>0)
   return ModelMetadata.Reference(hash,bytes,revision,algorithm)
  }
  fun id(entry:ModelCatalog.Entry)=prefs.getLong(entry.file,-1)
