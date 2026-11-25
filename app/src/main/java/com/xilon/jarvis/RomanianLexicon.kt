@@ -27,6 +27,7 @@ object RomanianLexicon {
   glossary = root.getValue("translations").jsonObject.mapValues { it.value.jsonPrimitive.content }
   verbs = root.getValue("verbs").jsonArray.map { normalize(it.jsonPrimitive.content) }
   entries = map.toMap()
+  corpusAssets = context.applicationContext.assets
  }
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean = Regex("^(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(normalize(clean(text)))
@@ -43,6 +44,61 @@ object RomanianLexicon {
   "reglezi" to "regleaza", "reglati" to "regleaza",
   "lansezi" to "lanseaza", "lansati" to "lanseaza"
  )
+ @Volatile private var corpusAssets: android.content.res.AssetManager? = null
+ private data class Rule(val prefix: Boolean, val flag: String, val strip: String, val add: String, val condition: Regex)
+ private class Corpus(val words: Map<String, String>, val rules: List<Rule>)
+ @Volatile private var corpus: Corpus? = null
+ @Synchronized private fun loadCorpus(): Corpus? {
+  corpus?.let { return it }
+  val assets = corpusAssets ?: return null
+  return try {
+   val words = HashMap<String, String>()
+   assets.open("ro_hunspell/ro_RO.dic").bufferedReader(Charsets.UTF_8).useLines { lines ->
+    lines.drop(1).forEach { line ->
+     val token = line.trim().substringBefore(' ').substringBefore('\t')
+     val word = token.substringBefore('/')
+     if (word.isNotEmpty()) words[word.lowercase(Locale.ROOT)] = token.substringAfter('/', "")
+    }
+   }
+   val rules = ArrayList<Rule>()
+   assets.open("ro_hunspell/ro_RO.aff").bufferedReader(Charsets.UTF_8).useLines { lines ->
+    lines.forEach { line ->
+     val p = line.trim().split(Regex("\\s+"))
+     if (p.size >= 5 && (p[0] == "PFX" || p[0] == "SFX")) {
+      val prefix = p[0] == "PFX"
+      val condition = runCatching { Regex(if (prefix) "^" + p[4] else p[4] + "$") }.getOrNull()
+      if (condition != null) rules.add(Rule(prefix, p[1], p[2].takeUnless { it == "0" } ?: "", p[3].substringBefore('/').takeUnless { it == "0" } ?: "", condition))
+     }
+    }
+   }
+   if (words.isEmpty()) null else Corpus(words, rules).also { corpus = it }
+  } catch (_: java.io.IOException) { null }
+ }
+ fun dictionaryContains(word: String): Boolean {
+  val c = loadCorpus() ?: return false
+  val w = word.lowercase(Locale.ROOT).replace('ş','ș').replace('ţ','ț')
+  if (c.words.containsKey(w)) return true
+  return c.rules.any { r ->
+   val stem = if (r.prefix && w.startsWith(r.add)) r.strip + w.removePrefix(r.add)
+    else if (!r.prefix && w.endsWith(r.add)) w.removeSuffix(r.add) + r.strip else return@any false
+   c.words[stem]?.contains(r.flag) == true && r.condition.containsMatchIn(stem)
+  }
+ }
+ private fun oneEdit(a: String, b: String): Boolean {
+  if (a == b || kotlin.math.abs(a.length - b.length) > 1) return false
+  if (a.length == b.length) {
+   val d = a.indices.filter { a[it] != b[it] }
+   return d.size == 1 || (d.size == 2 && d[1] == d[0]+1 && a[d[0]] == b[d[1]] && a[d[1]] == b[d[0]])
+  }
+  val longer = if (a.length > b.length) a else b
+  val shorter = if (a.length > b.length) b else a
+  return longer.indices.any { longer.removeRange(it,it+1) == shorter }
+ }
+ private fun correctVerb(first: String): String? {
+  if (first.length < 5 || dictionaryContains(first)) return null
+  val candidates = verbs.distinct().filter { oneEdit(normalize(first), it) && dictionaryContains(it) }
+  return candidates.singleOrNull()
+ }
  private val typos = mapOf("deschde" to "deschide", "deshide" to "deschide",
   "pornste" to "porneste", "oprestee" to "opreste", "setaza" to "seteaza",
   "catu a" to "cauta", "actveaza" to "activeaza", "dezactveaza" to "dezactiveaza")
@@ -50,7 +106,7 @@ object RomanianLexicon {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')
   val key = normalize(first)
-  val replacement = conjugations[key] ?: typos[key] ?: return cleaned
+  val replacement = conjugations[key] ?: typos[key] ?: correctVerb(first) ?: return cleaned
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {
