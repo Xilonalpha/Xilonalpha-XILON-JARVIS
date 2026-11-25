@@ -226,6 +226,31 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
+    if(q.equals("instrumente",true)){
+     append(com.jarvis.mobile.core.tools.ToolRegistry.catalogPrompt())
+     return@setOnClickListener
+    }
+    if(q.startsWith("instrument ",true)){
+     val raw=q.substringAfter(" ").trim()
+     val name=raw.substringBefore(" ")
+     val args=try{kotlinx.serialization.json.Json.parseToJsonElement(raw.substringAfter(" ","{}")) as kotlinx.serialization.json.JsonObject}catch(e:Exception){append("Argumente JSON invalide.");return@setOnClickListener}
+     if(com.jarvis.mobile.core.tools.ToolRegistry.get(name)==null){append("Instrument necunoscut.");return@setOnClickListener}
+     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Execută instrumentul")
+      .setMessage(name+"\n"+args.toString())
+      .setNegativeButton("Anulează",null)
+      .setPositiveButton("Execută"){_,_->
+       if(!busy){
+        busy=true;refreshOmegaStatus()
+        worker.execute{
+         val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,true)}}.fold(
+          {it.status.toString()+" / "+it.verified+"\n"+it.message},
+          {"Execuție eșuată: "+it.javaClass.simpleName})
+         runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append("JARVIS: "+result)}}
+        }
+       }
+      }.show()
+     return@setOnClickListener
+    }
     if(q.startsWith("planifică ",true)){
      val model=nativeModel
      if(model==null){append("Încarcă un model GGUF.");return@setOnClickListener}
