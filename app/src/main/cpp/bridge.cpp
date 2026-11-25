@@ -13,7 +13,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
  return reinterpret_cast<jlong>(m);
 }
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){llama_model_free(reinterpret_cast<llama_model*>(h));}
-extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens){
+extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
  auto* m=reinterpret_cast<llama_model*>(h); auto* v=llama_model_get_vocab(m);
  const int count=e->GetArrayLength(messages);
  if(count<1 || count!=e->GetArrayLength(roles)){fail(e,"Invalid conversation");return nullptr;}
@@ -45,7 +45,17 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(n<=0 || n>context-maxTokens){fail(e,"Prompt exceeds supported token budget");return nullptr;}
  auto cp=llama_context_default_params();cp.n_ctx=context;cp.n_batch=context;cp.n_threads=threads;cp.n_threads_batch=threads;
  auto* ctx=llama_init_from_model(m,cp);if(!ctx){fail(e,"Context allocation failed");return nullptr;}
- auto* sampler=llama_sampler_init_greedy();
+ auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
+ if(!sampler){llama_free(ctx);fail(e,"Sampler allocation failed");return nullptr;}
+ const char* rules=e->GetStringUTFChars(grammar,nullptr);
+ if(!rules){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
+ if(*rules){
+  auto* constrained=llama_sampler_init_grammar(v,rules,"root");
+  if(!constrained){e->ReleaseStringUTFChars(grammar,rules);llama_sampler_free(sampler);llama_free(ctx);fail(e,"Invalid grammar");return nullptr;}
+  llama_sampler_chain_add(sampler,constrained);
+ }
+ e->ReleaseStringUTFChars(grammar,rules);
+ llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
  std::string out;auto batch=llama_batch_get_one(tokens.data(),n);bool ok=true;
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");
  if(!cancel){llama_sampler_free(sampler);llama_free(ctx);return nullptr;}
