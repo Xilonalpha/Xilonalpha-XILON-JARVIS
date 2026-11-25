@@ -927,13 +927,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      busy=false;refreshOmegaStatus()
      if(agentCancelled||model.isCancelled())append("Planificare oprită.")
      else plan.fold({steps->
-      android.app.AlertDialog.Builder(this@MainActivity).setTitle("Verifică planul JARVIS")
-       .setMessage(steps.mapIndexed{i,a->"${i+1}. ${a.tool} ${a.args}"}.joinToString("\n"))
-       .setNegativeButton("Anulează",null)
-       .setPositiveButton("Execută"){_,_->
-        if(!busy && !agentCancelled && !isDestroyed)runRegistryPlan(steps)
-        else append("Planul nu a fost pornit: agent indisponibil sau oprit.")
-       }.show()
+      if(!busy && !agentCancelled && !isDestroyed)runRegistryPlan(steps)
+      else append("Planul nu a fost pornit.")
      },{append("Plan neexecutat: "+it.message)})
     }
    }
@@ -963,14 +958,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
     append(result.fold({"Stare: "+it.status+" ("+it.steps.size+"/"+steps.size+")\nPași rămași: "+it.remaining.size+(it.reason?.let{reason->"\nMotiv: "+reason}?:"")},{"Execuție eșuată: "+it.message}))}}
   }
  }
- private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject){
+ private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject,approved:Boolean=false){
   if(busy)return
   busy=true;refreshOmegaStatus()
   worker.execute{
-   val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,true)}}.fold(
-    {it.status.toString()+" / "+it.verified+"\n"+it.message+(it.detail?.let{d->"\n"+d}?:"")},
-    {"Execuție eșuată: "+it.javaClass.simpleName})
-   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append("JARVIS: "+result)}}
+   val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,approved)}}
+   runOnUiThread{if(!isDestroyed){
+    busy=false;refreshOmegaStatus()
+    result.fold({value->
+     if(value.status==com.jarvis.mobile.core.tools.ToolStatus.REQUIRES_CONFIRMATION && !approved){
+      android.app.AlertDialog.Builder(this).setTitle("Operațiune critică")
+       .setMessage(name+"\n"+args.toString())
+       .setPositiveButton("Confirmă"){_,_->if(!busy&&!isDestroyed)executeRequestedTool(name,args,true)}
+       .setNegativeButton("Anulează",null).show()
+     }else append("JARVIS: "+value.status+" / "+value.verified+"\n"+value.message+(value.detail?.let{"\n"+it}?:""))
+    },{append("Execuție eșuată: "+it.javaClass.simpleName)})
+   }}
   }
  }
  private fun executeAgentPlan(steps:List<String>){
