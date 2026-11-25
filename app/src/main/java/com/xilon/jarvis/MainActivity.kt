@@ -232,23 +232,23 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Observă aplicația peste 5 secunde";setOnClickListener{
    if(!busy){append("Deschide aplicația dorită în 5 secunde. Captura va fi locală.");screenHandler.removeCallbacksAndMessages(null);observedScreen=null;screenHandler.postDelayed({if(!isDestroyed){val observed=LocalScreen.snapshot();observedScreen=observed;observedAt=android.os.SystemClock.elapsedRealtime();append(if(observed==null)"Ecran indisponibil." else "Observație locală disponibilă pentru analiză timp de 2 minute.");screenHandler.postDelayed({observedScreen=null},120000);}},5000)}
   } })
-  settings.addView(Button(this).apply { text="Captură ecran și OCR local";setOnClickListener {
+  settings.addView(Button(this).apply { text="Captură ecran: OCR și analiză vizuală";setOnClickListener {
    if(busy)return@setOnClickListener
    if(!LocalScreen.connected()){append("Activează accesibilitatea pentru captură.");return@setOnClickListener}
    append("Deschide ecranul dorit în 5 secunde. Captura este procesată local.")
+   agentCancelled=false;screenHandler.removeCallbacksAndMessages(null);ocrText=null;visualObservation.clear()
    screenHandler.postDelayed({
     if(!isDestroyed && !busy) LocalScreen.capture { bitmap,error ->
      if(bitmap==null){append(error?:"Captură indisponibilă.");return@capture}
-     busy=true
+     if(isDestroyed || busy){bitmap.recycle();return@capture}
+     busy=true;refreshOmegaStatus()
      worker.execute {
-      val result=runCatching { try { LocalOcr.readBitmap(this@MainActivity,bitmap) } finally { bitmap.recycle() } }
+      val result=runCatching { try { LocalImageAnalysis.analyze(this@MainActivity,bitmap) } finally { bitmap.recycle() } }
       runOnUiThread { if(!isDestroyed) {
-       busy=false
-       result.onSuccess { extracted ->
-        ocrText=extracted.take(12000)
-        ocrAt=android.os.SystemClock.elapsedRealtime()
-        append(if(extracted.isBlank())"OCR: nu s-a detectat text." else "OCR din ecran disponibil 2 minute: "+extracted.take(1500))
-       }.onFailure { append("OCR indisponibil: "+it.message) }
+       busy=false;refreshOmegaStatus()
+       result.onSuccess { analysis ->
+        if(!agentCancelled){val now=android.os.SystemClock.elapsedRealtime();ocrText=analysis.text;ocrAt=now;visualObservation.put(analysis.vision,now);append(analysis.report())}
+       }.onFailure { append("Analiză indisponibilă: "+it.message) }
       } }
      }
     }
@@ -1713,11 +1713,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
    @Suppress("DEPRECATION")
    val bitmap=data?.extras?.get("data") as? android.graphics.Bitmap
    if(bitmap==null){append("Camera nu a returnat imaginea.");return}
-   busy=true
+   busy=true;agentCancelled=false;ocrText=null;visualObservation.clear();refreshOmegaStatus()
    worker.execute{
-    val result=try{LocalVision.describe(this,bitmap)+"\nOCR: "+runCatching{LocalOcr.readBitmap(this,bitmap)}.getOrElse{"indisponibil: "+it.message}.take(1500)}catch(e:Exception){"Analiză eșuată: "+e.message}
-    bitmap.recycle()
-    runOnUiThread{if(!isDestroyed){busy=false;visualObservation.put(result,android.os.SystemClock.elapsedRealtime());append(result)}}
+    val result=runCatching{try{LocalImageAnalysis.analyze(this,bitmap)}finally{bitmap.recycle()}}
+    runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();if(!agentCancelled)result.onSuccess{analysis->val now=android.os.SystemClock.elapsedRealtime();ocrText=analysis.text;ocrAt=now;visualObservation.put(analysis.vision,now);append(analysis.report())}.onFailure{append("Analiză eșuată: "+it.message)}}}
    };return
   }
   if(requestCode in 53..56){
