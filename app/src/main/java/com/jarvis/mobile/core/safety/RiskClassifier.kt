@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonObject
 /**
  * Action risk system (spec: HIGH-RISK ACTIONS).
  * - LOW tools run freely.
- * - MEDIUM tools require confirmation unless the user enabled auto-approve.
+ * - MEDIUM tools run without redundant confirmation.
  * - HIGH tools ALWAYS require confirmation (cannot be disabled).
  * Context escalation: typing into a messaging app is treated as message sending.
  */
@@ -27,7 +27,7 @@ object RiskClassifier {
 
         // Typing text inside a messaging app = sending a message.
         if (spec.name == "type_text" && messagingPackages.any { pkg.contains(it) }) {
-            risk = Risk.MEDIUM
+            risk = risk.coerceAtLeast(Risk.MEDIUM)
         }
         // Any interactive action inside a finance/purchase app is high risk.
         if (highRiskPackages.any { pkg.contains(it) } &&
@@ -36,13 +36,13 @@ object RiskClassifier {
             risk = Risk.HIGH
         }
         // Sensitive sharing.
-        if (spec.name in setOf("share_file", "share_content")) risk = risk.coerceAtLeast(Risk.MEDIUM)
+        if (spec.name in setOf("share_file", "share_content")) risk = risk.coerceAtLeast(Risk.HIGH)
         return risk
     }
 
     fun requiresConfirmation(risk: Risk, autoApproveMedium: Boolean): Boolean = when (risk) {
         Risk.LOW -> false
-        Risk.MEDIUM -> !autoApproveMedium
+        Risk.MEDIUM -> false
         Risk.HIGH -> true
     }
 
