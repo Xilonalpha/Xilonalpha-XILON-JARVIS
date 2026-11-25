@@ -365,9 +365,9 @@ object RomanianLexicon {
     val input = context.assets.open("ro_wiktionary/lexicon.jsonl")
     input.bufferedReader(Charsets.UTF_8).useLines { lines ->
      val opened = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(
-      java.io.File(context.noBackupFilesDir,"romanian-definitions-v1.db"),null)
+      java.io.File(context.noBackupFilesDir,"romanian-definitions-v2.db"),null)
      db = opened
-     if (opened.version != 1) {
+     if (opened.version != 2) {
       opened.beginTransaction()
       try {
        opened.execSQL("CREATE TABLE IF NOT EXISTS definitions(key TEXT, lemma TEXT, gloss TEXT, PRIMARY KEY(key,lemma,gloss))")
@@ -378,7 +378,7 @@ object RomanianLexicon {
          val row = Json.parseToJsonElement(line).jsonObject
          val lemma = row.getValue("word").jsonPrimitive.content
          val glosses = row.getValue("english_glosses").jsonArray.map { it.jsonPrimitive.content }
-         val forms = row.getValue("forms").jsonArray.map { it.jsonPrimitive.content }
+         val forms = row.getValue("forms").jsonArray.map { it.jsonPrimitive.content }.filter { it.isNotBlank() && it.length <= 160 }
          for (form in (listOf(lemma) + forms).distinct()) {
           for (gloss in glosses) {
            insert.bindString(1,normalize(form)); insert.bindString(2,lemma)
@@ -389,7 +389,8 @@ object RomanianLexicon {
         }
        } finally { insert.close() }
        check(count >= 10000)
-       opened.version = 1
+       opened.execSQL("CREATE INDEX IF NOT EXISTS definitions_gloss ON definitions(gloss COLLATE NOCASE,lemma)")
+       opened.version = 2
        opened.setTransactionSuccessful()
       } finally { opened.endTransaction() }
      }
@@ -416,9 +417,21 @@ object RomanianLexicon {
    }
   }
  }
+ // Reverse lookup is deliberately exact: definitions are not sentence translations.
+ fun romanianDefinitionMatches(english: String): List<String> {
+  if (definitionsState != "ready" || english.isBlank() || english.length > 160) return emptyList()
+  return synchronized(this) {
+   val db = definitionsDb ?: return@synchronized emptyList()
+   db.rawQuery("SELECT DISTINCT lemma FROM definitions WHERE gloss=? COLLATE NOCASE ORDER BY lemma LIMIT 12",arrayOf(english.trim())).use { cursor ->
+    val result = ArrayList<String>()
+    while (cursor.moveToNext()) result.add(cursor.getString(0))
+    result
+   }
+  }
+ }
  fun translateReverse(text: String): String? {
   val key = normalize(text)
-  return reverseGlossary[key]
+  return reverseGlossary[key] ?: romanianDefinitionMatches(text).takeIf { it.isNotEmpty() }?.joinToString(" / ")?.let { "Potriviri lexicale RO: " + it }
  }
  fun split(text: String): List<String> = clean(text).split(Regex("\\s+(?:și|si|apoi|după aceea|dupa aceea)\\s+|;\\s*", RegexOption.IGNORE_CASE)).map { it.trim() }.filter { it.isNotEmpty() }
  fun compoundPlan(text: String): List<PlannedAction>? {
