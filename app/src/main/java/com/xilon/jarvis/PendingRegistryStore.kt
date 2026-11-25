@@ -12,7 +12,7 @@ class PendingRegistryStore(context: Context) {
   return RegistryPlanner.parse(raw)
  }
  fun save(steps: List<PlannedAction>) {
-  require(steps.size in 1..20)
+  require(steps.size in 1..RegistryPlanner.MAX_STEPS)
   val array = JsonArray(steps.map { step -> buildJsonObject {
    put("tool", JsonPrimitive(step.tool))
    put("args", step.args)

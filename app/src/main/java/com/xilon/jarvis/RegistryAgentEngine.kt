@@ -8,7 +8,7 @@ object RegistryAgentEngine {
  data class Step(val action:PlannedAction,val result:ToolResult)
  data class Outcome(val status:String,val steps:List<Step>,val remaining:List<PlannedAction> = emptyList(),val reason:String? = null)
  suspend fun run(plan:List<PlannedAction>,cancelled:()->Boolean,confirm:suspend (PlannedAction)->Boolean,onStep:(Step)->Unit={}):Outcome {
-  if(plan.size !in 1..20)return Outcome("INVALID_PLAN",emptyList(),plan,"Plan gol sau prea lung")
+  if(plan.size !in 1..RegistryPlanner.MAX_STEPS)return Outcome("INVALID_PLAN",emptyList(),plan,"Plan gol sau prea lung")
   val steps=mutableListOf<Step>()
   for(action in plan){
    val invalid=ToolEnvironment.validate(action.tool,action.args)
