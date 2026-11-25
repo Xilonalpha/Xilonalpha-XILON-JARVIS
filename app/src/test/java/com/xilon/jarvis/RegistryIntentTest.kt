@@ -14,7 +14,7 @@ class RegistryIntentTest {
    assertTrue(verb,RegistryIntent.compound("Deschide aplicația și $verb ceva"))
   }
  }
- @Test fun punctuation(){assertTrue(RegistryIntent.compound("Deschide YouTube; apoi, setează volumul")))}
+ @Test fun punctuation(){assertTrue(RegistryIntent.compound("Deschide YouTube; apoi, setează volumul"))}
  @Test fun questionWithActions(){assertFalse(RegistryIntent.compound("Cum deschid YouTube și setez volumul?"))}
  @Test fun conjunctionInObject(){assertFalse(RegistryIntent.compound("Caută muzică și filme"))}
 }
