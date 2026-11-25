@@ -10,6 +10,7 @@ class LocalScreen:AccessibilityService(){
  companion object {
   @Volatile private var active:LocalScreen?=null
   fun snapshot():String?=active?.readScreen()
+  internal fun clickConfirmed(target:ElementTarget):Boolean=active?.clickExact(target)?:false
   fun observe():ScreenObservation?=active?.structuredScreen()
   fun resolve(target:ElementTarget):ScreenElement? { val svc=active?:return null;val obs=svc.structuredScreen()?:return null;if(target.pkg!=null&&target.pkg!=obs.packageName)return null;return ElementResolver.resolve(obs,target,svc.resources.displayMetrics.widthPixels,svc.resources.displayMetrics.heightPixels) }
  }
@@ -17,6 +18,38 @@ class LocalScreen:AccessibilityService(){
  override fun onAccessibilityEvent(event:AccessibilityEvent?){}
  override fun onInterrupt(){}
  override fun onDestroy(){if(active===this)active=null;super.onDestroy()}
+ private fun clickExact(target:ElementTarget):Boolean{
+  if(target.pkg.isNullOrBlank()||!target.hasNode)return false
+  val root=rootInActiveWindow?:return false
+  val queue=java.util.ArrayDeque<AccessibilityNodeInfo>();queue.add(root)
+  val matches=mutableListOf<AccessibilityNodeInfo>()
+  var count=0
+  try{
+   if(root.packageName?.toString()!=target.pkg)return false
+   while(queue.isNotEmpty()&&count<200){
+    val n=queue.removeFirst();count++
+    try{
+     if(n.isPassword||n.isEditable)continue
+     if(n.packageName?.toString()==target.pkg&&n.isVisibleToUser&&n.isEnabled&&n.isClickable&&
+       (target.viewId==null||target.viewId==n.viewIdResourceName)&&
+       (target.text==null||target.text==n.text?.toString())&&
+       (target.desc==null||target.desc==n.contentDescription?.toString())){
+      matches.add(AccessibilityNodeInfo.obtain(n))
+     }
+     for(j in 0 until n.childCount){if(queue.size>=200)return false;n.getChild(j)?.let{queue.add(it)}}
+    }finally{n.recycle()}
+   }
+   if(queue.isNotEmpty()||matches.size!=1)return false
+   val node=matches.single()
+   if(!node.refresh()||!node.isVisibleToUser||!node.isEnabled||!node.isClickable||node.isPassword||node.isEditable||node.packageName?.toString()!=target.pkg)return false
+   if(target.viewId!=null&&target.viewId!=node.viewIdResourceName)return false
+   if(target.text!=null&&target.text!=node.text?.toString())return false
+   if(target.desc!=null&&target.desc!=node.contentDescription?.toString())return false
+   val current=rootInActiveWindow?:return false
+   try{if(current.packageName?.toString()!=target.pkg)return false}finally{current.recycle()}
+   return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+  }finally{matches.forEach{it.recycle()};while(queue.isNotEmpty())queue.removeFirst().recycle()}
+ }
  private fun structuredScreen():ScreenObservation?{
   val root=rootInActiveWindow?:return null
   val pkg=root.packageName?.toString()
