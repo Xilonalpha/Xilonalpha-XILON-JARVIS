@@ -42,6 +42,11 @@ class LocalGraph(context:Context):SQLiteOpenHelper(context,"local_graph.db",null
   while(c.moveToNext())rows.add(c.getString(0)+" → "+c.getString(1)+" : "+c.getLong(2))
   rows.joinToString("\n").ifBlank{"Nicio relație observată."}
  }
+ fun observedSuccessors(source:String):List<Pair<String,Long>>{
+  val key=source.trim().lowercase(java.util.Locale.ROOT)
+  require(ToolCatalog.permits(key))
+  return readableDatabase.rawQuery("SELECT target,count FROM edges WHERE source=? ORDER BY count DESC,target",arrayOf(key)).use{c->buildList{while(c.moveToNext()){val target=c.getString(0);if(ToolCatalog.permits(target))add(target to c.getLong(1))}}}
+ }
  fun recommend(source:String):String{
   val key=source.trim().lowercase(java.util.Locale.ROOT)
   require(ToolCatalog.permits(key)){"Instrument necunoscut"}
