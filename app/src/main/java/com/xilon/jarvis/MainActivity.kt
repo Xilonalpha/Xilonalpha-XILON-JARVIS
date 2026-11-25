@@ -311,6 +311,36 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian=="stare dictionar"){
+     append("Dicționar local: "+RomanianLexicon.dictionaryStatus())
+     return@setOnClickListener
+    }
+    val languagePrefix=listOf("analizeaza limba ","corecteaza textul ","sinonime pentru ").firstOrNull{normalizedRomanian.startsWith(it)}
+    if(languagePrefix!=null){
+     val term=q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""}
+     if(term.isBlank()){append("Introdu textul de analizat.");return@setOnClickListener}
+     busy=true
+     worker.execute{
+      val result=runCatching{
+       if(languagePrefix=="sinonime pentru "){
+        RomanianLexicon.synonyms(term).joinToString(", ").ifBlank{"Nu am găsit sinonime în corpusul local."}
+       }else{
+        val review=RomanianLexicon.review(term)
+        buildString{
+         append("Analiză locală: "+review.original)
+         append("\nDicționar: "+review.dictionaryState)
+         if(review.blocked)append("\nNegație detectată; nicio acțiune executată.")
+         if(review.spelling.isNotEmpty())append("\nCorecturi posibile: "+review.spelling.joinToString("; "))
+         if(review.synonyms.isNotEmpty())append("\nComenzi alternative: "+review.synonyms.joinToString("; "))
+         review.translation?.let{append("\nTraducere: "+it)}
+         if(review.spelling.isEmpty() && review.synonyms.isEmpty())append("\nNu există sugestii pentru comenzile înregistrate.")
+        }
+       }
+      }.getOrElse{"Analiza lexicală nu este disponibilă: "+it.javaClass.simpleName}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }
+     return@setOnClickListener
+    }
     if(normalizedRomanian.startsWith("tradu in engleza ") || normalizedRomanian.startsWith("tradu in romana ")){
      val english=normalizedRomanian.startsWith("tradu in engleza ")
      val term=q.trim().split(Regex("\\s+"),limit=4).getOrElse(3){""}
