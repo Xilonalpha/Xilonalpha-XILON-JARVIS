@@ -262,7 +262,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } })
-  actions.addView(Button(this).apply { text="■";contentDescription="Oprește"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } })
+  actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("stop",dp(22),cyan),null,null,null);contentDescription="Oprește"; setOnClickListener { screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; recorder.cancel(); kokoroVoice?.stop(); nativeModel?.stop(); voice.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch() } },LinearLayout.LayoutParams(dp(40),dp(48)))
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
@@ -522,19 +522,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
    center.addView(resources)
    val manager=ModelDownloads(this@MainActivity)
    val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
-   val states=mutableListOf<Pair<TextView,List<ModelCatalog.Entry>>>()
+   val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
     val entries=categories[label].orEmpty()
     val card=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL;background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(14),dp(16),dp(14));isClickable=true;isFocusable=true}
     card.addView(TextView(this@MainActivity).apply{text=label.removePrefix("Catalog ");textSize=17f;setTextColor(cyan)})
-    val status=TextView(this@MainActivity).apply{textSize=12f;setTextColor(0xffa7bdcf.toInt())}
-    card.addView(status);states.add(status to entries)
+    for(entry in entries){
+     val status=TextView(this@MainActivity).apply{textSize=12f;setTextColor(0xffa7bdcf.toInt());setPadding(0,dp(8),0,0)}
+     val progress=ProgressBar(this@MainActivity,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;progressTintList=android.content.res.ColorStateList.valueOf(cyan);visibility=android.view.View.GONE}
+     card.addView(status);card.addView(progress,LinearLayout.LayoutParams(-1,dp(8)));states.add(Triple(status,progress,entry))
+    }
     card.setOnClickListener{dialog.dismiss();catalogButtons[label]?.performClick()}
     center.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})
    }
    val handler=android.os.Handler(android.os.Looper.getMainLooper())
-   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,entries) in states)view.text=entries.joinToString("\n"){it.name+" · "+runCatching{manager.status(it)}.getOrDefault("Stare indisponibilă")};handler.postDelayed(this,1500)}}
+   val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,bar,entry) in states){val transfer=runCatching{manager.transfer(entry)}.getOrNull();view.text=entry.name+" · "+(transfer?.label?:"Stare indisponibilă");val percent=transfer?.percent;bar.visibility=if(percent!=null&&transfer.state==android.app.DownloadManager.STATUS_RUNNING)android.view.View.VISIBLE else android.view.View.GONE;bar.progress=percent?:0};handler.postDelayed(this,1500)}}
    dialog.setOnDismissListener{handler.removeCallbacks(refresh)}
    dialog.show();refresh.run()
   }})
