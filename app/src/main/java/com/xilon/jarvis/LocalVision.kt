@@ -9,6 +9,11 @@ import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
 import java.io.File
 
 internal object LocalVision {
+ fun status(context:Context):String = listOf("Obiecte" to "object_detector.tflite","Fețe" to "face_detector.tflite").joinToString("\n"){(label,name)->
+  val file=File(context.filesDir,name)
+  label+": "+if(file.isFile) "model local prezent ("+file.length()/1024+" KiB)" else "model neinstalat"
+ }
+
  fun install(context:Context,uri:Uri,face:Boolean){
   val target=File(context.filesDir,if(face)"face_detector.tflite" else "object_detector.tflite")
   val temp=File.createTempFile("vision-", ".part",context.filesDir)

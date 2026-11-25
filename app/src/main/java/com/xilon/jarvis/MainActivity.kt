@@ -365,6 +365,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian=="stare vedere"){
+     append(LocalVision.status(this@MainActivity));return@setOnClickListener
+    }
+    if(normalizedRomanian in setOf("detecteaza obiecte","detecteaza fete","citeste imaginea")){
+     if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="image/*";addCategory(Intent.CATEGORY_OPENABLE)},when(normalizedRomanian){"detecteaza obiecte"->55;"detecteaza fete"->56;else->52})
+     return@setOnClickListener
+    }
     if(normalizedRomanian=="conversatie continua"){
      if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){append("Acordă întâi permisiunea microfonului.");return@setOnClickListener}
      continuousVoice=true;voiceLoopHandler.removeCallbacks(voiceLoop);voiceLoopHandler.postDelayed(voiceLoop,500L);append("Conversație continuă activată în prim-plan.");return@setOnClickListener
@@ -629,8 +636,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
        val info=android.app.ActivityManager.MemoryInfo()
        getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
        val mib=info.availMem/1048576
-       val context=when { info.lowMemory || mib<768 -> 512; mib<2048 -> 1024; else -> 2048 }
        val thermal=com.jarvis.mobile.core.model.DeviceProfiler(this@MainActivity).profile().thermalStatus
+       val context=ResourceBudget.conversationContext(mib,info.lowMemory,thermal)
        val threads=ResourceBudget.threads(Runtime.getRuntime().availableProcessors(),info.lowMemory,thermal)
        val grounded=q.startsWith("întreabă documentele ",true)
        val question=if(grounded)q.substringAfter(" ").substringAfter(" ").trim() else q
@@ -679,7 +686,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("OMEGA Model Center","Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -1048,7 +1055,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      label=="Accesibilitate și agenți"||label.contains("jurnal",true)||label.contains("graf local",true)||label.contains("observă",true)->"Agenți și memorie"
      label.contains("Kokoro",true)||label.contains("vocal",true)||label.contains("vocale",true)||label.contains("Sherpa",true)||label.contains("Jarvis ON",true)||label.contains("voce",true)->"Voce și ascultare"
      label.contains("gesturi",true)||label.contains("Air Touch",true)->"Control prin gesturi"
-     label.contains("OCR",true)->"Percepție vizuală"
+     (label.contains("OCR",true)||label.startsWith("Vision:"))->"Percepție vizuală"
      label=="OMEGA Model Center"||label.contains("GGUF",true)||label.contains("model",true)||label.contains("benchmark",true)->"Modele și resurse AI"
      else->"Configurare locală"
     }
@@ -1058,7 +1065,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    controls.filter{it.tag=="omega_category"}.forEach{settings.removeView(it)}
    for((category,items) in groups){
     val iconKind=when(category){"Voce și ascultare"->"mic";"Control prin gesturi"->"hand";"Percepție vizuală"->"eye";"Modele și resurse AI"->"AI";"Învățare și demonstrații"->"record";"Agenți și memorie"->"Agenți";else->"Setări"}
-    val subtitle=when(category){"Voce și ascultare"->"Kokoro · Sherpa · activare vocală";"Control prin gesturi"->"Air Touch · MediaPipe";"Percepție vizuală"->"Recunoaștere text locală";"Modele și resurse AI"->"Catalog · bibliotecă · performanță";"Învățare și demonstrații"->"Înregistrare · bibliotecă";"Agenți și memorie"->"Observații · jurnal · graf";else->"Preferințe și instrumente"}
+    val subtitle=when(category){"Voce și ascultare"->"Kokoro · Sherpa · activare vocală";"Control prin gesturi"->"Air Touch · MediaPipe";"Percepție vizuală"->"Text · obiecte · fețe local";"Modele și resurse AI"->"Catalog · bibliotecă · performanță";"Învățare și demonstrații"->"Înregistrare · bibliotecă";"Agenți și memorie"->"Observații · jurnal · graf";else->"Preferințe și instrumente"}
     val card=LinearLayout(this).apply{
      tag="omega_category";orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.CENTER_VERTICAL
      background=rounded(0xff142437.toInt(),18);setPadding(dp(14),dp(12),dp(14),dp(12));isClickable=true;isFocusable=true
