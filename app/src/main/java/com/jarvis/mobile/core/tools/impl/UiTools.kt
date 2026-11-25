@@ -130,3 +130,29 @@ class WaitForChangeTool : Tool(
         }
     }
 }
+
+class SwipeTool : Tool(
+    ToolSpec(
+        "swipe", "Perform a swipe gesture between two screen points.",
+        listOf(
+            com.jarvis.mobile.core.tools.ParamSpec("x1", "int", true, "start x"),
+            com.jarvis.mobile.core.tools.ParamSpec("y1", "int", true, "start y"),
+            com.jarvis.mobile.core.tools.ParamSpec("x2", "int", true, "end x"),
+            com.jarvis.mobile.core.tools.ParamSpec("y2", "int", true, "end y"),
+        ),
+        com.jarvis.mobile.core.tools.Risk.LOW,
+        needsAccessibility = true,
+    ),
+) {
+    override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
+        val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility service not connected.")
+        val x1 = T.int(args, "x1") ?: return ToolResult.fail("Missing x1.")
+        val y1 = T.int(args, "y1") ?: return ToolResult.fail("Missing y1.")
+        val x2 = T.int(args, "x2") ?: return ToolResult.fail("Missing x2.")
+        val y2 = T.int(args, "y2") ?: return ToolResult.fail("Missing y2.")
+        val ok = svc.swipeConfirmed(x1, y1, x2, y2)
+        return if (ok) ToolResult.ok("Swiped ($x1,$y1)→($x2,$y2).", Verification.UNVERIFIED)
+        else ToolResult.fail("Could not dispatch swipe gesture.")
+    }
+}
+
