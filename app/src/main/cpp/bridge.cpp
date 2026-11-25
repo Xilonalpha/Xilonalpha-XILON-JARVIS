@@ -1,5 +1,8 @@
 #include <jni.h>
 #include <llama.h>
+#ifdef XILON_VLM
+#include <mtmd.h>
+#endif
 #include <vector>
 #include <string>
 #include <mutex>
@@ -195,4 +198,19 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  e->SetByteArrayRegion(bytes,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
  auto cls=e->FindClass("java/lang/String");auto ctor=e->GetMethodID(cls,"<init>","([BLjava/lang/String;)V");
  return static_cast<jstring>(e->NewObject(cls,ctor,bytes,e->NewStringUTF("UTF-8")));
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_com_xilon_jarvis_NativeModel_probeVision(JNIEnv* e,jobject,jlong h,jstring path){
+#ifdef XILON_VLM
+ auto* state=reinterpret_cast<ModelState*>(h);
+ if(!state || !path)return JNI_FALSE;
+ const char* p=e->GetStringUTFChars(path,nullptr);if(!p)return JNI_FALSE;
+ auto params=mtmd_context_params_default();params.use_gpu=false;params.warmup=false;params.n_threads=2;
+ auto* vision=mtmd_init_from_file(p,state->model,params);
+ e->ReleaseStringUTFChars(path,p);
+ if(!vision)return JNI_FALSE;
+ const bool supported=mtmd_support_vision(vision);mtmd_free(vision);return supported?JNI_TRUE:JNI_FALSE;
+#else
+ return JNI_FALSE;
+#endif
 }
