@@ -31,3 +31,5 @@ if (sherpaEnabled) {
 }
 
 dependencies { testImplementation("junit:junit:4.13.2") }
+
+dependencies { implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0") }
