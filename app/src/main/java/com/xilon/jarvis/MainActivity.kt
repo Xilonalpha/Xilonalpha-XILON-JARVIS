@@ -369,7 +369,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val entry=entries[index]
     val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
-    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy)importGguf(uri,false)}
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy)importGguf(uri,false,entry)}
     else if(downloads.id(entry)<0)dialog.setPositiveButton("Descarcă"){_,_->if(!busy)append(runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Descărcare eșuată: "+it.message})}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Anulezi transferul și ștergi copia descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
     dialog.setNegativeButton("Închide",null).show()
@@ -681,7 +681,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val uri=data?.data ?: return
   importGguf(uri,true)
  }
- private fun importGguf(uri:android.net.Uri,persistPermission:Boolean){
+ private fun importGguf(uri:android.net.Uri,persistPermission:Boolean,entry:ModelCatalog.Entry?=null){
   if(busy)return
   try {
    val magic=ByteArray(4)
@@ -694,9 +694,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val target=java.io.File(filesDir,"model-"+java.util.UUID.randomUUID()+".gguf")
     var candidate: NativeModel?=null
     val status=try {
+     val reference=entry?.let{ModelMetadata.fetch(it)}
      val size=contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.SIZE),null,null,null)?.use { c -> if(c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L } ?: -1L
      if(size>0 && size>StatFs(filesDir.path).availableBytes) error("Spațiu insuficient pentru copiere")
-     contentResolver.openInputStream(uri)?.use { src -> target.outputStream().use { dst -> src.copyTo(dst) } } ?: error("Fișier inaccesibil")
+     if(reference!=null)require(reference.bytes<=StatFs(filesDir.path).availableBytes){"Spațiu insuficient"}
+     contentResolver.openInputStream(uri)?.use { src -> target.outputStream().use { dst ->
+      val buffer=ByteArray(65536);var total=0L
+      while(true){val n=src.read(buffer);if(n<0)break;total+=n;require(total<=(reference?.bytes ?: 8L*1024*1024*1024)){"Fișier prea mare"};dst.write(buffer,0,n)}
+     } } ?: error("Fișier inaccesibil")
+     if(reference!=null)ModelIntegrity.verify(target.inputStream(),reference.sha256,reference.bytes)
      nativeModel?.close()
      nativeModel=null
      val next=NativeModel()
@@ -708,7 +714,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      candidate=null
      getSharedPreferences("jarvis_model",MODE_PRIVATE).edit().putString("file",target.name).apply()
      // Retain previously imported GGUF files for model switching.
-     "Model GGUF încărcat. Poți trimite un mesaj."
+     if(reference!=null)"Model GGUF verificat SHA-256 și încărcat." else "Model GGUF importat manual; SHA-256 neverificat."
     } catch(e:Exception) { candidate?.close(); target.delete(); "Încărcare eșuată: "+e.message } catch(e:LinkageError) { target.delete(); "Biblioteca nativă indisponibilă: "+e.message }
     runOnUiThread { if(!isDestroyed) { busy=false; modelStatus.text=status } }
    }
