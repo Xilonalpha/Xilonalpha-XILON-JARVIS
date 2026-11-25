@@ -357,6 +357,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
      return@setOnClickListener
     }
     val normalizedRomanian=RomanianLexicon.normalize(q)
+    if(normalizedRomanian=="diagnostic telefon"){
+     val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+     val battery=getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+     val cm=getSystemService(android.net.ConnectivityManager::class.java)
+     val connected=cm.activeNetwork?.let{cm.getNetworkCapabilities(it)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)}==true
+     val report=listOf("RAM: "+info.availMem/1048576+" MiB din "+info.totalMem/1048576+" MiB","Memorie redusă: "+info.lowMemory,"Stocare disponibilă: "+StatFs(filesDir.path).availableBytes/1048576+" MiB","Baterie: "+(if(battery in 0..100)battery.toString()+"%" else "indisponibilă"),"Rețea validată: "+connected,"GGUF încărcat: "+(nativeModel!=null),"Profil: "+com.jarvis.mobile.core.model.DeviceProfiler(this@MainActivity).profile().toString()).joinToString("\n")
+     append(report);return@setOnClickListener
+    }
+    if(normalizedRomanian=="stare agent"){
+     append("Agent ocupat: "+busy+"\nOprire solicitată: "+agentCancelled+"\nPași suspendați în memorie: "+pendingRegistry.size+"\n"+previewStatus());return@setOnClickListener
+    }
+    if(normalizedRomanian=="renunta la sarcina suspendata"){
+     runCatching{PendingRegistryStore(this@MainActivity).clear()}.fold({pendingRegistry=emptyList();append("Sarcina suspendată a fost eliminată.")},{append("Eliminare eșuată: "+it.message)})
+     return@setOnClickListener
+    }
     if(normalizedRomanian.startsWith("propune planul ")){startRegistryPlan(q.trim().split(Regex("\\s+"),limit=3).getOrElse(2){""},true);return@setOnClickListener}
     if(normalizedRomanian=="stare plan propus"){append(previewStatus());return@setOnClickListener}
     if(normalizedRomanian.startsWith("revizuieste planul ")){
@@ -1478,10 +1493,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   append("JARVIS: Planific sarcina local...")
   worker.execute{
    val appTips=com.jarvis.assistant.agent.AppTips(getSharedPreferences("app_tips",MODE_PRIVATE).getString("notes","").orEmpty()) { name -> runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(name,0)).toString() }.getOrNull() }
-   val hints=runCatching { appTips.forForeground(LocalScreen.observe()?.packageName).orEmpty() }.getOrDefault("")
+   val hints=runCatching { appTips.forForeground(LocalScreen.observe()?.packageName).orEmpty() }.getOrDefault("").take(400)
    val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
    val context=if(info.lowMemory || info.availMem<768L*1048576)1024 else if(info.availMem<2048L*1048576)2048 else 4096
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registryPatterns()+"\n"+it.registrySummary()}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.grammar))}
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{(it.registryPatterns()+"\n"+it.registrySummary()).take(800)}}.getOrDefault(""),hints),if(context==1024)1 else 2,context,if(context==1024)256 else 512,emptyList(),RegistryPlanner.grammar))}
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
