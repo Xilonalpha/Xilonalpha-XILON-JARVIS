@@ -87,7 +87,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val open=settingsScroll.visibility!=android.view.View.VISIBLE
    settingsScroll.visibility=if(open)android.view.View.VISIBLE else android.view.View.GONE
    chat.visibility=if(open)android.view.View.GONE else android.view.View.VISIBLE
-   text=if(open)"Chat" else "Setări"
+   if(open)for(i in 0 until settings.childCount)settings.getChildAt(i).visibility=android.view.View.VISIBLE
+   text="Setări"
   }})
   root.addView(header)
   androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root){v,insets->
@@ -109,7 +110,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
   transcript = TextView(this).apply { textSize = 16f; setTextColor(android.graphics.Color.rgb(220,235,247)); setTextIsSelectable(true);setPadding(dp(8),dp(12),dp(8),dp(12)) }
   scroll = ScrollView(this).apply { addView(transcript) }
+  val core=OmegaCoreView(this)
+  val corePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=android.view.Gravity.CENTER}
+  corePanel.addView(core,LinearLayout.LayoutParams(-1,dp(180)))
+  corePanel.addView(TextView(this).apply{text="J.A.R.V.I.S.";textSize=20f;gravity=android.view.Gravity.CENTER;setTextColor(cyan)})
+  corePanel.addView(TextView(this).apply{text="Sistem local";gravity=android.view.Gravity.CENTER;setTextColor(android.graphics.Color.LTGRAY)})
+  chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
+  root.viewTreeObserver.addOnGlobalLayoutListener{
+   val visible=if(root.height<dp(540))android.view.View.GONE else android.view.View.VISIBLE
+   if(corePanel.visibility!=visible)corePanel.visibility=visible
+  }
   val input = EditText(this).apply { hint = "Scrie o comandă"; maxLines = 4;setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY) }
   voiceInput=input
   chat.addView(input)
@@ -206,6 +217,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Air Touch ON/OFF";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until actions.childCount){actions.getChildAt(i).layoutParams=LinearLayout.LayoutParams(0,-2,1f)}
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
+  val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  val aiControls=setOf("Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF")
+  fun showPage(page:String){
+   chat.visibility=if(page=="Chat")android.view.View.VISIBLE else android.view.View.GONE
+   settingsScroll.visibility=if(page=="Chat")android.view.View.GONE else android.view.View.VISIBLE
+   for(i in 0 until settings.childCount){
+    val v=settings.getChildAt(i);val label=(v as? TextView)?.text?.toString()
+    v.visibility=if(page=="Setări" || page=="AI" && label in aiControls || page=="Agenți" && label in agentControls)android.view.View.VISIBLE else android.view.View.GONE
+   }
+  }
+  for(page in listOf("Chat","AI","Agenți","Setări")){
+   nav.addView(Button(this).apply{text=page;isAllCaps=false;setTextColor(cyan);setOnClickListener{showPage(page)}},LinearLayout.LayoutParams(0,-2,1f))
+  }
+  root.addView(nav)
   cursor=com.jarvis.ai.gesture.GestureCursorView(this){if(!busy)startMicrophone()}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
