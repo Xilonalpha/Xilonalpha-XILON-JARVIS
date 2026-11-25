@@ -16,7 +16,7 @@ class TaskRuntime(private val clock:()->Long={System.nanoTime()/1_000_000L}) {
   observations.clear()
   move(AgentStatus.THINKING)
   val normalized=commands.map{it.trim().lowercase(java.util.Locale.ROOT)}
-  if(commands.size !in 1..6 || normalized.distinct().size!=normalized.size || normalized.any{!ToolCatalog.permits(it)}){
+  if(commands.size !in 1..ToolCatalog.readOnly.size || normalized.distinct().size!=normalized.size || normalized.any{!ToolCatalog.permits(it)}){
    move(AgentStatus.FAILED);return "Plan respins înainte de execuție."
   }
   val results=mutableListOf<String>()
