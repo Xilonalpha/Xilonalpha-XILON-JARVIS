@@ -137,13 +137,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   composer.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer)
   actions.addView(Button(this).apply { text="";background=null;minWidth=0;minimumWidth=0;setCompoundDrawablesWithIntrinsicBounds(OmegaIcon("mic",dp(24),cyan),null,null,null);contentDescription="Microfon offline"; setOnClickListener { startMicrophone() } },LinearLayout.LayoutParams(dp(44),dp(48)))
+  settings.addView(Button(this).apply { text="Accesibilitate și agenți";setOnClickListener{android.app.AlertDialog.Builder(this@MainActivity).setTitle("Accesibilitate locală").setMessage(if(LocalScreen.connected())"Serviciu conectat." else "Serviciu deconectat. Activează-l manual pentru observare și demonstrații.").setPositiveButton("Setări Android"){_,_->startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}.setNegativeButton("Închide",null).show()} })
   settings.addView(Button(this).apply { text="Înregistrează demonstrație";setOnClickListener{
    if(!busy){
     val field=EditText(this@MainActivity).apply{hint="Pachete Android separate prin virgulă";setSingleLine(true)}
     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrație locală").setMessage("Înregistrează identificatorii butoanelor din aplicațiile alese până la oprire sau 200 de acțiuni. Revino aici pentru oprire.").setView(field).setNegativeButton("Anulează",null).setPositiveButton("Pornește"){_,_->
      val packages=field.text.toString().split(',').map{it.trim()}.filter{it.isNotEmpty()}.toSet()
      if(packages.isEmpty()||packages.any{!it.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))||it==packageName}){append("Pachet invalid.");return@setPositiveButton}
-     if(LocalScreen.observe()==null){append("Activează serviciul de accesibilitate.");return@setPositiveButton}
+     if(!LocalScreen.connected()){append("Activează serviciul de accesibilitate.");return@setPositiveButton}
      com.jarvis.mobile.core.skills.SkillRecorder.start(packages)
      append("Înregistrare pornită pentru "+packages.joinToString()+". Revino pentru oprire.")
     }.show()
@@ -162,7 +163,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
    worker.execute{val result=runCatching{DemonstrationStore(this@MainActivity).use{it.list()}};runOnUiThread{if(!isDestroyed)result.onSuccess{items->
     android.app.AlertDialog.Builder(this@MainActivity).setTitle("Demonstrații salvate").setItems(items.map{it.name+" • "+it.count+" acțiuni"}.toTypedArray()){_,index->
      val item=items[index]
-     android.app.AlertDialog.Builder(this@MainActivity).setTitle(item.name).setMessage("Acțiuni salvate: "+item.count).setNegativeButton("Închide",null).setPositiveButton("Șterge"){_,_->worker.execute{val deleted=runCatching{DemonstrationStore(this@MainActivity).use{it.delete(item.id)}};runOnUiThread{if(!isDestroyed)append(if(deleted.getOrDefault(false))"Demonstrație ștearsă." else "Ștergere eșuată.")}}}.show()
+     worker.execute{
+      val loaded=runCatching{DemonstrationStore(this@MainActivity).use{it.load(item.id)}}
+      runOnUiThread{if(!isDestroyed)loaded.onSuccess{steps->
+       val details=steps.mapIndexed{i,t->"${i+1}. ${t.pkg} • ${t.viewId}"}.joinToString("\n")
+       android.app.AlertDialog.Builder(this@MainActivity).setTitle(item.name).setMessage(details.ifBlank{"Demonstrație fără acțiuni."})
+        .setNegativeButton("Închide",null)
+        .setNeutralButton("Verifică structura"){_,_->val valid=steps.isNotEmpty()&&steps.all{!it.pkg.isNullOrBlank()&&!it.viewId.isNullOrBlank()};android.app.AlertDialog.Builder(this@MainActivity).setTitle("Verificare locală").setMessage(if(valid)"Structură validă. Executarea și efectele nu au fost verificate." else "Demonstrație incompletă.").setPositiveButton("OK",null).show()}
+        .setPositiveButton("Șterge"){_,_->android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi demonstrația salvată?").setNegativeButton("Nu",null).setPositiveButton("Da"){_,_->worker.execute{val deleted=runCatching{DemonstrationStore(this@MainActivity).use{it.delete(item.id)}};runOnUiThread{if(!isDestroyed)append(if(deleted.getOrDefault(false))"Demonstrație ștearsă." else "Ștergere eșuată.")}}}.show()}.show()
+      }.onFailure{append("Citire eșuată: "+it.message)}}
+     }
     }.setMessage(if(items.isEmpty())"Nicio demonstrație salvată." else null).setNegativeButton("Închide",null).show()
    }.onFailure{append("Bibliotecă indisponibilă: "+it.message)}}}
   }})
@@ -569,7 +579,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(label in catalogLabels)continue
     val category=when{
      label.contains("demonstra",true)||label.contains("abilități",true)->"Învățare și demonstrații"
-     label.contains("jurnal",true)||label.contains("graf local",true)||label.contains("observă",true)->"Agenți și memorie"
+     label=="Accesibilitate și agenți"||label.contains("jurnal",true)||label.contains("graf local",true)||label.contains("observă",true)->"Agenți și memorie"
      label.contains("Kokoro",true)||label.contains("vocal",true)||label.contains("vocale",true)||label.contains("Sherpa",true)||label.contains("Jarvis ON",true)||label.contains("voce",true)->"Voce și ascultare"
      label.contains("gesturi",true)||label.contains("Air Touch",true)->"Control prin gesturi"
      label.contains("OCR",true)->"Percepție vizuală"
