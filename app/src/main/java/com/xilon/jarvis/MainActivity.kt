@@ -467,7 +467,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .setNegativeButton("Anulează",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
-  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nInstrumente agent verificate:\n"+it.registrySummary()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
+  settings.addView(Button(this).apply{text="Graf local";setOnClickListener{report("Graf local"){LocalGraph(this@MainActivity).use{"Instrumente executate:\n"+it.summary()+"\n\nInstrumente agent verificate:\n"+it.registrySummary()+"\n\nTipare repetate verificate:\n"+it.registryPatterns()+"\n\nTranziții demonstrate de utilizator:\n"+it.demonstrationSummary()}}}})
   settings.addView(Button(this).apply{text="Detalii model local";setOnClickListener{report("Model local"){
    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
    val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{java.io.File(filesDir,it)}?.takeIf{it.isFile}
@@ -895,7 +895,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   worker.execute{
    val appTips=com.jarvis.assistant.agent.AppTips(getSharedPreferences("app_tips",MODE_PRIVATE).getString("notes","").orEmpty()) { name -> runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(name,0)).toString() }.getOrNull() }
    val hints=runCatching { appTips.forForeground(LocalScreen.observe()?.packageName).orEmpty() }.getOrDefault("")
-   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registrySummary()}}.getOrDefault(""),hints),2,4096,512,emptyList(),RegistryPlanner.grammar))}
+   val plan=runCatching{RegistryPlanner.parse(model.generate(RegistryPlanner.prompt(goal,runCatching{LocalGraph(this@MainActivity).use{it.registryPatterns()+"\n"+it.registrySummary()}}.getOrDefault(""),hints),2,4096,512,emptyList(),RegistryPlanner.grammar))}
    runOnUiThread{
     if(!isDestroyed){
      busy=false;refreshOmegaStatus()
