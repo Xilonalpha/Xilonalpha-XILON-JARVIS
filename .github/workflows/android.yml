@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y glslc libvulkan-dev spirv-headers
+          sudo apt-get install -y glslc libvulkan-dev spirv-headers vulkan-headers
           config="$(find /usr -type f \( -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv-headers-config.cmake' \) -print -quit 2>/dev/null || true)"
           if [[ -z "$config" ]]; then
             git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git "$RUNNER_TEMP/SPIRV-Headers"
@@ -112,6 +112,13 @@ jobs:
           echo "XILON_SPIRV_HEADERS_DIR=$(dirname "$config")" >> "$GITHUB_ENV"
           echo "SPIRV-Headers CMake package: $config"
           test -f "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan/vulkan.h"
+          # Android NDK provides vulkan.h but not necessarily the Vulkan-Hpp C++ wrapper.
+          # Stage the complete Khronos header directory; never mix individual header versions.
+          test -s /usr/include/vulkan/vulkan.hpp
+          mkdir -p "$RUNNER_TEMP/xilon-vulkan-sdk/include"
+          cp -a /usr/include/vulkan "$RUNNER_TEMP/xilon-vulkan-sdk/include/"
+          test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/vulkan/vulkan_core.h"
+          echo "XILON_VULKAN_HEADERS_INCLUDE=$RUNNER_TEMP/xilon-vulkan-sdk/include" >> "$GITHUB_ENV"
           glslc --version
       - name: Build Vulkan and VLM APK
         run: |
