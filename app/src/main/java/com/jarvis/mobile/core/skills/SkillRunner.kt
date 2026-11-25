@@ -3,6 +3,7 @@ package com.jarvis.mobile.core.skills
 import com.xilon.jarvis.LocalScreen
 import com.jarvis.mobile.core.observer.ScreenObservation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 
 /** Adapted from MIT upstream SkillRunner: observation-only target polling. */
 object SkillRunner {
@@ -18,7 +19,11 @@ object SkillRunner {
         while (true) {
             val obs = LocalScreen.observe()
             if (obs != null && obs.packageName == target.pkg) {
-                val el = ElementResolver.resolve(obs, target.copy(fx=null,fy=null,pxX=null,pxY=null))
+                val el = obs.elements.filter { candidate ->
+                    (target.viewId == null || candidate.viewId == target.viewId) &&
+                    (target.text == null || candidate.text == target.text) &&
+                    (target.desc == null || candidate.desc == target.desc)
+                }.singleOrNull()
                 if (el != null && el.interactive && !el.isPassword) return obs to el
             }
             if (android.os.SystemClock.elapsedRealtime() >= deadline) return null
@@ -45,5 +50,17 @@ object SkillRunner {
   if(before.packageName!=exact.pkg||!LocalScreen.clickConfirmed(exact))return ActionOutcome(false,"Țintă schimbată, ambiguă sau inaccesibilă",false)
   val changed=verifyChanged(before)
   return ActionOutcome(true,if(changed)"Apăsare acceptată; ecran modificat" else "Apăsare acceptată; efect neverificat",changed)
+ }
+
+ data class ReplayOutcome(val completed:Int,val total:Int,val reason:String)
+ suspend fun replay(steps:List<ElementTarget>,confirm:suspend (ElementTarget)->Boolean):ReplayOutcome{
+  var completed=0
+  for(target in steps){
+   kotlinx.coroutines.currentCoroutineContext().ensureActive()
+   val outcome=click(target,confirm)
+   if(!outcome.ok||!outcome.verified)return ReplayOutcome(completed,steps.size,outcome.message)
+   completed++
+  }
+  return ReplayOutcome(completed,steps.size,"Toate apăsările au produs schimbări observabile; obiectivul final necesită verificare separată.")
  }
 }
