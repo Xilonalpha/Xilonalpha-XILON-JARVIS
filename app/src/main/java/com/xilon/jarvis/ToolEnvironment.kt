@@ -7,6 +7,6 @@ object ToolEnvironment {
  private set
  fun initialize(ctx:Context) {
   context=ctx.applicationContext
-  ToolRegistry.registerAll(listOf(ControlBrightnessTool(),ControlVolumeTool(),ControlFlashlightTool(),ControlWifiTool(),ControlBluetoothTool(),OpenUrlTool(),YoutubeSearchTool(),MapsNavigateTool(),SetAlarmTool(),SetTimerTool(),MediaPlayPauseTool(),ToggleDndTool()))
+  ToolRegistry.registerAll(listOf(ControlBrightnessTool(),ControlVolumeTool(),ControlFlashlightTool(),ControlWifiTool(),ControlBluetoothTool(),OpenUrlTool(),YoutubeSearchTool(),MapsNavigateTool(),SetAlarmTool(),SetTimerTool(),MediaPlayPauseTool(),ToggleDndTool(),OpenAppTool(),LaunchIntentTool(),ShareContentTool()))
  }
 }
