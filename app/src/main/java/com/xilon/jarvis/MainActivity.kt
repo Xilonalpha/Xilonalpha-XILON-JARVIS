@@ -273,13 +273,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(q.equals("continuă sarcina",true)||q.equals("continua sarcina",true)){
      val pending=try { pendingRegistry.ifEmpty { PendingRegistryStore(this@MainActivity).load() }.also { pendingRegistry=it } } catch(e:Exception){append("Planul salvat nu poate fi validat: "+e.message);return@setOnClickListener}
      if(pending.isEmpty())append("Nu există o sarcină întreruptă care poate fi reluată.")
-     else android.app.AlertDialog.Builder(this@MainActivity).setTitle("Reia pașii rămași")
-      .setMessage(pending.joinToString("\n"){it.tool+" "+it.args})
-      .setNegativeButton("Anulează",null)
-      .setPositiveButton("Continuă"){_,_->
-       if(!busy && !isDestroyed && pendingRegistry==pending){agentCancelled=false;runRegistryPlan(pending)}
-       else append("Sarcina nu mai poate fi reluată în starea actuală.")
-      }.show()
+     else if(!busy && !isDestroyed && pendingRegistry==pending){agentCancelled=false;runRegistryPlan(pending)}
+     else append("Sarcina nu mai poate fi reluată în starea actuală.")
      return@setOnClickListener
     }
     if(q.trim().lowercase(java.util.Locale.ROOT).trimEnd('?','.') in setOf("analizează clipboardul","analizeaza clipboardul","analyze clipboard","verifică clipboardul","verifica clipboardul")){
