@@ -94,47 +94,26 @@ jobs:
           path: vlm-apk/*.apk
           if-no-files-found: error
       - name: Install Vulkan build dependencies
+        shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y glslc libvulkan-dev spirv-headers
-          config="$(dpkg -L spirv-headers | grep -E '/(SPIRV-HeadersConfig|spirv-headers-config)\.cmake
-      - name: Build Vulkan and VLM APK
-        run: |
-          gradle :app:assembleDebug -PenableVlm=true -PenableVulkan=true --stacktrace
-          mkdir -p vulkan-apk
-          cp app/build/outputs/apk/debug/*.apk vulkan-apk/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: xilon-jarvis-vulkan-vlm-debug
-          path: vulkan-apk/*.apk
-          if-no-files-found: error
-      - name: Verify APK signatures and record checksums
-        run: |
-          set -euo pipefail
-          mkdir -p validation
-          for apk in app/build/outputs/apk/debug/*.apk vlm-apk/*.apk vulkan-apk/*.apk; do
-            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
-            sha256sum "$apk" >> validation/apk-sha256.txt
-          done
-          git rev-parse HEAD > validation/commit.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: xilon-apk-validation
-          path: validation/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: xilon-jarvis-test-reports
-          path: app/build/test-results/testDebugUnitTest/
-          if-no-files-found: warn
- | head -n 1)"
+          config="$(find /usr -type f \( -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv-headers-config.cmake' \) -print -quit 2>/dev/null || true)"
+          if [[ -z "$config" ]]; then
+            git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git "$RUNNER_TEMP/SPIRV-Headers"
+            cmake -S "$RUNNER_TEMP/SPIRV-Headers" -B "$RUNNER_TEMP/SPIRV-Headers-build" -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/spirv-headers-install" -DSPIRV_HEADERS_ENABLE_TESTS=OFF
+            cmake --build "$RUNNER_TEMP/SPIRV-Headers-build"
+            cmake --install "$RUNNER_TEMP/SPIRV-Headers-build"
+            config="$(find "$RUNNER_TEMP/spirv-headers-install" -type f \( -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv-headers-config.cmake' \) -print -quit)"
+          fi
+          test -n "$config"
           test -f "$config"
           echo "XILON_SPIRV_HEADERS_DIR=$(dirname "$config")" >> "$GITHUB_ENV"
           glslc --version
       - name: Build Vulkan and VLM APK
         run: |
+          set -euo pipefail
           gradle :app:assembleDebug -PenableVlm=true -PenableVulkan=true --stacktrace
           mkdir -p vulkan-apk
           cp app/build/outputs/apk/debug/*.apk vulkan-apk/
