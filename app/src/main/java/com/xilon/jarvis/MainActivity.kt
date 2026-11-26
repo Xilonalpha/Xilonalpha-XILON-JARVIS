@@ -1443,6 +1443,43 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Catalog Sherpa Streaming • Full Duplex";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val entries=ModelCatalog.streamingAsr
+   val downloads=ModelDownloads(this@MainActivity)
+   val root=java.io.File(filesDir,"models/streaming-asr")
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Sherpa Streaming EN • 4 componente").setMessage("Model în engleză; recunoașterea românei nu este garantată. Descarcă și instalează toate cele 4 fișiere.").setItems(entries.map{entry->
+    entry.name+" • "+(if(java.io.File(root,ModelCatalog.streamingTarget(entry)).isFile)"Instalat" else downloads.status(entry))
+   }.toTypedArray()){_,index->
+    val entry=entries[index]
+    val uri=downloads.uri(entry)
+    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
+     val result=runCatching{
+      check(root.isDirectory || root.mkdirs()){"Nu pot crea directorul streaming"}
+      val ref=downloads.reference(entry)
+      val temp=java.io.File.createTempFile("stream-", ".part",root)
+      try{
+       contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->src.copyTo(dst,65536)}}?:error("Fișier inaccesibil")
+       ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+       val target=java.io.File(root,ModelCatalog.streamingTarget(entry))
+       if(target.isFile && runCatching{ModelIntegrity.verify(target.inputStream(),ref.sha256,ref.bytes,ref.algorithm)}.isSuccess)"Componentă deja instalată."
+       else{
+        check(temp.renameTo(target) || (target.delete() && temp.renameTo(target))){"Nu pot instala componenta"}
+        "Componentă streaming instalată și verificată."
+       }
+      }finally{temp.delete()}
+     }.getOrElse{"Instalare eșuată: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
+     val result=runCatching{downloads.start(entry);"Transfer streaming pornit."}.getOrElse{"Descărcare eșuată: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }}}
+    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+    dialog.setNegativeButton("Închide",null).show()
+   }.setNegativeButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Vision: importă model poziție corporală";setOnClickListener{
    if(!busy)startActivityForResult(android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(android.content.Intent.CATEGORY_OPENABLE)},190)
   }})

@@ -12,6 +12,20 @@ object ModelCatalog {
  )
  val ocr=listOf("ron","eng").map{lang->Entry("OCR "+lang,"Tesseract","lm-kit/tessdata-fast","$lang.traineddata",5,"83ff76b97461395f257255720bf7f3957606dbb5")}
  val whisper=listOf("tiny-encoder.int8.onnx" to 13L,"tiny-decoder.int8.onnx" to 90L,"tiny-tokens.txt" to 1L).map{(file,mb)->Entry(file,"Whisper Tiny","csukuangfj/sherpa-onnx-whisper-tiny",file,mb,"65176e2")}
+ /** Streaming Zipformer EN INT8; model is English-only, not Romanian. */
+ val streamingAsr=listOf(
+  Entry("Zipformer EN encoder INT8","Sherpa streaming EN","csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26","encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",72),
+  Entry("Zipformer EN decoder INT8","Sherpa streaming EN","csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26","decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",2),
+  Entry("Zipformer EN joiner INT8","Sherpa streaming EN","csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26","joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",1),
+  Entry("Zipformer EN tokens","Sherpa streaming EN","csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26","tokens.txt",1)
+ )
+ fun streamingTarget(entry:Entry):String=when(entry){
+  streamingAsr[0]->"encoder.int8.onnx"
+  streamingAsr[1]->"decoder.int8.onnx"
+  streamingAsr[2]->"joiner.int8.onnx"
+  streamingAsr[3]->"tokens.txt"
+  else->error("Componentă streaming necunoscută")
+ }
  val wake=listOf("hey_jarvis.onnx","melspectrogram.onnx","embedding_model.onnx").map{Entry(it,"Hey Jarvis experimental","Soulcreek2/speechkit-wakeword-models",it,2,"0795387053f80d32bcebbd3bf7f7009ef0e32db5")}
  val pose=Entry("Pose Landmarker Lite","33 repere corporale","litert-community/MediaPipe-PoseLandmarker-Lite","pose_landmarker_lite.task",6,"105f65f")
  val vision=listOf(
