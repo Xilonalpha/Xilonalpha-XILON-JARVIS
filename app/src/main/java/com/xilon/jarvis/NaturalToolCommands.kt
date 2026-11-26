@@ -19,6 +19,48 @@ object NaturalToolCommands {
    val body=if(wa.value.contains(Regex("cum se simte",RegexOption.IGNORE_CASE))) "Cum te simți?" else "Ce faci?"
    return PlannedAction("whatsapp_message",JsonObject(mapOf("contact" to JsonPrimitive(wa.groupValues[1].trim()),"message" to JsonPrimitive(body))))
   }
+  // Direct Romanian commands with arbitrary argument values, no GGUF.
+  val raw=input.trim().trimEnd('!','.')
+  fun direct(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
+  fun rawMatch(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(raw)
+  rawMatch("(?:sună|suna|apelează|apeleaza|telefonează|telefoneaza) (?:pe |la )?(.+)")?.let{
+   return direct("call_contact","contact" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:scrie|trimite) (?:un )?(?:mesaj (?:pe |prin )?)?(whatsapp|sms) (?:lui |către |catre )?([^:]+):\\s*(.+)")?.let{
+   return direct(if(it.groupValues[1].equals("sms",true))"send_sms" else "whatsapp_message","contact" to JsonPrimitive(it.groupValues[2].trim()),"message" to JsonPrimitive(it.groupValues[3]))
+  }
+  rawMatch("(?:deschide|arată|arata) (?:conversația|conversatia|chatul) (?:pe |din )?telegram (?:cu )?(.+)")?.let{
+   return direct("telegram_message","handle" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:caută|cauta|găsește|gaseste) (?:fișierul|fisierul|documentul) (.+)")?.let{
+   return direct("find_file","name" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:caută|cauta) (?:pe google|pe internet) (.+)")?.let{
+   return direct("launch_intent","kind" to JsonPrimitive("search"),"value" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:scrie|tastează|tasteaza) (?:textul )?[:]\\s*(.+)")?.let{
+   return direct("type_text","text" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:apasă|apasa|atinge) (?:butonul )?(.+)")?.let{
+   return direct("tap","text" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:mărește|mareste|crește|creste|ridică|ridica|scade|redu|micșorează|micsoreaza|oprește|opreste) (?:volumul|sunetul)")?.let{
+   val v=RomanianLexicon.normalize(raw).substringBefore(' ')
+   return direct("control_volume","direction" to JsonPrimitive(when(v){"opreste"->"mute";"scade","redu","micsoreaza"->"down";else->"up"}))
+  }
+  when(RomanianLexicon.normalize(raw).trimEnd('?')){
+   "unde sunt","arata locatia mea","locatia mea" -> return direct("get_location")
+   "ce am in calendar","arata calendarul","citeste calendarul","ce am de facut azi" -> return direct("read_calendar","days" to JsonPrimitive(1))
+   "citeste notificarile","ce notificari am" -> return direct("read_notifications")
+   "citeste ecranul","ce scrie pe ecran","ce este pe ecran" -> return direct("read_screen")
+   "inchide aplicatia","iesi din aplicatie" -> return direct("close_app")
+   "sterge textul","goleste campul" -> return direct("clear_text")
+   "copiaza textul" -> return direct("copy_text")
+   "lipeste textul" -> return direct("paste_text")
+   "fa o captura de ecran","fa screenshot" -> return direct("take_screenshot")
+   "arata aplicatiile recente","deschide aplicatiile recente" -> return direct("press_recents")
+   "mergi inapoi","da inapoi" -> return direct("press_back")
+  }
   // A lexicon rule is accepted only for a single intent. A compound request
   // needs a multi-step plan with per-action verification.
   RomanianLexicon.parse(input)?.let { return it }
