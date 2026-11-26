@@ -53,6 +53,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
      .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
      .setBufferSizeInBytes(maxOf(buffer,4096)).setTransferMode(AudioTrack.MODE_STREAM).build()
+    if(id!=epoch.get()){player.release();return@execute}
     track=player
     try{
      player.play()
@@ -75,5 +76,5 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
    finally{runCatching{tts?.release()};if(id==epoch.get())done(error)}
   }
  }
- override fun stop(){epoch.incrementAndGet();runCatching{track?.pause()};runCatching{track?.flush()}}
+ override fun stop(){epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()}}
 }

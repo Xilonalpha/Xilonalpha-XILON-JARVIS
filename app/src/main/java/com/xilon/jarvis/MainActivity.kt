@@ -1465,12 +1465,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
     java.io.File(root,"decoder_model_merged_quantized.onnx").isFile
    val streaming=java.io.File(filesDir,"models/streaming-asr")
    val transducer=listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all{java.io.File(streaming,it).isFile}
-   val message="TTS română Android: "+if(voice.romanianVoiceAvailable())"Voce offline disponibilă și conectată" else "Nicio voce offline activă; instalează o voce română în Android"+"\\nLiana RO: "+if(liana)"Fișiere instalate; motor Piper neconectat" else "Fișiere lipsă"
+   val androidTtsStatus=if(voice.romanianVoiceAvailable())"Voce offline disponibilă și conectată" else "Nicio voce offline activă; instalează o voce română în Android"
+   val lianaStatus=if(liana)"Fișiere instalate; compatibilitatea cu Piper nu este validată" else "Fișiere lipsă"
+   val message="TTS română Android: "+androidTtsStatus+"\\nLiana RO: "+lianaStatus
    val piperRuntime=NeuralVoiceFactory.romanian(this@MainActivity)?.installed()==true
-   val status=message+"\\nPiper RO complet: "+if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență"
-   val status2=status+"\\nWhisper RO: "+if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă"
+   val status=message+"\\nPiper RO complet: "+(if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență")
+   val status2=status+"\\nWhisper RO: "+(if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă")
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Diagnostic vocal • offline")
-    .setMessage(status2+"\\nSherpa streaming: "+if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă"+
+    .setMessage(status2+"\\nSherpa streaming: "+(if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă")+
      "\\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
     .setPositiveButton("Închide",null).show()
   }})

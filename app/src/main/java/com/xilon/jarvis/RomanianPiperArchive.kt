@@ -26,6 +26,7 @@ object RomanianPiperArchive {
      require(name.startsWith(PREFIX)){"Cale neașteptată: $name"}
      val relative=name.removePrefix(PREFIX)
      require(relative in setOf("ro_RO-mihai-medium.onnx","tokens.txt","ro_RO-mihai-medium.onnx.json","README.md","LICENSE","espeak-ng-data")||relative.startsWith("espeak-ng-data/")){"Fișier nepermis"}
+     require(relative.split("/").none{it=="."||it==".."||it.isBlank()}){"Cale nesigură"}
      val out=File(temp,relative).canonicalFile
      require(out.path.startsWith(temp.canonicalPath+File.separator)&&seen.add(out.path))
      if(entry.isDirectory)check(out.isDirectory||out.mkdirs())
@@ -33,7 +34,7 @@ object RomanianPiperArchive {
       require(entry.size>=0 && entry.size<=256L*1024*1024)
       total+=entry.size;require(total<=384L*1024*1024)
       check(out.parentFile?.isDirectory==true||out.parentFile?.mkdirs()==true)
-      out.outputStream().use{dst->val buf=ByteArray(65536);while(true){val n=tar.read(buf);if(n<0)break;dst.write(buf,0,n)}}
+      out.outputStream().use{dst->val buf=ByteArray(65536);var written=0L;while(true){val n=tar.read(buf);if(n<0)break;written+=n;require(written<=entry.size){"Dimensiune invalidă"};dst.write(buf,0,n)}}
       require(out.length()==entry.size)
      }
     }
