@@ -32,6 +32,18 @@ internal object ResourceBudget {
   when { lowMemory || thermal>=3 || availableMiB<768 -> 1024
    thermal>=2 || availableMiB<2048 -> 2048
    else -> 4096 }
+ // Social greetings and identity requests need a short, context-free response.
+ // This avoids a long multi-turn prefill for 4B-class GGUFs on CPU.
+ fun quickConversation(question:String):Boolean {
+  val plain=java.text.Normalizer.normalize(question.trim().lowercase(java.util.Locale.ROOT),
+   java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"),"")
+   .trimEnd(' ','!','.','?')
+  return Regex("^(?:(?:salut|salutare|buna ziua|buna|hello|hei)[,! ]+)?(?:cine esti|ce faci|cum te cheama|salut|salutare|buna|buna ziua|hello)$").matches(plain)
+ }
+ fun chatResponseTokens(context:Int,quick:Boolean):Int =
+  if(quick) { if(context<=512)64 else 96 }
+  else if(context<=512)96 else if(context>=2048)384 else 192
+
  fun conversationContext(availableMiB:Long,lowMemory:Boolean,thermal:String):Int =
   when { lowMemory || availableMiB<768 || thermal in setOf("severe","critical","emergency","shutdown") -> 512
    availableMiB<2048 || thermal=="moderate" -> 1024

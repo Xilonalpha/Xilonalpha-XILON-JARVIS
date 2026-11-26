@@ -28,6 +28,17 @@ class ResourceBudgetTest {
   assertEquals(2048,ResourceBudget.planningContext(8192,false,2))
   assertEquals(1024,ResourceBudget.planningContext(8192,false,6))
  }
+ @Test fun quickConversationKeepsFullWorkflowForOtherTasks(){
+  assertTrue(ResourceBudget.quickConversation("Salut cine esti"))
+  assertTrue(ResourceBudget.quickConversation("Bună ziua, cine ești?"))
+  assertTrue(ResourceBudget.quickConversation("Ce faci?"))
+  assertFalse(ResourceBudget.quickConversation("Trimite un mesaj lui Olivia pe WhatsApp"))
+  assertFalse(ResourceBudget.quickConversation("Scrie cod Kotlin pentru o aplicație"))
+  assertFalse(ResourceBudget.quickConversation("Salut explică-mi arhitectura aplicației"))
+  assertEquals(96,ResourceBudget.chatResponseTokens(1024,true))
+  assertEquals(64,ResourceBudget.chatResponseTokens(512,true))
+  assertEquals(384,ResourceBudget.chatResponseTokens(2048,false))
+ }
  @Test fun conversationLimits(){
   assertEquals(512,ResourceBudget.conversationContext(8192,false,"shutdown"))
   assertEquals(1024,ResourceBudget.conversationContext(8192,false,"moderate"))
