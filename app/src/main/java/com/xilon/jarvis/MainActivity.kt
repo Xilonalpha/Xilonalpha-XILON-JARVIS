@@ -953,7 +953,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision() } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision(); busy=false;refreshOmegaStatus();append("JARVIS: Oprire solicitată. Poți naviga în meniu.") } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -1912,6 +1912,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   agentCancelled=false;model.resetCancellation();busy=true;refreshOmegaStatus()
   append("JARVIS: Planific sarcina local...")
   worker.execute{
+   try {
    val appTips=com.jarvis.assistant.agent.AppTips(getSharedPreferences("app_tips",MODE_PRIVATE).getString("notes","").orEmpty()) { name -> runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(name,0)).toString() }.getOrNull() }
    val hints=runCatching { appTips.forForeground(LocalScreen.observe()?.packageName).orEmpty() }.getOrDefault("").take(400)
    val info=android.app.ActivityManager.MemoryInfo();getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
@@ -1932,6 +1933,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }else append("Planul nu a fost pornit.")
      },{append("Plan neexecutat: "+it.message)})
     }
+   }
+   } catch(e:Exception){
+    android.util.Log.e("JarvisPlanner","Planning failed",e)
+    runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append("Planificare eșuată: "+(e.message?:e.javaClass.simpleName))}}
    }
   }
  }
