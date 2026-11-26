@@ -236,8 +236,9 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   return nullptr;
  }
  publishStage("Generez primul token...");
+ bool generationCancelled=false;
  for(int i=0;ready && i<maxTokens;i++){
-  if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
+  if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck()){generationCancelled=true;break;}
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
   std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
@@ -255,11 +256,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   }
   if(i+1<maxTokens){if(decode(&t,1,n+i,true)!=0){
     const bool cancelled=e->CallBooleanMethod(self,cancel);
-    if(!cancelled){ok=false;publishStage("Eroare GGUF la generarea tokenului "+std::to_string(i+1));}
+    if(cancelled)generationCancelled=true;
+    else {ok=false;publishStage("Eroare GGUF la generarea tokenului "+std::to_string(i+1));}
     break;
    }}
  }
- if(ok && !e->ExceptionCheck() && publishedBytes!=out.size()){
+ if(ok && !generationCancelled && !e->ExceptionCheck() && publishedBytes!=out.size()){
   auto partial=e->NewByteArray(out.size());
   if(partial){e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));if(!e->ExceptionCheck())e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);}
  }
@@ -267,6 +269,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  llama_synchronize(ctx);if(batch)llama_batch_ext_free(batch);llama_set_abort_callback(ctx,nullptr,nullptr);llama_sampler_free(sampler);e->DeleteGlobalRef(owner);
  if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}
+ if(generationCancelled){fail(e,"GGUF generation cancelled");return nullptr;}
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
  e->SetByteArrayRegion(bytes,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
  auto cls=e->FindClass("java/lang/String");auto ctor=e->GetMethodID(cls,"<init>","([BLjava/lang/String;)V");
