@@ -19,7 +19,7 @@ class ModelDownloads(context:Context){
  private fun file(e:ModelCatalog.Entry)=File(root,e.file)
  private fun part(e:ModelCatalog.Entry)=File(root,e.file+".part")
  @Synchronized fun start(entry:ModelCatalog.Entry):Long{
-  require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.streamingAsr+ModelCatalog.romanianModels+ModelCatalog.wake+ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro,ModelCatalog.silero)))
+  require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.streamingAsr+ModelCatalog.romanianModels+ModelCatalog.wake+ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro,ModelCatalog.silero,ModelCatalog.mihai)))
   check(active.putIfAbsent(entry.file,Transfer(DownloadManager.STATUS_PENDING,0,-1,0))==null){"Transfer deja activ"}
   val id=System.currentTimeMillis()
   try{
@@ -36,6 +36,7 @@ class ModelDownloads(context:Context){
   try{
    val ref=when(entry){
     ModelCatalog.kokoro -> ModelMetadata.kokoro()
+    ModelCatalog.mihai -> ModelMetadata.releaseAsset(ModelCatalog.mihai)
     ModelCatalog.silero -> ModelMetadata.Reference("1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",2327524L,"pinned-silero")
     ModelCatalog.hand -> ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned-hand")
     else -> ModelMetadata.fetch(entry)
@@ -97,6 +98,7 @@ class ModelDownloads(context:Context){
     ModelCatalog.hand -> ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned-hand")
     ModelCatalog.silero -> ModelMetadata.Reference("1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",2327524L,"pinned-silero")
     ModelCatalog.kokoro -> ModelMetadata.kokoro()
+    ModelCatalog.mihai -> ModelMetadata.releaseAsset(ModelCatalog.mihai)
     else -> ModelMetadata.fetch(entry)
    }
    ModelIntegrity.verify(file(entry).inputStream(),recovered.sha256,recovered.bytes,recovered.algorithm)
@@ -107,7 +109,7 @@ class ModelDownloads(context:Context){
   val bytes=prefs.getLong(entry.file+".bytes",-1)
   val algorithm=prefs.getString(entry.file+".algorithm","SHA-256")?:error("Algoritm absent")
   require(algorithm in setOf("SHA-256","git-blob-sha1"))
-  require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&(when(entry){ModelCatalog.kokoro->revision.matches(Regex("asset-[0-9]+"));ModelCatalog.hand->revision=="pinned-hand";ModelCatalog.silero->revision=="pinned-silero";else->revision.matches(Regex("[0-9a-f]{40}"))})&&bytes>0)
+  require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&(when(entry){ModelCatalog.kokoro,ModelCatalog.mihai->revision.matches(Regex("asset-[0-9]+"));ModelCatalog.hand->revision=="pinned-hand";ModelCatalog.silero->revision=="pinned-silero";else->revision.matches(Regex("[0-9a-f]{40}"))})&&bytes>0)
   return ModelMetadata.Reference(hash,bytes,revision,algorithm)
  }
 

@@ -4,7 +4,9 @@ import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 object ModelMetadata {
  data class Reference(val sha256:String,val bytes:Long,val revision:String,val algorithm:String="SHA-256")
- fun kokoro():Reference {
+ fun kokoro():Reference = releaseAsset(ModelCatalog.kokoro)
+ fun releaseAsset(entry:ModelCatalog.Entry):Reference {
+  require(entry==ModelCatalog.kokoro || entry==ModelCatalog.mihai)
   val connection=URL("https://api.github.com/repos/k2-fsa/sherpa-onnx/releases/tags/tts-models").openConnection() as HttpsURLConnection
   connection.connectTimeout=15000;connection.readTimeout=15000;connection.instanceFollowRedirects=false
   connection.setRequestProperty("Accept","application/vnd.github+json")
@@ -14,14 +16,14 @@ object ModelMetadata {
    val assets=JSONObject(body).getJSONArray("assets")
    for(i in 0 until assets.length()){
     val asset=assets.getJSONObject(i)
-    if(asset.optString("name")!=ModelCatalog.kokoro.file)continue
-    require(asset.getString("browser_download_url")==KokoroArchive.URL)
+    if(asset.optString("name")!=entry.file)continue
+    require(asset.getString("browser_download_url")==entry.url)
     val digest=asset.optString("digest")
     require(digest.matches(Regex("sha256:[0-9a-fA-F]{64}"))){"GitHub nu publică SHA-256 pentru arhivă"}
     val size=asset.getLong("size");require(size>0)
     return Reference(digest.removePrefix("sha256:"),size,"asset-"+asset.getLong("id"))
    }
-   error("Arhiva Kokoro absentă din release")
+   error("Arhiva vocală absentă din release")
   }finally{connection.disconnect()}
  }
  fun fetch(entry:ModelCatalog.Entry):Reference {
