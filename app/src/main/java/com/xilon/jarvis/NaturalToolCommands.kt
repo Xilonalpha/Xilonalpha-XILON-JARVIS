@@ -6,7 +6,7 @@ object NaturalToolCommands {
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
   // Do not bypass the negation and compound-action safety guards.
-  if(RomanianLexicon.negated(input))return null
+  if(RomanianLexicon.negated(input) || RomanianLexicon.split(input).any { RomanianLexicon.negated(it) })return null
   val yt=input.trim().trimEnd('!','?','.').replace(Regex("\\s+")," ")
   val ytPrefix=Regex("^(?:deschide|pornește|porneste|lansează|lanseaza) (?:aplicația |aplicatia )?youtube (?:și|si) (?:pune|redă|reda|pornește|porneste|caută|cauta) (?:muzică |muzica |melodia |piesa |un cântec |un cantec |niște muzică |niste muzica )?(.+)$",RegexOption.IGNORE_CASE)
   val ytSuffix=Regex("^(?:pune|redă|reda|pornește|porneste) (?:muzică |muzica |melodia |piesa )?(.+) (?:pe|în|in) youtube$",RegexOption.IGNORE_CASE)
@@ -35,8 +35,10 @@ object NaturalToolCommands {
   match("(?:deschide site-ul|deschide pagina) (.+)")?.let{return call("open_url","url" to JsonPrimitive(it.groupValues[1]))}
   match("(?:deschide|lansează|lanseaza) (?:aplicația |aplicatia )?(.+)")?.let{
    val app=it.groupValues[1].trim()
-   // Reject free-form clauses; do not pass them as a fake app name.
-   if(!Regex("\\b(?:și|si|apoi|iar|după aceea|dupa aceea)\\b",RegexOption.IGNORE_CASE).containsMatchIn(app))
+   // An app title can contain conjunctions (e.g. "Tom și Jerry").
+   // The shared Romanian clause splitter decides whether another verb
+   // introduces a separate action, rather than rejecting all conjunctions.
+   if(RomanianLexicon.split(q).size==1)
     return call("open_app","app" to JsonPrimitive(app))
   }
   // The single-intent YouTube forms are handled once, above the lexicon.

@@ -49,6 +49,11 @@ class NaturalToolCommandsTest {
   assertEquals(2,RomanianLexicon.split("Aprinde lanterna; deschide WhatsApp").size)
   assertEquals("youtube_search",NaturalToolCommands.parse("Caută pe YouTube jazz și blues")?.tool)
  }
+ @Test fun applicationNamesCanContainConjunctions(){
+  assertEquals(JsonPrimitive("Tom și Jerry"),NaturalToolCommands.parse("Deschide aplicația Tom și Jerry")?.args?.get("app"))
+  assertNull(NaturalToolCommands.parse("Deschide WhatsApp și trimite un mesaj"))
+  assertNull(NaturalToolCommands.parse("Deschide YouTube și pune jazz apoi trimite un mesaj"))
+ }
  @Test fun unknown(){assertNull(NaturalToolCommands.parse("Ce este inteligența artificială?"))}
  @Test fun upstreamNavigation(){
   assertEquals("press_back",NaturalToolCommands.parse("go back")!!.tool)
