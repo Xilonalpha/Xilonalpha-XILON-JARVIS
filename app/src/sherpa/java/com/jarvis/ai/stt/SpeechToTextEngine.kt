@@ -220,6 +220,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var lastPartial = ""
         var totalSamples = 0
         var zeroReads = 0
+        var digitalSilenceReads = 0
         val aec = runCatching {
             if (android.media.audiofx.AcousticEchoCanceler.isAvailable())
                 android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId)
@@ -248,6 +249,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     continue
                 }
                 zeroReads = 0
+                if (isDigitalSilence(pcm, n)) {
+                    if (++digitalSilenceReads >= 30) error("Microfon blocat sau dezactivat de Android.")
+                } else digitalSilenceReads = 0
                 totalSamples += n
                 for (i in 0 until n) normalizedFrame[i] = pcm[i] / 32768.0f
                 // Normal 100-ms reads reuse the same array rather than allocating every frame.
@@ -262,13 +266,15 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     // A UI callback must not break the native capture loop.
                     runCatching { onPartial(partial) }
                 }
-                if (online.isEndpoint(stream) && lastPartial.isNotBlank()) break
+                // Respect the recognizer's no-speech endpoint as well as spoken endpoints.
+                if (online.isEndpoint(stream)) break
             }
             if (captureCancelled || closed || epoch != cancellationEpoch.get()) return ""
             stream.inputFinished()
             while (!captureCancelled && !closed && epoch == cancellationEpoch.get() && online.isReady(stream)) online.decode(stream)
             if (captureCancelled || closed || epoch != cancellationEpoch.get()) return ""
-            return online.getResult(stream).text.trim().ifBlank { lastPartial }
+            // Partial hypotheses are UI feedback only, never a fallback executable command.
+            return online.getResult(stream).text.trim()
         } finally {
             runCatching { recorder.stop() }
             runCatching { aec?.release() }
