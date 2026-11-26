@@ -74,6 +74,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
         modelDirectory.listFiles()?.filter{it.isFile && it.length()>0L}.orEmpty()
     )!=null
 
+    /** Streaming is selected only when the preferred Romanian Whisper model is absent. */
+    fun supportsConcurrentPlayback():Boolean = !hasRomanianWhisper() && hasStreamingModelFiles()
+
     fun hasStreamingModelFiles():Boolean {
         val directory=File(modelDirectory,"streaming-asr")
         return listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all { name ->
