@@ -16,11 +16,15 @@ internal class SileroVad16k(model:File):AutoCloseable {
  private val env=OrtEnvironment.getEnvironment()
  private val session=OrtSession.SessionOptions().use { options ->
   require(model.isFile && model.length()>0){"Missing local Silero VAD model"}
+  options.setIntraOpNumThreads(1)
+  options.setInterOpNumThreads(1)
   env.createSession(model.absolutePath,options)
  }
  private var state=FloatArray(2*1*128)
  private val window=FloatArray(512)
  private val contextSamples=FloatArray(64)
+ private val framed=FloatArray(576)
+ private val nextState=FloatArray(256)
  private var buffered=0
  private val gate=NeuralSpeechGate()
  init {
@@ -50,7 +54,6 @@ internal class SileroVad16k(model:File):AutoCloseable {
   gate.reset()
  }
  private fun infer():Float {
-  val framed=FloatArray(576)
   System.arraycopy(contextSamples,0,framed,0,64)
   System.arraycopy(window,0,framed,64,512)
   System.arraycopy(window,448,contextSamples,0,64)
@@ -65,7 +68,7 @@ internal class SileroVad16k(model:File):AutoCloseable {
       val next=outputs.get("stateN").orElseThrow{
        IllegalStateException("Missing Silero recurrent state")
       }.value as Array<*>
-      val updated=FloatArray(256)
+      val updated=nextState
       var pos=0
       for(layer in next){
        for(batch in layer as Array<*>){
@@ -76,7 +79,7 @@ internal class SileroVad16k(model:File):AutoCloseable {
        }
       }
       require(pos==updated.size && probability.isFinite() && probability in 0f..1f){"Invalid Silero output"}
-      state=updated
+      updated.copyInto(state)
       return probability
      }
     }
