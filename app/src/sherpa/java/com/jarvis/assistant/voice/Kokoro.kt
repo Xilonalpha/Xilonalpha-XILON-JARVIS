@@ -265,7 +265,7 @@ object Kokoro {
                             tokens = File(dir, "tokens.txt").absolutePath,
                             dataDir = File(dir, "espeak-ng-data").absolutePath,
                         ),
-                        numThreads = VOICE_THREADS, // the phone's fast cores
+                        numThreads = minOf(VOICE_THREADS, com.xilon.jarvis.localTtsThreadBudget(context)), // the phone's fast cores
                     ),
                     maxNumSentences = 1, // stream one sentence at a time
                 ),

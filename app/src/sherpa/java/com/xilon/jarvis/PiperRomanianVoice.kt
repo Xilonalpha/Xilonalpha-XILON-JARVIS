@@ -36,7 +36,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   val key=listOf(m.absolutePath,m.lastModified().toString(),m.length().toString(),t.absolutePath,t.lastModified().toString(),d.absolutePath).joinToString("|")
   if(cachedKey==key)cachedTts?.let{return it}
   releaseCached()
-  return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(vits=OfflineTtsVitsModelConfig(model=m.absolutePath,tokens=t.absolutePath,dataDir=d.absolutePath),numThreads=2))).also{cachedTts=it;cachedKey=key}
+  return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(vits=OfflineTtsVitsModelConfig(model=m.absolutePath,tokens=t.absolutePath,dataDir=d.absolutePath),numThreads=localTtsThreadBudget(app)))).also{cachedTts=it;cachedKey=key}
  }
  @Volatile private var track:AudioTrack?=null
  override fun installed()=model.isFile && model.length()>0 && (useMihai() || (config.isFile && config.length()>0)) && tokens.isFile && tokens.length()>0 && phonemeData()!=null
@@ -84,5 +84,5 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
    finally{if(error!=null)releaseCached();if(id==epoch.get())done(error)}
   }
  }
- override fun stop(){epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};val stopped=epoch.get();executor.execute{if(epoch.get()==stopped)releaseCached()}}
+ override fun stop(){val stopped=epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};executor.execute{if(epoch.get()==stopped)releaseCached()}}
 }
