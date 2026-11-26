@@ -52,6 +52,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
     @Volatile
     private var captureCancelled = false
 
+    /** Prefer the multilingual Whisper decoder for Romanian instead of the English-only streaming model. */
+    private fun hasRomanianWhisper():Boolean = ModelStore.whisperFiles(
+        modelDirectory.listFiles()?.filter{it.isFile && it.length()>0L}.orEmpty()
+    )!=null
+
     fun hasStreamingModelFiles():Boolean {
         val directory=File(modelDirectory,"streaming-asr")
         return listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all { name ->
@@ -65,7 +70,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         kotlinx.coroutines.runBlocking {
             operationMutex.withLock {
                 check(!closed) { "Speech engine closed" }
-                if (ensureOnlineRecognizer() == null) ensureRecognizer()
+                if (hasRomanianWhisper()) ensureRecognizer()
+                else if (ensureOnlineRecognizer() == null) ensureRecognizer()
             }
         }
         return true
@@ -84,7 +90,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
-            val online = ensureOnlineRecognizer()
+            val online = if (hasRomanianWhisper()) null else ensureOnlineRecognizer()
             if (online != null) return@withContext captureStreaming(online, requestEpoch, onPartial)
             val activeRecognizer = ensureRecognizer()
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""

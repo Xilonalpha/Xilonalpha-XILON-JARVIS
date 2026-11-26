@@ -1417,6 +1417,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Whisper română • ASR offline Sherpa";setOnClickListener{
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Whisper RO • recunoaștere offline")
+    .setMessage("Pentru recunoaștere română folosește cele 3 fișiere Whisper Tiny multilingv din Catalog voce Sherpa. Motorul nativ Sherpa le încarcă cu language=ro și task=transcribe. Exportul Gntz Transformers.js nu este compatibil direct și nu este folosit. Dacă ai instalat și Zipformer EN, Whisper RO are prioritate.")
+    .setPositiveButton("Înțeles",null).show()
+  }})
   settings.addView(Button(this).apply{text="Catalog voce Sherpa";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.whisper

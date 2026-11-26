@@ -11,7 +11,9 @@ object ModelCatalog {
  Entry("Qwen3 1.7B Q4","Raționament și planificare; necesită RAM disponibilă suplimentară","tensorblock/Qwen_Qwen3-1.7B-GGUF","Qwen3-1.7B-Q4_K_M.gguf",1282)
  )
  val ocr=listOf("ron","eng").map{lang->Entry("OCR "+lang,"Tesseract","lm-kit/tessdata-fast","$lang.traineddata",5,"83ff76b97461395f257255720bf7f3957606dbb5")}
- val whisper=listOf("tiny-encoder.int8.onnx" to 13L,"tiny-decoder.int8.onnx" to 90L,"tiny-tokens.txt" to 1L).map{(file,mb)->Entry(file,"Whisper Tiny","csukuangfj/sherpa-onnx-whisper-tiny",file,mb,"65176e2")}
+ val whisper=listOf("tiny-encoder.int8.onnx" to 13L,"tiny-decoder.int8.onnx" to 90L,"tiny-tokens.txt" to 1L).map{(file,mb)->Entry(file,"Whisper Tiny multilingv • ASR română prin Sherpa","csukuangfj/sherpa-onnx-whisper-tiny",file,mb,"65176e2")}
+ /** Sherpa-compatible multilingual Whisper: this is the working native Romanian ASR path. */
+ val romanianWhisperNative:List<Entry> get()=whisper
  /** Streaming Zipformer EN INT8; model is English-only, not Romanian. */
  val streamingAsr=listOf(
   Entry("Zipformer EN encoder INT8","Sherpa streaming EN","csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26","encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",72),
