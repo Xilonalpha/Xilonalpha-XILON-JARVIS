@@ -122,12 +122,15 @@ class LocalScreen:AccessibilityService(){
    while(queue.isNotEmpty()&&count<200&&elements.size<60){
     val n=queue.removeFirst();count++
     try{
-     if(n.isPassword||n.isEditable)continue
+     // Expose safe field geometry, never editable text, hints, descriptions or password nodes.
+     if(n.isPassword)continue
      if(n.isVisibleToUser&&n.packageName?.toString()==pkg){
       val rect=android.graphics.Rect();n.getBoundsInScreen(rect)
-      val label=n.text?.toString()?.take(120);val desc=n.contentDescription?.toString()?.take(120)
-      if(!rect.isEmpty&&(n.isClickable||n.isScrollable||!label.isNullOrBlank()||!desc.isNullOrBlank())){
-       elements.add(ScreenElement(elements.size,if(n.isClickable)"button" else "other",label,desc,n.viewIdResourceName,n.className?.toString(),rect.left,rect.top,rect.right,rect.bottom,n.isClickable&&n.isEnabled,false,n.isScrollable,n.isSelected,false))
+      val editable=n.isEditable
+      val label=if(editable)null else n.text?.toString()?.take(120)
+      val desc=if(editable)null else n.contentDescription?.toString()?.take(120)
+      if(!rect.isEmpty&&(editable||n.isClickable||n.isScrollable||!label.isNullOrBlank()||!desc.isNullOrBlank())){
+       elements.add(ScreenElement(elements.size,if(editable)"edittext" else if(n.isClickable)"button" else "other",label,desc,if(editable)null else n.viewIdResourceName,n.className?.toString(),rect.left,rect.top,rect.right,rect.bottom,n.isClickable&&n.isEnabled,editable,n.isScrollable,n.isSelected,false))
       }
      }
      for(j in 0 until minOf(n.childCount,30)){if(queue.size>=200)break;n.getChild(j)?.let{queue.add(it)}}
