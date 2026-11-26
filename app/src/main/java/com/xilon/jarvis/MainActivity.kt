@@ -23,8 +23,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val speechSessions=VoiceSessionState()
  @Volatile private var speechClosing=false
  private val partialVoiceGate=VoicePartialGate()
+ private val speechCapture=VoiceCaptureGate()
  private fun stopNeural(){
   neuralCancelled=true
+  speechCapture.cancel()
   speechSessions.cancel()
   partialVoiceGate.reset()
   neural?.stop()
@@ -34,14 +36,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun startNeural(fallback:Boolean=false){
-  if(speechClosing || busy || wake!=null || !conversationForeground)return
+  if(speechClosing || busy || speechCapture.active() || wake!=null || !conversationForeground)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
   val turn=speechSessions.begin()
+  if(!speechCapture.begin(turn)){speechSessions.cancel();return}
   partialVoiceGate.reset()
   listening.close();stopAllSpeech();busy=true;neuralCancelled=false
   omegaCore.listening=true;refreshOmegaStatus()
   speechWorker.execute {
-   if(speechClosing || !speechSessions.isCurrent(turn) || neuralCancelled)return@execute
+   if(speechClosing || !speechSessions.isCurrent(turn) || neuralCancelled){speechCapture.finish(turn);return@execute}
    var engine:NeuralSpeech?=null
    val result:Result<String> = try {
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{created ->
@@ -59,7 +62,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }})
     }
    }catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}
-   finally{neural=null}
+   finally{neural=null;speechCapture.finish(turn)}
    runOnUiThread {
     if(isDestroyed || speechClosing || !speechSessions.isCurrent(turn))return@runOnUiThread
     busy=false;omegaCore.listening=false;refreshOmegaStatus()
@@ -183,7 +186,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!busy && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))localVad.start({
+   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))localVad.start({
     if(continuousVoice && conversationForeground && omegaCore.speaking && !isDestroyed){
      // Stop playback as soon as VAD detects the user's speech, before ASR.
      // This prevents the recognizer from hearing continued synthesized audio.
@@ -217,7 +220,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){localVad.stop();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
+ private fun stopVoiceLoop(){localVad.stop();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
@@ -2450,6 +2453,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   voice.close()
   nativeModel?.stop()
   speechClosing=true
+  speechCapture.close()
   stopNeural()
   speechSessions.close()
   speechWorker.execute {

@@ -1,0 +1,22 @@
+package com.xilon.jarvis
+/**
+ * Prevents overlapping microphone capture sessions, including stale callbacks
+ * from a cancelled Sherpa recognizer. No audio or transcript is stored.
+ */
+internal class VoiceCaptureGate {
+ private var ticket:Long?=null
+ private var closed=false
+ @Synchronized fun begin(id:Long):Boolean {
+  if(closed || ticket!=null)return false
+  ticket=id
+  return true
+ }
+ @Synchronized fun active():Boolean=ticket!=null
+ @Synchronized fun finish(id:Long):Boolean {
+  if(ticket!=id)return false
+  ticket=null
+  return true
+ }
+ @Synchronized fun cancel(){ticket=null}
+ @Synchronized fun close(){closed=true;ticket=null}
+}
