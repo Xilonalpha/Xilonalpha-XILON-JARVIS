@@ -13,7 +13,7 @@ object RegistryIntent {
    .replace(Regex("\\p{M}+"), "")
  fun matches(text: String): Boolean {
   val q = normalized(text)
-  return !question.containsMatchIn(q) && action.containsMatchIn(q)
+  return !RomanianLexicon.negated(text) && !question.containsMatchIn(q) && action.containsMatchIn(q)
  }
  fun compound(text: String): Boolean {
   val q = normalized(text)

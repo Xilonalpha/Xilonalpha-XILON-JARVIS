@@ -26,6 +26,13 @@ object InjectionGuard {
         Regex("jarvis,?\\s+(ignore|forget)\\b", RegexOption.IGNORE_CASE),
     )
 
+    private val romanianPatterns = listOf(
+        Regex("""\b(?:ignora|omite|uita|nesocoti)\s+(?:toate\s+)?(?:instructiunile|regulile|comenzile)\s+(?:anterioare|precedente|de mai sus)"""),
+        Regex("""\b(?:instructiuni|reguli)\s+noi\s*:"""),
+        Regex("""\b(?:dezvaluie|afiseaza|arata)\s+(?:promptul|instructiunile|regulile)\s+(?:de sistem|interne|secrete)"""),
+        Regex("""\b(?:trimite|transmite|transfera|partajeaza)\b[^\n]{0,60}\b(?:parola|parolele|codul otp|pinul|banii|codul de verificare)\b"""),
+    )
+
     fun inspect(obs: ScreenObservation?): Verdict {
         if (obs == null) return Verdict(Level.CLEAN, emptyList())
         val corpus = obs.elements.joinToString("\n") { (it.text ?: "") + " " + (it.desc ?: "") }
@@ -36,6 +43,9 @@ object InjectionGuard {
         val hits = patterns.mapNotNull { p ->
             p.find(corpus)?.let { p.pattern }
         }
-        return Verdict(if (hits.isEmpty()) Level.CLEAN else Level.SUSPICIOUS, hits.distinct().take(4))
+        val folded = java.text.Normalizer.normalize(corpus.lowercase(java.util.Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+        val allHits = hits + romanianPatterns.mapNotNull { p -> p.find(folded)?.let { p.pattern } }
+        return Verdict(if (allHits.isEmpty()) Level.CLEAN else Level.SUSPICIOUS, allHits.distinct().take(4))
     }
 }
