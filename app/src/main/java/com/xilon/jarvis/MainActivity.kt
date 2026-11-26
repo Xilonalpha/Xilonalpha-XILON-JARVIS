@@ -235,6 +235,33 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var englishNeuralVoice=false
  private var romanianNeuralVoice=false
  private var piperVoice:NeuralVoice?=null
+ private val mihaiHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ private val mihaiPoll=object:Runnable{override fun run(){
+  if(isDestroyed || !getPreferences(MODE_PRIVATE).getBoolean("mihai_auto_install",false))return
+  val downloads=ModelDownloads(this@MainActivity)
+  val state=downloads.transfer(ModelCatalog.mihai)
+  if(state.state==android.app.DownloadManager.STATUS_FAILED){getPreferences(MODE_PRIVATE).edit().remove("mihai_auto_install").apply();append(state.label);return}
+  if(!busy && conversationForeground && downloads.uri(ModelCatalog.mihai)!=null){installMihaiVoice(downloads);return}
+  mihaiHandler.postDelayed(this,1500)
+ }}
+ private fun scheduleMihaiInstall(){mihaiHandler.removeCallbacks(mihaiPoll);mihaiHandler.post(mihaiPoll)}
+ private fun installMihaiVoice(downloads:ModelDownloads){
+  if(busy)return
+  val uri=downloads.uri(ModelCatalog.mihai)?:return
+  getPreferences(MODE_PRIVATE).edit().remove("mihai_auto_install").apply()
+  busy=true
+  worker.execute{
+   val result=runCatching{
+    val ref=downloads.reference(ModelCatalog.mihai)
+    ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm)
+    RomanianPiperArchive.install(this@MainActivity,uri)
+   }
+   runOnUiThread{if(!isDestroyed){busy=false;result.fold({
+    append("Mihai RO instalat.")
+    if(activateInstalledRomanianVoice())speakReply("Bună! Vocea românească este instalată.",true) else append("Piper RO: motorul nu este pregătit.")
+   },{append("Instalare Piper RO eșuată: "+it.message)})}}
+  }
+ }
  private var piperToggle:Button?=null
  private var replyToggle:Switch?=null
  private fun activateInstalledRomanianVoice():Boolean {
@@ -1583,19 +1610,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val uri=downloads.uri(entry)
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Mihai RO • Piper Sherpa")
     .setMessage("Pachet complet Sherpa-ONNX: model, tokens și date eSpeak. "+downloads.status(entry)+"\nFuncționează exclusiv offline după instalare.")
-   if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
-    val result=runCatching{
-     val ref=downloads.reference(entry)
-     ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm)
-     RomanianPiperArchive.install(this@MainActivity,uri)
-     "Mihai RO instalat."
-    }.getOrElse{"Instalare Piper RO eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result);if(result=="Mihai RO instalat."){if(activateInstalledRomanianVoice())speakReply("Bună! Vocea românească este instalată.",true) else this@MainActivity.append("Piper RO: instalat, dar motorul nu este pregătit.")}}}
-   }}}
-   else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
-    val result=runCatching{downloads.start(entry);"Descărcare Mihai RO pornită."}.getOrElse{"Descărcare eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
-   }}}
+   if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->installMihaiVoice(downloads)}
+   else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă și instalează"){_,_->if(!busy){
+    getPreferences(MODE_PRIVATE).edit().putBoolean("mihai_auto_install",true).apply()
+    val result=runCatching{downloads.start(entry);"Descărcare Mihai RO pornită; instalarea urmează automat."}.getOrElse{getPreferences(MODE_PRIVATE).edit().remove("mihai_auto_install").apply();"Descărcare eșuată: "+it.message}
+    this@MainActivity.append(result);scheduleMihaiInstall()
+   }}
    dialog.setNegativeButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Catalog modele românești • STT și TTS";setOnClickListener{
@@ -2747,6 +2767,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onResume(){
   super.onResume()
+  scheduleMihaiInstall()
   conversationForeground=true
   lastConversationActivity=android.os.SystemClock.elapsedRealtime()
   conversationHandler.removeCallbacks(conversationTick)
@@ -2769,6 +2790,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onStop(){stopAllSpeech();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  mihaiHandler.removeCallbacks(mihaiPoll)
   agentCancelled=true;invalidatePreview();ocrText=null;visualObservation.clear()
   conversationHandler.removeCallbacks(conversationTick);triggerHandler.removeCallbacks(triggerTick)
   com.jarvis.mobile.core.skills.SkillRecorder.stop()
