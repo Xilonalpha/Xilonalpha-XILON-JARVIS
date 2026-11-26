@@ -32,6 +32,9 @@ class BackgroundVoiceService:Service(){
   const val ACTION_STOP="com.xilon.jarvis.BACKGROUND_VOICE_STOP"
   const val ACTION_INITIATIVE_ON="com.xilon.jarvis.BACKGROUND_INITIATIVE_ON"
   const val ACTION_INITIATIVE_OFF="com.xilon.jarvis.BACKGROUND_INITIATIVE_OFF"
+  @Volatile internal var sessionActive=false
+   private set
+  private val sessionSlot=AtomicBoolean(false)
   private const val CHANNEL="xilon_background_voice"
   private const val NOTIFICATION_ID=4206
  }
@@ -54,12 +57,14 @@ class BackgroundVoiceService:Service(){
    stopSelf();return START_NOT_STICKY
   }
   if(!running.compareAndSet(false,true))return START_NOT_STICKY
+  if(!sessionSlot.compareAndSet(false,true)){running.set(false);stopSelf();return START_NOT_STICKY}
+  sessionActive=true
   initiative=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("background_initiative",false)
   lastInteraction=SystemClock.elapsedRealtime()
   val manager=getSystemService(NotificationManager::class.java)
   manager.createNotificationChannel(NotificationChannel(CHANNEL,"JARVIS • microfon în fundal",NotificationManager.IMPORTANCE_LOW))
   try{startForeground(NOTIFICATION_ID,notification("Ascultare locală activă"))}
-  catch(e:Exception){running.set(false);stopSelf();return START_NOT_STICKY}
+  catch(e:Exception){running.set(false);sessionActive=false;sessionSlot.set(false);stopSelf();return START_NOT_STICKY}
   executor.execute{
    try{
     val speech=NeuralSpeechFactory.create(applicationContext)
@@ -129,6 +134,7 @@ class BackgroundVoiceService:Service(){
     runCatching{engine?.close()};engine=null
     runCatching{model?.close()};model=null
     runCatching{piper?.stop()};piper=null
+    sessionActive=false;sessionSlot.set(false)
     stopSelf()
    }
   }

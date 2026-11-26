@@ -1,6 +1,6 @@
 package com.xilon.jarvis
 class NativeModel(private val gpuLayers:Int=0) : AutoCloseable {
- companion object { init { System.loadLibrary("xilon_llama") } }
+ companion object { init { System.loadLibrary("xilon_llama") }; private val modelSlot=java.util.concurrent.Semaphore(1,true) }
  @Volatile private var cancelled = false
  fun stop() { cancelled = true }
  fun isCancelled(): Boolean = cancelled
@@ -16,9 +16,16 @@ class NativeModel(private val gpuLayers:Int=0) : AutoCloseable {
  private var startNanos=0L
  fun publishToken(){if(generatedTokens==0)firstTokenNanos=android.os.SystemClock.elapsedRealtimeNanos()-startNanos;generatedTokens++}
  private var handle = 0L
- @Synchronized fun load(path: String) { close(); handle = openModel(path,gpuLayers); check(handle != 0L) { "Model loading failed" } }
+ private var ownsSlot=false
+ @Synchronized fun load(path: String) {
+  close()
+  check(modelSlot.tryAcquire()) { "Un alt motor GGUF este deja încărcat. Eliberează-l înainte." }
+  ownsSlot=true
+  try { handle=openModel(path,gpuLayers);check(handle!=0L){"Model loading failed"} }
+  finally { if(handle==0L){ownsSlot=false;modelSlot.release()} }
+ }
  @Synchronized fun generate(prompt: String, threads: Int = 2, context: Int = 1024, maxTokens: Int = 128, history: List<Pair<String,String>> = emptyList(), grammar:String = ""): String { check(handle != 0L); generatedTokens=0;firstTokenNanos=0;startNanos=android.os.SystemClock.elapsedRealtimeNanos(); return infer(handle,(history + ("user" to prompt)).map { it.first }.toTypedArray(),(history + ("user" to prompt)).map { it.second.toByteArray(Charsets.UTF_8) }.toTypedArray(),threads.coerceIn(1,8),context.coerceIn(512,4096),maxTokens.coerceIn(32,minOf(512,context.coerceIn(512,4096)/2)),grammar) }
- @Synchronized override fun close() { if(handle != 0L) { freeModel(handle); handle=0 } }
+ @Synchronized override fun close() { if(handle != 0L) { freeModel(handle); handle=0 }; if(ownsSlot){ownsSlot=false;modelSlot.release()} }
  @Synchronized fun supportsVisionProjector(path:String):Boolean { check(handle != 0L); return probeVision(handle,path) }
  @Synchronized fun describeImage(projector:String,bitmap:android.graphics.Bitmap,question:String,context:Int=2048,maxTokens:Int=128):String {
   check(handle!=0L);require(question.isNotBlank() && question.length<=4000)

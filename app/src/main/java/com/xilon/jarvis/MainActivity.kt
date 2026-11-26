@@ -82,6 +82,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun beginBargeIn():Long? {
+  if(BackgroundVoiceService.sessionActive)return null
   val ticket=voiceBargeIn.beginTicket() ?: return null
   val timeout=Runnable{if(voiceBargeIn.isCurrent(ticket)){
    localVad.stop();listening.close();endBargeIn(ticket)
@@ -104,6 +105,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun startNeural(fallback:Boolean=false){
+  if(BackgroundVoiceService.sessionActive)return
   if(!VoiceCapturePolicy.mayStartNormalAsr(conversationForeground,speechClosing,busy,speechCapture.active(),voiceBargeIn.active(),wake!=null))return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
   val turn=speechSessions.begin()
@@ -170,6 +172,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var wakeReplyPending=false
  private fun stopWake(){wake?.stop();wake=null;wakeCommandPending=false;wakeReplyPending=false}
  private fun startWake(){
+  if(BackgroundVoiceService.sessionActive)return
   if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
   listening.close();voice.stop()
@@ -1296,6 +1299,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   composerUpdate?.invoke()
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon în fundal • pornește";setOnClickListener{
+   if(busy || nativeModel!=null){append("Eliberează modelul GGUF din memorie înainte de pornirea serviciului vocal în fundal.");return@setOnClickListener}
    if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
     requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
     append("Acordă microfonul și apasă din nou pentru ascultarea în fundal.")
@@ -2045,6 +2049,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
  private fun startMicrophone(fromWake:Boolean=false){
+  if(BackgroundVoiceService.sessionActive){append("Serviciul vocal în fundal este activ sau se oprește.");return}
   if(busy || speechCapture.active() || voiceBargeIn.active())return
   stopWake()
   wakeCommandPending=fromWake
@@ -2052,6 +2057,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   startNeural(true)
  }
  private fun startAndroidMicrophone(){
+  if(BackgroundVoiceService.sessionActive)return
   if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
