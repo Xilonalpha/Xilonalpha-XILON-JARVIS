@@ -41,6 +41,35 @@ object NaturalToolCommands {
   rawMatch("(?:scrie|tastează|tasteaza) (?:textul )?[:]\\s*(.+)")?.let{
    return direct("type_text","text" to JsonPrimitive(it.groupValues[1]))
   }
+  rawMatch("(?:trimite|scrie) (?:un )?(?:email|e-mail) (?:către |catre |la )?([^\\s:]+@[^\\s:]+):\\s*(.+)")?.let{
+   return direct("send_email","to" to JsonPrimitive(it.groupValues[1]),"body" to JsonPrimitive(it.groupValues[2]))
+  }
+  rawMatch("(?:distribuie|partajează|partajeaza) (?:textul )?:\\s*(.+)")?.let{
+   return direct("share_content","text" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:găsește|gaseste|identifică|identifica) (?:butonul|elementul) (.+)")?.let{
+   return direct("find_element","text" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:ține|tine) apăsat (?:pe )?(.+)")?.let{
+   return direct("long_press","text" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:apasă|apasa) de două ori (?:pe )?(.+)")?.let{
+   return direct("double_tap","text" to JsonPrimitive(it.groupValues[1]))
+  }
+  rawMatch("(?:pune|setează|seteaza|pornește|porneste) (?:un )?(?:cronometru|timer|temporizator) (?:de |pentru )?(\\d{1,5}) (ore|oră|ora|minute|minut|secunde|secundă|secunda)")?.let{
+   val unit=RomanianLexicon.normalize(it.groupValues[2])
+   val seconds=it.groupValues[1].toLong()*when(unit){"ore","ora"->3600;"minute","minut"->60;else->1}
+   if(seconds in 1..86400)return direct("set_timer","seconds" to JsonPrimitive(seconds.toInt()))
+   return null
+  }
+  rawMatch("(?:arată|arata|citește|citeste) calendarul (?:pentru )?(?:următoarele |urmatoarele )?(\\d{1,2}) zile")?.let{
+   val days=it.groupValues[1].toInt()
+   if(days in 1..30)return direct("read_calendar","days" to JsonPrimitive(days))
+   return null
+  }
+  rawMatch("(?:arată|arata|caută|cauta) pe hartă (.+)")?.let{
+   return direct("launch_intent","kind" to JsonPrimitive("map"),"value" to JsonPrimitive(it.groupValues[1]))
+  }
   rawMatch("(?:apasă|apasa|atinge) (?:butonul )?(.+)")?.let{
    return direct("tap","text" to JsonPrimitive(it.groupValues[1]))
   }
