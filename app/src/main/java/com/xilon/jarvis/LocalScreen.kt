@@ -67,6 +67,38 @@ class LocalScreen:AccessibilityService(){
   if(mode=="double")builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,120,60))
   return dispatchGesture(builder.build(),null,null)
  }
+ /**
+  * Wait for Android's gesture completion callback. Dispatch acceptance alone
+  * does not mean the gesture actually finished.
+  */
+ internal suspend fun swipeCompleted(x1:Int,y1:Int,x2:Int,y2:Int):Boolean {
+  val m=resources.displayMetrics
+  if(listOf(x1,x2).any{it !in 0 until m.widthPixels}||listOf(y1,y2).any{it !in 0 until m.heightPixels})return false
+  val path=android.graphics.Path().apply{moveTo(x1.toFloat(),y1.toFloat());lineTo(x2.toFloat(),y2.toFloat())}
+  val gesture=android.accessibilityservice.GestureDescription.Builder()
+   .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,350)).build()
+  return kotlinx.coroutines.withTimeoutOrNull(2500L) {
+   kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { continuation ->
+    val callback=object:AccessibilityService.GestureResultCallback(){
+     override fun onCompleted(gestureDescription:android.accessibilityservice.GestureDescription?){
+      if(continuation.isActive)continuation.resume(true){}
+     }
+     override fun onCancelled(gestureDescription:android.accessibilityservice.GestureDescription?){
+      if(continuation.isActive)continuation.resume(false){}
+     }
+    }
+    val accepted=runCatching{dispatchGesture(gesture,callback,null)}.getOrDefault(false)
+    if(!accepted&&continuation.isActive)continuation.resume(false){}
+   }
+  } ?: false
+ }
+ internal suspend fun scrollCompleted(forward:Boolean):Boolean {
+  val m=resources.displayMetrics
+  val x=m.widthPixels/2
+  val top=(m.heightPixels*0.25).toInt()
+  val bottom=(m.heightPixels*0.75).toInt()
+  return if(forward)swipeCompleted(x,bottom,x,top) else swipeCompleted(x,top,x,bottom)
+ }
  internal fun scrollConfirmed(forward:Boolean):Boolean {
   val m=resources.displayMetrics
   val x=m.widthPixels/2
