@@ -21,8 +21,7 @@ internal class SileroVad16k(model:File):AutoCloseable {
  private var state=FloatArray(2*1*128)
  private val window=FloatArray(512)
  private var buffered=0
- private var active=0
- private var lastProbability=0f
+ private val gate=NeuralSpeechGate()
  init {
   try {
    require(session.inputNames.containsAll(setOf("input","state","sr"))){"Unsupported Silero VAD ONNX inputs"}
@@ -37,9 +36,7 @@ internal class SileroVad16k(model:File):AutoCloseable {
    if(buffered==512){
     buffered=0
     val probability=infer()
-    lastProbability=probability
-    active=if(probability>=0.65f)active+1 else 0
-    if(active>=2)detected=true
+    if(gate.accept(probability))detected=true
    }
   }
   return detected
@@ -48,8 +45,7 @@ internal class SileroVad16k(model:File):AutoCloseable {
   state.fill(0f)
   window.fill(0f)
   buffered=0
-  active=0
-  lastProbability=0f
+  gate.reset()
  }
  private fun infer():Float {
   OnnxTensor.createTensor(env,FloatBuffer.wrap(window),longArrayOf(1,512)).use{audio->
