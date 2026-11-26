@@ -152,6 +152,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun allowVoiceInferenceInterrupt()=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("voice_interrupt_inference",false)
+ private var wakeEnabled=false
+ private val wakeHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ private val wakeRearm=object:Runnable{override fun run(){
+  if(!wakeEnabled || !conversationForeground || isDestroyed)return
+  if(wake==null && !busy && !continuousVoice && !wakeCommandPending && !wakeReplyPending && !speechCapture.active() && !voiceBargeIn.active() && ::omegaCore.isInitialized && !omegaCore.speaking && !omegaCore.listening)startWake()
+  wakeHandler.postDelayed(this,1500L)
+ }}
  private var wake:WakeController?=null
  private var wakeCommandPending=false
  private var wakeReplyPending=false
@@ -1251,7 +1258,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision();refreshOmegaStatus();append("JARVIS: Oprire solicitată. Aștept oprirea operației active înainte de o nouă comandă.") } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision();refreshOmegaStatus();append("JARVIS: Oprire solicitată. Aștept oprirea operației active înainte de o nouă comandă.") } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -1281,7 +1288,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    startService(Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_STOP))
   }})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
-  settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
+  settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wakeEnabled){wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()} else {wakeEnabled=true;startWake();wakeHandler.removeCallbacks(wakeRearm);wakeHandler.postDelayed(wakeRearm,1500L)}}})
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
   settings.addView(Button(this).apply { text="Verifică încărcarea Whisper / Sherpa";setOnClickListener{
@@ -2834,6 +2841,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerHandler.post(triggerTick)
  }
  override fun onPause(){
+  wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()
   stopVoiceLoop();listening.close();stopNeural();stopAllSpeech()
   conversationForeground=false
   stopLiveVision()
@@ -2846,6 +2854,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onStop(){stopAllSpeech();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm)
   whisperInstallHandler.removeCallbacks(whisperInstallPoll)
   mihaiHandler.removeCallbacks(mihaiPoll)
   agentCancelled=true;invalidatePreview();ocrText=null;visualObservation.clear()
