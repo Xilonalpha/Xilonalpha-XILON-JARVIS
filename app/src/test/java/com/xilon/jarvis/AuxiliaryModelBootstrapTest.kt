@@ -22,6 +22,8 @@ class AuxiliaryModelBootstrapTest {
   assertTrue(required.containsAll(ModelCatalog.vision))
   assertTrue(required.contains(ModelCatalog.hand))
   assertTrue(required.contains(ModelCatalog.kokoro))
+  assertTrue(required.contains(ModelCatalog.silero))
+  assertTrue(ModelCatalog.silero.url.contains("/v6.2/"))
   assertEquals(required.size,required.map { it.file }.distinct().size)
  }
 }
