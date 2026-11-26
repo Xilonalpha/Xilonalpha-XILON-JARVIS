@@ -51,5 +51,10 @@ class VoiceEchoGateTest {
   val gate=VoiceEchoGate();gate.remember("Jarvis oprestete acum")
   assertTrue(gate.isStop("Jarvis opreste"))
  }
+ @Test fun punctuationDoesNotDefeatEchoBoundary(){
+  val g=VoiceEchoGate()
+  g.remember("Jarvis, poți spune oprește acum.")
+  assertTrue(g.isEcho("poti spune opreste"))
+ }
  @Test fun expandedStopCommands(){val g=VoiceEchoGate();assertTrue(g.isStop("Jarvis, liniște!"));assertTrue(g.isStop("Jarvis, întrerupe"));assertFalse(g.isStop("Jarvis nu opri"));g.remember("Jarvis pauză");assertFalse(g.isStop("Jarvis pauză"))}
 }

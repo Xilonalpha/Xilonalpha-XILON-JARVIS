@@ -53,8 +53,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     else {
      neural=engine
      Result.success(kotlinx.coroutines.runBlocking{engine!!.listen { partial ->
-      if(partialVoiceGate.shouldPublish(partial,android.os.SystemClock.elapsedRealtime()) && turn==speechGeneration.get() && !neuralCancelled){
-       runOnUiThread { if(!isDestroyed && conversationForeground && turn==speechGeneration.get() && omegaCore.listening) modelStatus.text="Ascult: "+partial.take(160) }
+      if(partialVoiceGate.shouldPublish(partial,android.os.SystemClock.elapsedRealtime()) && speechSessions.isCurrent(turn) && !neuralCancelled){
+       runOnUiThread { if(!isDestroyed && conversationForeground && speechSessions.isCurrent(turn) && omegaCore.listening) modelStatus.text="Ascult: "+partial.take(160) }
       }
      }})
     }
