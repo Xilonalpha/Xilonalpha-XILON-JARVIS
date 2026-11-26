@@ -24,6 +24,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var speechClosing=false
  private val partialVoiceGate=VoicePartialGate()
  private val speechCapture=VoiceCaptureGate()
+ private val voiceBargeIn=VoiceBargeInState()
  private fun stopNeural(){
   neuralCancelled=true
   speechCapture.cancel()
@@ -161,7 +162,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(speech!=null)worker.execute{runCatching{speech.close()}}
   }
  }
- private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
+ private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop();voiceEndedAt=android.os.SystemClock.elapsedRealtime();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
   omegaCore.speaking=true;refreshOmegaStatus()
@@ -190,7 +191,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!busy && !speechCapture.active() && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))localVad.start({
+   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && !voiceBargeIn.active() && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()) && voiceBargeIn.begin())localVad.start({
     if(continuousVoice && conversationForeground && omegaCore.speaking && !isDestroyed){
      // Stop playback as soon as VAD detects the user's speech, before ASR.
      // This prevents the recognizer from hearing continued synthesized audio.
@@ -198,6 +199,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      stopAllSpeech()
      // VAD releases AudioRecord before the Android recognizer takes the mic.
      listening.listen({text->
+    voiceBargeIn.finish()
     if(conversationForeground && continuousVoice && text.isNotBlank()){
      when {
       echoGate.isStop(text)->{
@@ -218,13 +220,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }
      }
     }
-     },{_->})
+     },{_->voiceBargeIn.finish()})
     }
-   })
+   },{error->voiceBargeIn.finish();voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){localVad.stop();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
+ private fun stopVoiceLoop(){localVad.stop();voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
@@ -1626,7 +1628,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   startNeural(true)
  }
  private fun startAndroidMicrophone(){
-  if(busy || wake!=null)return
+  if(busy || wake!=null || speechCapture.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }

@@ -4,10 +4,11 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
  private data class Spoken(val value:String,val at:Long)
  private val recentChunks=ArrayDeque<Spoken>()
  private val maxChunks=12
+ private val maxEchoChars=300
  private val stopCommands=setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde")
  private fun normalize(s:String)=VoiceTextNormalizer.normalize(s)
  @Synchronized fun remember(text:String){
-  val normalized=normalize(text)
+  val normalized=normalize(text).take(maxEchoChars)
   if(normalized.isBlank())return
   val now=clock()
   prune(now)
