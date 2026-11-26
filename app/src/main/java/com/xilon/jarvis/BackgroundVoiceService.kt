@@ -15,11 +15,15 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Explicitly opted-in, user-visible microphone foreground service.
  * No hidden recording, auto-start on boot, or cloud inference.
- * Transcription is local; generated LLM replies remain in the foreground Activity.
+ * Transcription, GGUF response generation and Piper playback are all local.
+ * Only explicitly opted-in foreground service use is supported.
  */
 class BackgroundVoiceService:Service(){
  companion object{
@@ -31,6 +35,8 @@ class BackgroundVoiceService:Service(){
  private val running=AtomicBoolean(false)
  private val executor=Executors.newSingleThreadExecutor()
  @Volatile private var engine:NeuralSpeech?=null
+ @Volatile private var model:NativeModel?=null
+ @Volatile private var piper:NeuralVoice?=null
  override fun onBind(intent:Intent?):IBinder?=null
  override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
   if(intent?.action==ACTION_STOP){stopSelf();return START_NOT_STICKY}
@@ -47,12 +53,35 @@ class BackgroundVoiceService:Service(){
    try{
     val speech=NeuralSpeechFactory.create(applicationContext)
     engine=speech
+    val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
+    val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{File(filesDir,it)}?.takeIf{it.isFile}
+    if(file!=null){
+     runCatching{NativeModel(0).also{it.load(file.absolutePath);model=it}}
+      .onFailure{manager.notify(NOTIFICATION_ID,notification("GGUF indisponibil: "+(it.message?:"eroare").take(70)))}
+    }
+    piper=NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}
     while(running.get()){
      val transcript=runBlocking{speech.listen()}.trim()
      if(!running.get())break
      if(transcript.isNotBlank()){
-      // The notification displays recognition; it never executes commands without an Activity.
       manager.notify(NOTIFICATION_ID,notification("Recunoscut: "+transcript.take(90)))
+      val local=model
+      if(local!=null){
+       val answer=runCatching{local.resetCancellation();local.generate(
+        "Răspunde în română, concis, fără să inventezi informații. Cerere: "+transcript.take(500),
+        threads=2,context=1024,maxTokens=100
+       )}.getOrNull()?.trim().orEmpty()
+       if(running.get() && answer.isNotBlank()){
+        manager.notify(NOTIFICATION_ID,notification("JARVIS: "+answer.take(90)))
+        val voice=piper
+        if(voice!=null){
+         val done=CountDownLatch(1)
+         voice.speakTracked(answer){done.countDown()}
+         done.await(40,TimeUnit.SECONDS)
+         voice.stop()
+        }
+       }
+      }
      }else Thread.sleep(250)
     }
    }catch(e:Exception){
@@ -71,8 +100,10 @@ class BackgroundVoiceService:Service(){
  override fun onDestroy(){
   running.set(false)
   runCatching{engine?.stop()}
+  runCatching{model?.stop()}
+  runCatching{piper?.stop()}
   // Closing must follow any active decode, on the same executor.
-  runCatching{executor.execute{runCatching{engine?.close()};engine=null}}
+  runCatching{executor.execute{runCatching{engine?.close()};engine=null;runCatching{model?.close()};model=null;piper=null}}
   executor.shutdown()
   super.onDestroy()
  }
