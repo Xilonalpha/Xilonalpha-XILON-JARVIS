@@ -63,6 +63,10 @@ class BackgroundVoiceService:Service(){
   executor.execute{
    try{
     val speech=NeuralSpeechFactory.create(applicationContext)
+    if(speech==null){
+     manager.notify(NOTIFICATION_ID,notification("Motorul ASR local nu este disponibil."))
+     return@execute
+    }
     engine=speech
     val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
     val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{File(filesDir,it)}?.takeIf{it.isFile}
@@ -72,6 +76,7 @@ class BackgroundVoiceService:Service(){
     }
     piper=NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}
     while(running.get()){
+     // The service only processes local speech; no network recognition fallback.
      val transcript=runBlocking{speech.listen()}.trim()
      if(!running.get())break
      if(transcript.isNotBlank()){
@@ -96,6 +101,7 @@ class BackgroundVoiceService:Service(){
       }
      }else{
       val now=SystemClock.elapsedRealtime()
+      initiative=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("background_initiative",false)
       if(initiative && model!=null && now-lastInteraction>=initiativeDelay && now-lastInitiative>=initiativeDelay){
        lastInitiative=now
        lastInteraction=now

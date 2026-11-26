@@ -1198,7 +1198,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     getSharedPreferences("conversation",MODE_PRIVATE).edit().putBoolean("background_initiative",enabled).apply()
     // This setting never starts the microphone service implicitly.
     if(enabled)append("Inițiativa în fundal este permisă numai când pornești explicit serviciul microfon.")
-    runCatching{startService(Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(if(enabled)BackgroundVoiceService.ACTION_INITIATIVE_ON else BackgroundVoiceService.ACTION_INITIATIVE_OFF))}
+    // The already-running service reads this preference; never start it from this switch.
    }
   })
   settings.addView(Button(this).apply { text="Microfon în fundal • oprește";setOnClickListener{
