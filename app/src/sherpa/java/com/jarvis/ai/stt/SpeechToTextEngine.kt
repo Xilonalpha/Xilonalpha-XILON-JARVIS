@@ -56,6 +56,18 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
     @Volatile
     private var recognizer: OfflineRecognizer? = null
+    private var offlineRevision: List<Triple<String, Long, Long>>? = null
+
+    private fun releaseOffline() {
+        runCatching { recognizer?.release() }
+        recognizer = null
+        offlineRevision = null
+    }
+    private fun releaseOnline() {
+        runCatching { onlineRecognizer?.release() }
+        onlineRecognizer = null
+        onlineRevision = null
+    }
 
     @Volatile
     private var onlineRecognizer: OnlineRecognizer? = null
@@ -148,10 +160,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
             operationMutex.withLock {
                 activeRecorder = null
                 releaseVad()
-                runCatching { recognizer?.release() }
-                recognizer = null
-                runCatching { onlineRecognizer?.release() }
-                onlineRecognizer = null
+                releaseOffline()
+                releaseOnline()
             }
         }
     }
@@ -165,11 +175,10 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val files = streamingFiles()
         val revision = files?.map { Triple(it.absolutePath, it.length(), it.lastModified()) }
         if (revision != onlineRevision) {
-            runCatching { onlineRecognizer?.release() }
-            onlineRecognizer = null
-            onlineRevision = null
+            releaseOnline()
         }
         if (files == null) return null
+        releaseOffline()
         onlineRecognizer?.let { return it }
         val (encoder, decoder, joiner, tokens) = files
         val config = OnlineRecognizerConfig(
@@ -294,17 +303,25 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     private fun ensureRecognizer(): OfflineRecognizer {
-        recognizer?.let { return it }
+        releaseOnline()
         val files = modelDirectory.listFiles()?.filter { it.isFile && it.length() > 0L }.orEmpty()
         val senseVoice = ModelStore.senseVoiceFiles(files)
         val whisper = ModelStore.whisperFiles(files)
+        val selected = when {
+            whisper != null -> listOf(whisper.first, whisper.second, whisper.third)
+            senseVoice != null -> listOf(senseVoice.first, senseVoice.second)
+            else -> emptyList()
+        }
+        val revision = selected.map { Triple(it.absolutePath, it.length(), it.lastModified()) }
+        if (revision != offlineRevision) releaseOffline()
+        recognizer?.let { return it }
         val threads = speechThreadBudget()
         val modelConfig = when {
             senseVoice != null && whisper == null -> OfflineModelConfig(
                 senseVoice = OfflineSenseVoiceModelConfig(
                     model = senseVoice.first.absolutePath,
-                    // SenseVoice supports automatic language detection; do not force English
-                    // for Romanian utterances when this model is the installed recognizer.
+                    // SenseVoice auto covers its supported languages, not Romanian.
+                    // Romanian speech requires the multilingual Whisper model.
                     language = "auto",
                     useInverseTextNormalization = true,
                 ),
@@ -335,7 +352,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
                 modelConfig = modelConfig,
             ),
-        ).also { recognizer = it }
+        ).also { recognizer = it; offlineRevision = revision }
     }
 
     private fun captureUtterance(epoch: Long): FloatArray {
