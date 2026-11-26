@@ -156,11 +156,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var wakeReplyPending=false
  private fun stopWake(){wake?.stop();wake=null;wakeCommandPending=false}
  private fun startWake(){
-  if(busy || wake!=null)return
+  if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
   listening.close();voice.stop()
   lateinit var controller:WakeController
-  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone();wakeCommandPending=true}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
+  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone();wakeCommandPending=speechCapture.active()}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
   wake=controller;controller.start()
  }
  private var airTouch:AirTouchController?=null
@@ -1512,7 +1512,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   settings.addView(Button(this).apply{text="Catalog voce Sherpa";setOnClickListener{
    if(busy)return@setOnClickListener
-   val entries=ModelCatalog.whisper
+   val entries=ModelCatalog.romanianWhisperNative
    val downloads=ModelDownloads(this@MainActivity)
    val root=java.io.File(filesDir,"models")
    val enabled=runCatching{Class.forName("com.xilon.jarvis.SherpaSpeech")}.isSuccess
@@ -1554,8 +1554,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val root=java.io.File(filesDir,"models/romanian")
    val liana=java.io.File(root,"ro_RO-liana-medium.onnx").isFile &&
     java.io.File(root,"ro_RO-liana-medium.onnx.json").isFile
-   val whisper=java.io.File(root,"encoder_model_quantized.onnx").isFile &&
-    java.io.File(root,"decoder_model_merged_quantized.onnx").isFile
+   val whisper=ModelCatalog.romanianWhisperNative.all{java.io.File(filesDir,"models/"+it.file).let{f->f.isFile && f.length()>0}}
    val streaming=java.io.File(filesDir,"models/streaming-asr")
    val transducer=listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all{java.io.File(streaming,it).isFile}
    val androidTtsStatus=if(voice.romanianVoiceAvailable())"Voce offline disponibilă și conectată" else "Nicio voce offline activă; instalează o voce română în Android"
@@ -1563,7 +1562,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val message="TTS română Android: "+androidTtsStatus+"\nLiana RO: "+lianaStatus
    val piperRuntime=NeuralVoiceFactory.romanian(this@MainActivity)?.installed()==true
    val status=message+"\nPiper RO complet: "+(if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență")
-   val status2=status+"\nWhisper RO: "+(if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă")
+   val status2=status+"\nWhisper RO: "+(if(whisper)"Componente Whisper Tiny native prezente; testează încărcarea" else "Fișiere lipsă")
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Diagnostic vocal • offline")
     .setMessage(status2+"\nSherpa streaming: "+(if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă")+
      "\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
