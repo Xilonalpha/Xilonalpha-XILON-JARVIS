@@ -47,5 +47,9 @@ class VoiceEchoGateTest {
   assertFalse(g.isEcho("Fraza de test foarte lunga numarul 0"))
   assertTrue(g.isEcho("Fraza de test foarte lunga numarul 19"))
  }
+ @Test fun stopDoesNotMatchWordFragments(){
+  val gate=VoiceEchoGate();gate.remember("Jarvis oprestete acum")
+  assertTrue(gate.isStop("Jarvis opreste"))
+ }
  @Test fun expandedStopCommands(){val g=VoiceEchoGate();assertTrue(g.isStop("Jarvis, liniște!"));assertTrue(g.isStop("Jarvis, întrerupe"));assertFalse(g.isStop("Jarvis nu opri"));g.remember("Jarvis pauză");assertFalse(g.isStop("Jarvis pauză"))}
 }

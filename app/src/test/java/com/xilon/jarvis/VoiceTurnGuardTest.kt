@@ -14,6 +14,11 @@ class VoiceTurnGuardTest {
   assertTrue(guard.accept("Deschide camera",5000))
   assertTrue(guard.accept("Deschide camera",100))
  }
+ @Test fun romanianDiacriticsAreDeduplicated(){
+  val guard=VoiceTurnGuard()
+  assertTrue(guard.accept("Închide aplicația",1000))
+  assertFalse(guard.accept("inchide aplicatia",1200))
+ }
  @Test fun emptyAndReset(){
   val guard=VoiceTurnGuard()
   assertFalse(guard.accept("  ",10))
