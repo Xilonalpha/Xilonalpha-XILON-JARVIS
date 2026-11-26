@@ -233,11 +233,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
   )
   return NativeModel(layers)
  }
+ private fun releaseVisualCaches(){
+  runCatching{LocalVision.release()}
+  runCatching{LocalPose.release()}
+  runCatching{LocalOcr.release()}
+ }
  override fun onTrimMemory(level:Int){
   super.onTrimMemory(level)
-  if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && !busy){
-   val speech=cachedNeural;cachedNeural=null
-   if(speech!=null)worker.execute{runCatching{speech.close()}}
+  if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN || (android.os.Build.VERSION.SDK_INT<34 && level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)){
+   if(isDestroyed)return
+   worker.execute{releaseVisualCaches()}
+   speechWorker.execute{
+    if(!speechCapture.active && !voiceBargeIn.active){
+     val speech=cachedNeural;cachedNeural=null
+     runCatching{speech?.close()}
+    }
+   }
   }
  }
  private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();piperVoice?.stop();voice.stop();voiceEndedAt=android.os.SystemClock.elapsedRealtime();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
@@ -2896,7 +2907,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    runCatching{speech?.close()}
   }
   speechWorker.shutdown()
-  worker.execute { nativeModel?.close(); nativeModel=null }
+  worker.execute { releaseVisualCaches(); nativeModel?.close(); nativeModel=null }
   worker.shutdown()
   super.onDestroy()
  }
