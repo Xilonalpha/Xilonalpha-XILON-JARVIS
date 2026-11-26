@@ -9,6 +9,12 @@ import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
 import com.jarvis.ai.memory.ModelStore
 import com.k2fsa.sherpa.onnx.FeatureConfig
+import com.k2fsa.sherpa.onnx.OnlineModelConfig
+import com.k2fsa.sherpa.onnx.OnlineRecognizer
+import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
+import com.k2fsa.sherpa.onnx.EndpointConfig
+import com.k2fsa.sherpa.onnx.EndpointRule
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -33,6 +39,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
     @Volatile
     private var recognizer: OfflineRecognizer? = null
+
+    @Volatile
+    private var onlineRecognizer: OnlineRecognizer? = null
 
     @Volatile
     private var activeRecorder: AudioRecord? = null
@@ -63,6 +72,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
+            val online = ensureOnlineRecognizer()
+            if (online != null) return@withContext captureStreaming(online, requestEpoch)
             val activeRecognizer = ensureRecognizer()
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
             val recording = captureUtterance()
@@ -94,6 +105,121 @@ class SpeechToTextEngine(context: Context) : Closeable {
         activeRecorder = null
         runCatching { recognizer?.release() }
         recognizer = null
+        runCatching { onlineRecognizer?.release() }
+        onlineRecognizer = null
+    }
+
+    /**
+     * Optional real streaming transducer. Only load a model explicitly installed
+     * under models/streaming-asr; offline Whisper/SenseVoice are not online models.
+     * The same Sherpa JNI processes 100 ms frames and produces partial hypotheses.
+     */
+    private fun ensureOnlineRecognizer(): OnlineRecognizer? {
+        onlineRecognizer?.let { return it }
+        val directory = File(modelDirectory, "streaming-asr")
+        if (!directory.isDirectory) return null
+        val files = directory.listFiles()?.filter { it.isFile && it.length() > 0L }.orEmpty()
+        fun find(prefix: String): File? = files.firstOrNull {
+            it.name.startsWith(prefix) && it.name.endsWith(".onnx", ignoreCase = true)
+        }
+        val encoder = find("encoder") ?: return null
+        val decoder = find("decoder") ?: return null
+        val joiner = find("joiner") ?: return null
+        val tokens = files.firstOrNull { it.name == "tokens.txt" } ?: return null
+        val config = OnlineRecognizerConfig(
+            featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
+            modelConfig = OnlineModelConfig(
+                transducer = OnlineTransducerModelConfig(
+                    encoder = encoder.absolutePath,
+                    decoder = decoder.absolutePath,
+                    joiner = joiner.absolutePath,
+                ),
+                tokens = tokens.absolutePath,
+                numThreads = minOf(2, Runtime.getRuntime().availableProcessors().coerceAtLeast(1)),
+            ),
+            enableEndpoint = true,
+            endpointConfig = EndpointConfig(
+                rule1 = EndpointRule(false, 2.4f, 0f),
+                rule2 = EndpointRule(true, 0.8f, 0f),
+                rule3 = EndpointRule(false, 0f, MAX_RECORDING_SECONDS.toFloat()),
+            ),
+        )
+        return OnlineRecognizer(assetManager = null, config = config).also {
+            onlineRecognizer = it
+        }
+    }
+
+    /** True incremental decoding; no 20-second PCM accumulation or offline decode. */
+    private fun captureStreaming(online: OnlineRecognizer, epoch: Long): String {
+        val minimum = AudioRecord.getMinBufferSize(
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+        )
+        check(minimum > 0) { "Microfonul nu acceptă captură la 16 kHz." }
+        val recorder = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+            maxOf(minimum, FRAME_SAMPLES * 4),
+        )
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            error("Microfonul nu poate fi inițializat.")
+        }
+        activeRecorder = recorder
+        val stream = online.createStream()
+        val pcm = ShortArray(FRAME_SAMPLES)
+        var lastPartial = ""
+        var totalSamples = 0
+        var zeroReads = 0
+        val aec = runCatching {
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable())
+                android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId)
+            else null
+        }.getOrNull()
+        val ns = runCatching {
+            if (android.media.audiofx.NoiseSuppressor.isAvailable())
+                android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId)
+            else null
+        }.getOrNull()
+        try {
+            runCatching { aec?.enabled = true }
+            runCatching { ns?.enabled = true }
+            recorder.startRecording()
+            while (!closed && !captureCancelled && epoch == cancellationEpoch.get() &&
+                totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
+                val n = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
+                if (n < 0) {
+                    if (captureCancelled || closed) break
+                    error("Eroare de citire microfon ($n)")
+                }
+                if (n == 0) {
+                    if (++zeroReads >= 30) break
+                    Thread.sleep(10)
+                    continue
+                }
+                zeroReads = 0
+                totalSamples += n
+                val samples = FloatArray(n) { pcm[it] / 32768.0f }
+                stream.acceptWaveform(samples, SAMPLE_RATE)
+                while (!captureCancelled && !closed && online.isReady(stream)) {
+                    online.decode(stream)
+                }
+                if (captureCancelled || closed || epoch != cancellationEpoch.get()) break
+                val partial = online.getResult(stream).text.trim()
+                if (partial.isNotBlank()) lastPartial = partial
+                if (online.isEndpoint(stream) && lastPartial.isNotBlank()) break
+            }
+            if (captureCancelled || closed || epoch != cancellationEpoch.get()) return ""
+            stream.inputFinished()
+            while (online.isReady(stream)) online.decode(stream)
+            return online.getResult(stream).text.trim().ifBlank { lastPartial }
+        } finally {
+            runCatching { recorder.stop() }
+            runCatching { aec?.release() }
+            runCatching { ns?.release() }
+            recorder.release()
+            activeRecorder = null
+            stream.release()
+        }
     }
 
     private fun ensureRecognizer(): OfflineRecognizer {
