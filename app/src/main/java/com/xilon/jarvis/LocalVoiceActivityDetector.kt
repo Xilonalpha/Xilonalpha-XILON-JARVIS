@@ -65,6 +65,12 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   worker=Thread({
    val samples=ShortArray(320)
    val decision=VoiceActivityDecision()
+   // Optional offline neural VAD. Energy gate remains available if the
+   // model is absent or incompatible; no network access is performed.
+   val neural=runCatching{
+    val model=java.io.File(context.filesDir,"models/silero_vad.onnx")
+    if(model.isFile)SileroVad16k(model) else null
+   }.getOrNull()
    val startedAt=android.os.SystemClock.elapsedRealtime()
    var detected=false
    try {
@@ -80,7 +86,10 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      var energy=0.0
      for(i in 0 until count){val v=samples[i].toDouble()/32768.0;energy+=v*v}
      val rms=sqrt(energy/count)
-     if(decision.accept(rms)){
+     val activity=if(neural!=null){
+      runCatching{neural.accept(samples,count)}.getOrElse{decision.accept(rms)}
+     }else decision.accept(rms)
+     if(activity){
       detected=true
       break
      }
@@ -90,6 +99,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      if(generation.get()==session)onError(e.message ?: "Eroare VAD local")
     }
    }finally {
+    runCatching{neural?.close()}
     runCatching{record.stop()}
     runCatching{echoCanceler?.release()}
     runCatching{noiseSuppressor?.release()}
