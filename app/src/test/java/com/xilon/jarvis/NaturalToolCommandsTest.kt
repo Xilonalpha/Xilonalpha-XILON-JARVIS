@@ -14,6 +14,15 @@ class NaturalToolCommandsTest {
  @Test fun app(){assertEquals(JsonPrimitive("WhatsApp"),NaturalToolCommands.parse("Deschide WhatsApp")!!.args["app"])}
  @Test fun alarm(){assertNull(NaturalToolCommands.parse("Setează alarma la 25:00"));assertEquals(JsonPrimitive(30),NaturalToolCommands.parse("Setează alarma la 07:30")!!.args["minute"])}
  @Test fun timer(){assertEquals(JsonPrimitive(300),NaturalToolCommands.parse("Pornește un temporizator de 5 minute")!!.args["seconds"])}
+ @Test fun youtubeMusicRoutesWithoutLlmPlanning(){
+  val jazz=NaturalToolCommands.parse("Deschide YouTube și pune muzica jazz")
+  assertEquals("youtube_search",jazz?.tool)
+  assertEquals(JsonPrimitive("jazz"),jazz?.args?.get("query"))
+  assertEquals("youtube_search",NaturalToolCommands.parse("Pune jazz pe YouTube")?.tool)
+  assertEquals(JsonPrimitive("jazz"),NaturalToolCommands.parse("Pune jazz pe YouTube")?.args?.get("query"))
+  assertNull(NaturalToolCommands.parse("Nu deschide YouTube și pune muzica jazz"))
+  assertNull(NaturalToolCommands.parse("Deschide YouTube și trimite un mesaj"))
+ }
  @Test fun unknown(){assertNull(NaturalToolCommands.parse("Ce este inteligența artificială?"))}
  @Test fun upstreamNavigation(){
   assertEquals("press_back",NaturalToolCommands.parse("go back")!!.tool)

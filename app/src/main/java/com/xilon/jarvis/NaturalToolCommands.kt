@@ -17,6 +17,16 @@ object NaturalToolCommands {
   }
   match("(?:deschide site-ul|deschide pagina) (.+)")?.let{return call("open_url","url" to JsonPrimitive(it.groupValues[1]))}
   match("(?:deschide|lansează|lanseaza) (?:aplicația |aplicatia )?(.+)")?.let{return call("open_app","app" to JsonPrimitive(it.groupValues[1]))}
+  // Recognize common Romanian YouTube requests before the generic open-app
+  // matcher. A search intent does not guarantee playback.
+  match("(?:deschide|pornește|porneste|lansează|lanseaza) (?:aplicația |aplicatia )?youtube (?:și|si|iar|apoi) (?:pune|redă|reda|pornește|porneste|caută|cauta) (?:muzică|muzica|melodia|piesa|un cântec|un cantec|niște muzică|niste muzica)?\\s*(.+)")?.let{
+   val query=it.groupValues[1].trim()
+   if(query.isNotBlank())return call("youtube_search","query" to JsonPrimitive(query))
+  }
+  match("(?:pune|redă|reda|pornește|porneste) (?:muzică|muzica|melodia|piesa|un cântec|un cantec|niște muzică|niste muzica)?\\s*(.+) (?:pe|în|in) youtube")?.let{
+   val query=it.groupValues[1].trim()
+   if(query.isNotBlank())return call("youtube_search","query" to JsonPrimitive(query))
+  }
   match("(?:caută|cauta) pe youtube (.+)")?.let{return call("youtube_search","query" to JsonPrimitive(it.groupValues[1]))}
   match("(?:navighează|navigheaza) (?:la|către|catre) (.+)")?.let{return call("maps_navigate","destination" to JsonPrimitive(it.groupValues[1]))}
   match("(?:setează|seteaza) alarma (?:la )?(\\d{1,2}):(\\d{2})")?.let{
