@@ -41,11 +41,17 @@ class ModelDownloads(context:Context){
     else -> ModelMetadata.fetch(entry)
    }
    val url=if(entry==ModelCatalog.hand || entry==ModelCatalog.silero)entry.url else if(entry.directUrl==null)entry.copy(revision=ref.revision).url else entry.url
-   {
+   run {
     require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
     check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
    }
    val partial=part(entry)
+   // Never append bytes from a different release or changed model revision.
+   val previousHash=prefs.getString(entry.file+".partial.sha",null)
+   val previousBytes=prefs.getLong(entry.file+".partial.bytes",-1L)
+   if(previousHash!=ref.sha256 || previousBytes!=ref.bytes)partial.delete()
+   check(prefs.edit().putString(entry.file+".partial.sha",ref.sha256)
+    .putLong(entry.file+".partial.bytes",ref.bytes).commit()){"Nu pot salva starea transferului"}
    val offset=partial.length().takeIf{it in 1 until ref.bytes} ?: 0L
    if(partial.length()>0L && offset==0L)partial.delete()
    val http=(URL(url).openConnection() as HttpURLConnection).apply{
@@ -77,7 +83,7 @@ class ModelDownloads(context:Context){
    ModelIntegrity.verify(part(entry).inputStream(),ref.sha256,ref.bytes,ref.algorithm)
    check(!cancelled.contains(entry.file)){"Anulat"}
    check(part(entry).renameTo(file(entry))){"Salvare eșuată"}
-   prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).apply()
+   prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).remove(entry.file+".partial.sha").remove(entry.file+".partial.bytes").remove(entry.file+".error").apply()
   }catch(e:Exception){
    // Preserve partial bytes for the next verified retry.
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_FAILED).putString(entry.file+".error",e.message?:"Eroare").apply()
@@ -123,7 +129,7 @@ class ModelDownloads(context:Context){
  }
  fun status(entry:ModelCatalog.Entry)=transfer(entry).label
  fun canStart(entry:ModelCatalog.Entry)=transfer(entry).state in setOf(-1,DownloadManager.STATUS_FAILED)
- private fun clear(entry:ModelCatalog.Entry){file(entry).delete();part(entry).delete();val edit=prefs.edit();for(s in listOf("",".sha",".bytes",".revision",".algorithm",".state",".error"))edit.remove(entry.file+s);edit.apply()}
+ private fun clear(entry:ModelCatalog.Entry){file(entry).delete();part(entry).delete();val edit=prefs.edit();for(s in listOf("",".sha",".bytes",".revision",".algorithm",".state",".error",".partial.sha",".partial.bytes"))edit.remove(entry.file+s);edit.apply()}
  fun cancel(entry:ModelCatalog.Entry){if(active.containsKey(entry.file))cancelled.add(entry.file) else clear(entry)}
  fun uri(entry:ModelCatalog.Entry):Uri?=file(entry).takeIf{it.isFile}?.let{Uri.fromFile(it)}
 }
