@@ -45,9 +45,14 @@ class WakeWordEngine(context: Context) : Closeable {
     private var framesSinceStart = 0
     private var lastDetectionAt = 0L
     private var rearmed = true
+    private val melWindowBuffer = FloatArray(MEL_CONTEXT_FRAMES * MEL_BINS)
+    private var classifierBuffer = FloatArray(WAKE_WINDOW * EMBEDDING_SIZE)
+    private var pcmBuffer = FloatArray(0)
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** Loads compatible openWakeWord models from private storage and reports missing files calmly. */
     suspend fun initialize(): Boolean = withContext(inferenceDispatcher) {
+        if (closed.get()) return@withContext false
         if (isReady) return@withContext true
         val files = modelDirectory.listFiles()
             ?.filter { it.isFile && it.extension.equals("onnx", ignoreCase = true) }
@@ -76,8 +81,8 @@ class WakeWordEngine(context: Context) : Closeable {
             environment = ort
             resetStreamingState()
             unavailableReason = null
-            isReady = true
-            true
+            isReady = !closed.get()
+            isReady
         } catch (error: Exception) {
             closeSessions()
             unavailableReason = "Could not load the wake-word models: ${error.message ?: "incompatible ONNX files"}"
@@ -98,7 +103,9 @@ class WakeWordEngine(context: Context) : Closeable {
         val fixedMelInputSize = fixedElementCount(melInputInfo.shape)
         val preferredInputSize = minOf(rawSamplesAvailable, FRAME_SAMPLES + MEL_OVERLAP_SAMPLES)
         val melInputSize = if (fixedMelInputSize != null && fixedMelInputSize > 1) {
-            minOf(rawSamplesAvailable, fixedMelInputSize)
+            if (fixedMelInputSize > rawAudioRing.size) error("Model mel incompatibil")
+            if (rawSamplesAvailable < fixedMelInputSize) return@withContext false
+            fixedMelInputSize
         } else {
             preferredInputSize
         }
@@ -112,7 +119,7 @@ class WakeWordEngine(context: Context) : Closeable {
         val melOutput = runModel(
             mel,
             mel.inputNames.first(),
-            FloatArray(audioInput.size) { audioInput[it].toFloat() },
+            audioInput,
             melShape,
             ort,
         )
@@ -142,12 +149,15 @@ class WakeWordEngine(context: Context) : Closeable {
         )
         val sequenceSize = classifierShape[classifierShape.lastIndex - 1].toInt()
         val vectorSize = classifierShape.last().toInt()
-        embeddingWindow.addLast(fitVector(embeddingValues, vectorSize))
+        require(embeddingValues.size == vectorSize) { "Dimensiune embedding incompatibilă" }
+        embeddingWindow.addLast(embeddingValues)
         while (embeddingWindow.size > sequenceSize) embeddingWindow.removeFirst()
         framesSinceStart++
         if (framesSinceStart < STARTUP_WARMUP_FRAMES) return@withContext false
 
-        val classifierInput = FloatArray(sequenceSize * vectorSize)
+        if (classifierBuffer.size != sequenceSize * vectorSize) classifierBuffer = FloatArray(sequenceSize * vectorSize)
+        val classifierInput = classifierBuffer
+        classifierInput.fill(0f)
         var offset = 0
         embeddingWindow.forEach { vector ->
             vector.copyInto(classifierInput, offset)
@@ -160,7 +170,7 @@ class WakeWordEngine(context: Context) : Closeable {
             classifierShape,
             ort,
         )
-        val rawScore = scoreTensor.firstOrNull() ?: return@withContext false
+        val rawScore = scoreTensor.firstOrNull()?.takeIf { it.isFinite() } ?: return@withContext false
         val score = if (rawScore in 0.0f..1.0f) rawScore else (1.0f / (1.0f + exp(-rawScore)))
         if (score < REARM_THRESHOLD) rearmed = true
 
@@ -176,6 +186,7 @@ class WakeWordEngine(context: Context) : Closeable {
 
     /** Queues ONNX session cleanup on the same inference thread used for model calls. */
     override fun close() {
+        if (!closed.compareAndSet(false, true)) return
         isReady = false
         runCatching {
             inferenceExecutor.execute {
@@ -197,11 +208,12 @@ class WakeWordEngine(context: Context) : Closeable {
         }
     }
 
-    private fun recentRawAudio(count: Int): ShortArray {
+    private fun recentRawAudio(count: Int): FloatArray {
         val size = count.coerceIn(0, rawSamplesAvailable)
-        val output = ShortArray(size)
+        if (pcmBuffer.size != size) pcmBuffer = FloatArray(size)
+        val output = pcmBuffer
         val start = (rawWriteIndex - size + rawAudioRing.size) % rawAudioRing.size
-        for (index in 0 until size) output[index] = rawAudioRing[(start + index) % rawAudioRing.size]
+        for (index in 0 until size) output[index] = rawAudioRing[(start + index) % rawAudioRing.size].toFloat()
         return output
     }
 
@@ -218,7 +230,7 @@ class WakeWordEngine(context: Context) : Closeable {
 
     private fun recentMelWindow(): FloatArray {
         check(melFrames.size >= MEL_CONTEXT_FRAMES) { "Not enough mel context to run openWakeWord." }
-        val output = FloatArray(MEL_CONTEXT_FRAMES * MEL_BINS)
+        val output = melWindowBuffer
         val iterator = melFrames.descendingIterator()
         for (frameIndex in MEL_CONTEXT_FRAMES - 1 downTo 0) {
             val frame = iterator.next()
@@ -275,12 +287,6 @@ class WakeWordEngine(context: Context) : Closeable {
     private fun elementCount(shape: LongArray): Long =
         shape.fold(1L) { product, dimension -> product * dimension }
 
-    private fun fitVector(values: FloatArray, size: Int): FloatArray = when {
-        values.size == size -> values
-        values.size > size -> values.copyOfRange(values.size - size, values.size)
-        else -> FloatArray(size).also { values.copyInto(it) }
-    }
-
     private fun resetStreamingState() {
         rawWriteIndex = 0
         rawSamplesAvailable = 0
@@ -311,7 +317,7 @@ class WakeWordEngine(context: Context) : Closeable {
         const val RAW_AUDIO_HISTORY_SAMPLES = 160_000
         const val MEL_CONTEXT_FRAMES = 76
         const val MEL_BINS = 32
-        const val MAX_MEL_FRAMES = 970
+        const val MAX_MEL_FRAMES = MEL_CONTEXT_FRAMES
         const val EMBEDDING_SIZE = 96
         const val WAKE_WINDOW = 16
         const val STARTUP_WARMUP_FRAMES = 5
