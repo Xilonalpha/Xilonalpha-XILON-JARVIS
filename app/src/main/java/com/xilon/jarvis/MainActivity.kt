@@ -352,9 +352,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val echoGate=VoiceEchoGate()
  private var voiceEndedAt=0L
  private var liveVision:LiveVisionController?=null
+ private var pendingLiveVisionStart=false
  private fun stopLiveVision(){liveVision?.close();liveVision=null}
  private fun startLiveVision(){
-  if(busy || liveVision!=null)return
+  if(liveVision!=null)return
+  if(busy){append("Camera live: așteaptă finalizarea operației active.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),59);return}
   stopAirTouch()
   liveVision=LiveVisionController(this,this,{report->if(conversationForeground && liveVision!=null){visualObservation.put(report,android.os.SystemClock.elapsedRealtime());modelStatus.text=report.take(300)}},{message->append(message);stopLiveVision()}).also{it.start()}
@@ -2020,7 +2022,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
   if(requestCode==48){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startNeural() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
-  if(requestCode==59){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && conversationForeground)startLiveVision() else append("Camera live indisponibilă.")}
+  if(requestCode==59){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED){window.decorView.post{if(!isDestroyed && conversationForeground)startLiveVision() else if(!isDestroyed)pendingLiveVisionStart=true}} else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
  }
@@ -2817,6 +2819,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   scheduleMihaiInstall()
   scheduleWhisperInstall()
   conversationForeground=true
+  if(pendingLiveVisionStart){pendingLiveVisionStart=false;window.decorView.post{if(!isDestroyed && conversationForeground)startLiveVision()}}
   lastConversationActivity=android.os.SystemClock.elapsedRealtime()
   conversationHandler.removeCallbacks(conversationTick)
   conversationHandler.postDelayed(conversationTick,60000L)
