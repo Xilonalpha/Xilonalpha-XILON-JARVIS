@@ -44,6 +44,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
     private fun acquireVad(file: File): com.xilon.jarvis.SileroVad16k? {
         if (!file.isFile || file.length() !in 1..com.xilon.jarvis.OfflineVadModelInstaller.MAX_BYTES) { releaseVad(); return null }
+        val memory = android.app.ActivityManager.MemoryInfo().also { appContext.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it) }
+        if (memory.lowMemory) { releaseVad(); return null }
         val revision = file.lastModified() to file.length()
         if (revision != vadRevision) releaseVad()
         return runCatching {
@@ -175,7 +177,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     joiner = joiner.absolutePath,
                 ),
                 tokens = tokens.absolutePath,
-                numThreads = minOf(2, Runtime.getRuntime().availableProcessors().coerceAtLeast(1)),
+                numThreads = minOf(2, speechThreadBudget()),
             ),
             enableEndpoint = true,
             endpointConfig = EndpointConfig(
@@ -273,14 +275,18 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
     }
 
+    private fun speechThreadBudget(): Int {
+        val memory=android.app.ActivityManager.MemoryInfo().also{appContext.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it)}
+        val thermal=if(android.os.Build.VERSION.SDK_INT>=29)appContext.getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
+        return com.xilon.jarvis.ResourceBudget.speechThreads(Runtime.getRuntime().availableProcessors(),memory.availMem/1048576,memory.lowMemory,thermal)
+    }
+
     private fun ensureRecognizer(): OfflineRecognizer {
         recognizer?.let { return it }
         val files = modelDirectory.listFiles()?.filter { it.isFile && it.length() > 0L }.orEmpty()
         val senseVoice = ModelStore.senseVoiceFiles(files)
         val whisper = ModelStore.whisperFiles(files)
-        val memory=android.app.ActivityManager.MemoryInfo().also{appContext.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it)}
-        val thermal=if(android.os.Build.VERSION.SDK_INT>=29)appContext.getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
-        val threads=com.xilon.jarvis.ResourceBudget.speechThreads(Runtime.getRuntime().availableProcessors(),memory.availMem/1048576,memory.lowMemory,thermal)
+        val threads = speechThreadBudget()
         val modelConfig = when {
             senseVoice != null && whisper == null -> OfflineModelConfig(
                 senseVoice = OfflineSenseVoiceModelConfig(
@@ -356,7 +362,6 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var started = false
         var silentSamples = 0
         var voicedSamples = 0
-        var peakSpeechRms = 0f
         var totalSamples = 0
         var zeroReads = 0
         var emptyReads = 0
@@ -398,7 +403,6 @@ class SpeechToTextEngine(context: Context) : Closeable {
                         releaseVad(); neuralVad = null; rms >= threshold
                     }
                 } ?: (rms >= threshold)
-                if (rms > peakSpeechRms) peakSpeechRms = rms
                 if (!started) {
                     preRoll.addLast(chunk)
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
