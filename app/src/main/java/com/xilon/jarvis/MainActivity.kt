@@ -1443,6 +1443,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Diagnostic voce română offline";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val root=java.io.File(filesDir,"models/romanian")
+   val liana=java.io.File(root,"ro_RO-liana-medium.onnx").isFile &&
+    java.io.File(root,"ro_RO-liana-medium.onnx.json").isFile
+   val whisper=java.io.File(root,"encoder_model_quantized.onnx").isFile &&
+    java.io.File(root,"decoder_model_merged_quantized.onnx").isFile
+   val streaming=java.io.File(filesDir,"models/streaming-asr")
+   val transducer=listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all{java.io.File(streaming,it).isFile}
+   val message="Liana RO: "+if(liana)"Fișiere instalate; motor Piper neconectat" else "Fișiere lipsă"
+   val status=message+"\\nWhisper RO: "+if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă"
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Diagnostic vocal • offline")
+    .setMessage(status+"\\nSherpa streaming: "+if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă"+
+     "\\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
+    .setPositiveButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Catalog modele românești • STT și TTS";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.romanianModels

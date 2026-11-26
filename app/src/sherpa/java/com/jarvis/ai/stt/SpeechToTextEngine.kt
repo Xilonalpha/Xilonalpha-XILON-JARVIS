@@ -54,8 +54,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
     fun hasStreamingModelFiles():Boolean {
         val directory=File(modelDirectory,"streaming-asr")
-        val names=directory.listFiles()?.filter{it.isFile && it.length()>0L}?.map{it.name}.orEmpty()
-        return names.any{it.startsWith("encoder") && it.endsWith(".onnx")} && names.any{it.startsWith("decoder") && it.endsWith(".onnx")} && names.any{it.startsWith("joiner") && it.endsWith(".onnx")} && "tokens.txt" in names
+        return listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all { name ->
+            File(directory,name).let{it.isFile && it.length()>0L}
+        }
     }
 
     /** Actually constructs the native recognizer; file presence alone is not readiness. */
