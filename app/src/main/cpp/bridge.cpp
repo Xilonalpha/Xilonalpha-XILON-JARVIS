@@ -30,6 +30,7 @@ struct ModelState {
  int size=0;
  int threads=0;
  int requestedSize=0;
+ std::vector<llama_token> cachedTokens;
  ~ModelState(){if(context)llama_free(context);llama_model_free(model);}
 };
 static std::once_flag init;
@@ -126,7 +127,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  const int required=n+maxTokens;
  const int requested=context;
  if(state->context && (state->requestedSize!=requested || state->size<required)){
-  llama_free(state->context);state->context=nullptr;
+  llama_free(state->context);state->context=nullptr;state->cachedTokens.clear();
  }
  int batchSize=std::min<int>(requested,512);
  if(!state->context){
@@ -145,7 +146,18 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(!ctx){fail(e,"Context allocation failed even at minimum prompt budget; reduce history or use a smaller GGUF");return nullptr;}
  if(state->threads!=threads){llama_set_n_threads(ctx,threads,threads);state->threads=threads;}
  batchSize=std::min<int>(state->size,64);
- llama_memory_clear(llama_get_memory(ctx), true);
+ // Reuse only an exact token prefix. Always evaluate at least the final prompt token for fresh logits.
+ auto* memory=llama_get_memory(ctx);
+ int reused=0;
+ while(reused<n-1 && reused<(int)state->cachedTokens.size() && tokens[reused]==state->cachedTokens[reused])++reused;
+ if(reused==0 || llama_memory_seq_pos_min(memory,0)!=0 ||
+    llama_memory_seq_pos_max(memory,0)!=(llama_pos)state->cachedTokens.size()-1 ||
+    !llama_memory_seq_rm(memory,0,reused,-1)){
+  llama_memory_clear(memory,true);reused=0;
+ }
+ // Until successful completion, no cache metadata may survive a failed or cancelled decode.
+ state->cachedTokens.clear();
+ std::vector<llama_token> evaluated(tokens.begin(),tokens.begin()+n);
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler){fail(e,"Sampler allocation failed");return nullptr;}
  const char* rules=e->GetStringUTFChars(grammar,nullptr);
@@ -193,8 +205,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch);
  };
  bool ready=true;
- publishStage("Evaluez promptul: 0/"+std::to_string(n)+" tokenuri");
- for(int offset=0;offset<n;offset+=batchSize){
+ publishStage("KV Cache: "+std::to_string(reused)+"/"+std::to_string(n)+" tokenuri reutilizate");
+ for(int offset=reused;offset<n;offset+=batchSize){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
   const int count=std::min(batchSize,n-offset);
   // Publish before entering the synchronous native backend: a slow first
@@ -263,7 +275,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
     if(cancelled)generationCancelled=true;
     else {ok=false;publishStage("Eroare GGUF la generarea tokenului "+std::to_string(i+1));}
     break;
-   }}
+   }else evaluated.push_back(t);}
  }
  // Stop may arrive during the final decode or just after the last token.
  // Never publish a successful final answer when cancellation was requested.
@@ -277,6 +289,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}
  if(generationCancelled){fail(e,"GGUF generation cancelled");return nullptr;}
+ state->cachedTokens=std::move(evaluated);
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
  e->SetByteArrayRegion(bytes,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
  auto cls=e->FindClass("java/lang/String");auto ctor=e->GetMethodID(cls,"<init>","([BLjava/lang/String;)V");
@@ -303,7 +316,7 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_com_xilon_jarvis_NativeModel_inferI
 #ifdef XILON_VLM
  auto* state=reinterpret_cast<ModelState*>(h);
  if(!state || !projector || !rgb || !question || width<1 || height<1 || width>1024 || height>1024 || e->GetArrayLength(rgb)!=width*height*3){fail(e,"Invalid image input");return nullptr;}
- if(state->context){llama_free(state->context);state->context=nullptr;}
+ if(state->context){llama_free(state->context);state->context=nullptr;state->cachedTokens.clear();}
  const char* path=e->GetStringUTFChars(projector,nullptr);if(!path)return nullptr;
  auto mp=mtmd_context_params_default();mp.use_gpu=false;mp.warmup=false;mp.n_threads=2;
  std::unique_ptr<mtmd_context,decltype(&mtmd_free)> vision(mtmd_init_from_file(path,state->model,mp),mtmd_free);
