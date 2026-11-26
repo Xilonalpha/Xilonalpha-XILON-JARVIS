@@ -152,13 +152,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private var wake:WakeController?=null
- private fun stopWake(){wake?.stop();wake=null}
+ private var wakeCommandPending=false
+ private var wakeReplyPending=false
+ private fun stopWake(){wake?.stop();wake=null;wakeCommandPending=false}
  private fun startWake(){
   if(busy || wake!=null)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
   listening.close();voice.stop()
   lateinit var controller:WakeController
-  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone()}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
+  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone();wakeCommandPending=true}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
   wake=controller;controller.start()
  }
  private var airTouch:AirTouchController?=null
@@ -358,7 +360,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
   partialVoiceGate.reset()
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
-  if((autoVoiceSend||continuousVoice)&&::sendControl.isInitialized&&!busy)sendControl.performClick()
+  val fromWake=wakeCommandPending
+  wakeCommandPending=false
+  if(fromWake)wakeReplyPending=true
+  if((autoVoiceSend||continuousVoice||fromWake)&&::sendControl.isInitialized&&!busy)sendControl.performClick()
  }
  private lateinit var omegaCore:OmegaCoreView
  private lateinit var activityStatus:TextView
@@ -1955,7 +1960,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun speakReply(text:String,manual:Boolean=false){
-  if((!manual && !speakReplies && !continuousVoice) || text.isBlank())return
+  if((!manual && !speakReplies && !continuousVoice && !wakeReplyPending) || text.isBlank())return
+  wakeReplyPending=false
   listening.close();echoGate.remember(text)
   val piper=piperVoice
   if(romanianNeuralVoice && piper!=null && piper.installed()){
