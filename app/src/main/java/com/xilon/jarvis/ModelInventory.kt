@@ -17,6 +17,7 @@ object ModelInventory {
    ModelCatalog.pose->File(root,entry.file)
    in ModelCatalog.vision->File(root,if(entry==ModelCatalog.vision[1])"face_detector.tflite" else "object_detector.tflite")
    ModelCatalog.hand->File(root,entry.file)
+   ModelCatalog.silero->File(root,"models/silero_vad.onnx")
    ModelCatalog.kokoro->{val dir=File(root,"kokoro");return listOf("model.int8.onnx","voices.bin","tokens.txt").all{File(dir,it).let{f->f.isFile&&f.length()>0}}&&File(dir,"espeak-ng-data").let{it.isDirectory&&it.list()?.isNotEmpty()==true}}
    else->return false
   }
