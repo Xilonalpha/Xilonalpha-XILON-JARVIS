@@ -832,7 +832,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val slowInferenceNotice=object:Runnable {
       override fun run(){
        if(inferenceFinished || isDestroyed)return
-       if(nativeModel?.generatedTokens==0 &&
+       if(nativeModel?.isCancelled()!=true && nativeModel?.generatedTokens==0 &&
           android.os.SystemClock.elapsedRealtime()-inferenceStarted>=30000L){
         val seconds=(android.os.SystemClock.elapsedRealtime()-inferenceStarted)/1000
         streamingBubble.text="JARVIS: "+inferenceStage+" ("+seconds+" s fără răspuns). Poți apăsa Oprește."
@@ -842,12 +842,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      inferenceHandler.postDelayed(slowInferenceNotice,30000L)
      nativeModel?.onStage = { stage -> runOnUiThread {
-      if(!isDestroyed && !inferenceFinished && nativeModel?.generatedTokens==0) {
+      if(!isDestroyed && !inferenceFinished && nativeModel?.isCancelled()!=true && nativeModel?.generatedTokens==0) {
        inferenceStage=stage
        streamingBubble.text="JARVIS: "+stage
       }
      } }
-     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && !inferenceFinished) {
+     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && !inferenceFinished && nativeModel?.isCancelled()!=true) {
       lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
       streamingBubble.text="JARVIS: "+partial
       if(streamSpeechEnabled && !streamingSpeechFailed && voiceStream.isCurrent(voiceStreamId)){
