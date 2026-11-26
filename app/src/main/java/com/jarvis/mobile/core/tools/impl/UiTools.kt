@@ -155,9 +155,9 @@ class SwipeTool : Tool(
         val y1 = T.int(args, "y1") ?: return ToolResult.fail("Missing y1.")
         val x2 = T.int(args, "x2") ?: return ToolResult.fail("Missing x2.")
         val y2 = T.int(args, "y2") ?: return ToolResult.fail("Missing y2.")
-        val ok = svc.swipeConfirmed(x1, y1, x2, y2)
-        return if (ok) ToolResult.ok("Swiped ($x1,$y1)→($x2,$y2).", Verification.UNVERIFIED)
-        else ToolResult.fail("Could not dispatch swipe gesture.")
+        val ok = svc.swipeCompleted(x1, y1, x2, y2)
+        return if (ok) ToolResult.ok("Swipe gesture completed ($x1,$y1)→($x2,$y2); screen effect not verified.", Verification.UNVERIFIED)
+        else ToolResult.fail("Swipe gesture rejected, cancelled or timed out.")
     }
 }
 
@@ -185,13 +185,13 @@ class ScrollTool : Tool(
         if (dir == "left" || dir == "right") {
             val m = svc.resources.displayMetrics
             val cy = m.heightPixels / 2
-            val ok = if (dir == "left") svc.swipeConfirmed((m.widthPixels * 0.78).toInt(), cy, (m.widthPixels * 0.22).toInt(), cy)
-            else svc.swipeConfirmed((m.widthPixels * 0.22).toInt(), cy, (m.widthPixels * 0.78).toInt(), cy)
+            val ok = if (dir == "left") svc.swipeCompleted((m.widthPixels * 0.78).toInt(), cy, (m.widthPixels * 0.22).toInt(), cy)
+            else svc.swipeCompleted((m.widthPixels * 0.22).toInt(), cy, (m.widthPixels * 0.78).toInt(), cy)
             return if (ok) ToolResult.ok("Swiped $dir.", Verification.UNVERIFIED)
             else ToolResult.fail("Could not dispatch swipe gesture.")
         }
         val before = T.freshObserve(0)?.elements?.map { it.text to it.top } ?: emptyList()
-        val ok = svc.scrollConfirmed(forward)
+        val ok = svc.scrollCompleted(forward)
         if (!ok) return ToolResult.fail("Could not scroll.")
         val after = T.freshObserve(420)?.elements?.map { it.text to it.top } ?: emptyList()
         val changed = before.isNotEmpty() && after.isNotEmpty() && before != after
