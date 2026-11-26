@@ -24,12 +24,16 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
  private val main=Handler(Looper.getMainLooper())
  @Volatile private var recorder:AudioRecord?=null
  @Volatile private var worker:Thread?=null
+ private val lifecycleLock=Any()
  @Volatile private var echoCanceler:AcousticEchoCanceler?=null
  @Volatile private var noiseSuppressor:NoiseSuppressor?=null
  fun start(onVoice:()->Unit,onError:(String)->Unit={}):Boolean {
   if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
-  if(!running.compareAndSet(false,true))return false
-  val session=generation.incrementAndGet()
+  val session=synchronized(lifecycleLock){
+   // A previous recorder must finish releasing before the next capture starts.
+   if(recorder!=null || !running.compareAndSet(false,true))return false
+   generation.incrementAndGet()
+  }
   val sampleRate=16000
   val min=AudioRecord.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
   if(min<=0){running.set(false);return false}
@@ -83,19 +87,24 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     echoCanceler=null
     noiseSuppressor=null
     record.release()
-    if(recorder===record)recorder=null
-    // Release ownership before allowing another session to start.
-    if(generation.get()==session)running.set(false)
+    synchronized(lifecycleLock){
+     if(recorder===record)recorder=null
+     // Do not mark the recorder free until AudioRecord.release() completed.
+     if(generation.get()==session)running.set(false)
+    }
     if(detected)main.post{if(generation.get()==session)onVoice()}
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}
   return true
  }
  fun stop(){
-  generation.incrementAndGet()
-  running.set(false)
+  val previous=synchronized(lifecycleLock){
+   generation.incrementAndGet()
+   running.set(false)
+   recorder
+  }
   // Stop unblocks a blocking read; the worker owns release().
-  runCatching{recorder?.stop()}
+  runCatching{previous?.stop()}
  }
  override fun close(){stop()}
 }
