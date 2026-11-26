@@ -11,6 +11,10 @@ class OfflineVoice(context: Context) : AutoCloseable {
  @Volatile private var ready=false
  @Volatile private var closed=false
  private val tts=TextToSpeech(context.applicationContext) { status -> ready=!closed && status==TextToSpeech.SUCCESS }
+ /** Runtime truth: a downloaded Piper file does not automatically install a system TTS engine. */
+ fun romanianVoiceAvailable():Boolean=ready && !closed && runCatching{
+  tts.voices?.any{it.locale.language=="ro" && !it.isNetworkConnectionRequired && !it.features.orEmpty().contains("notInstalled")}==true
+ }.getOrDefault(false)
  fun speak(text:String):String? {
   if(!ready || closed) return "Motorul vocal nu este disponibil."
   val voice=tts.voices?.filter { !it.isNetworkConnectionRequired && it.locale.language=="ro" && !it.features.orEmpty().contains("notInstalled") }?.maxByOrNull { it.quality }
