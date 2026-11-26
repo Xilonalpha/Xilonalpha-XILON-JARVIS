@@ -1248,8 +1248,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
       try{
        contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=ref.bytes);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
        ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
-       check(temp.renameTo(java.io.File(root,entry.file)))
-       "Componentă instalată; inferența rămâne de testat."
+       val target=java.io.File(root,entry.file)
+       if(target.isFile){
+        val existingValid=runCatching{ModelIntegrity.verify(target.inputStream(),ref.sha256,ref.bytes,ref.algorithm)}.isSuccess
+        if(existingValid) "Componentă deja instalată și verificată."
+        else {
+         check(target.delete()){"Model existent invalid; nu poate fi înlocuit"}
+         check(temp.renameTo(target)){"Nu pot finaliza instalarea"}
+         "Componentă reinstalată și verificată; inferența rămâne de testat."
+        }
+       }else{
+        check(temp.renameTo(target)){"Nu pot finaliza instalarea"}
+        "Componentă instalată și verificată; inferența rămâne de testat."
+       }
       }finally{temp.delete()}
      }.getOrElse{"Import eșuat: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
