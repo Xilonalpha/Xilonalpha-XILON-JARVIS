@@ -61,7 +61,10 @@ object RomanianLexicon {
  fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să|ai putea sa|ai putea să|te-as ruga sa|te-aș ruga să|as vrea sa|aș vrea să|imi poti|îmi poți|imi poti sa|îmi poți să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean {
   val key = normalize(clean(text))
-  if (Regex("\\b(?:dar|insa|totusi|ci)\\s+(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(key)) return true
+  // A negative clause anywhere in a compound instruction must prevent
+  // partial execution. The action splitter intentionally ignores clauses
+  // beginning with "nu", so check them independently here.
+  if (Regex("\\b(?:si|apoi|iar|dar|insa|totusi|ci|dupa aceea|dupa care)\\s+(?:nu|sa nu|niciodata|fara sa|mai bine nu)\\b").containsMatchIn(key)) return true
   return Regex("^(?:nu|sa nu|niciodata|fara sa|mai bine nu|te rog nu|as prefera sa nu|nu vreau sa|nu trebuie sa)\\b").containsMatchIn(key)
  }
  data class LanguageReview(val original: String, val normalized: String, val blocked: Boolean,

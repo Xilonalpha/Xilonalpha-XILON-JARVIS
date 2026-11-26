@@ -54,6 +54,14 @@ class NaturalToolCommandsTest {
   assertNull(NaturalToolCommands.parse("Deschide WhatsApp și trimite un mesaj"))
   assertNull(NaturalToolCommands.parse("Deschide YouTube și pune jazz apoi trimite un mesaj"))
  }
+ @Test fun negativeSecondClauseMustNotExecuteFirstAction(){
+  assertTrue(RomanianLexicon.negated("Deschide WhatsApp și nu trimite mesaje"))
+  assertTrue(RomanianLexicon.negated("Aprinde lanterna apoi nu deschide camera"))
+  assertTrue(RomanianLexicon.negated("Pornește muzica dar nu deschide YouTube"))
+  assertNull(NaturalToolCommands.parse("Deschide WhatsApp și nu trimite mesaje"))
+  assertNull(RomanianLexicon.compoundPlan("Aprinde lanterna și nu deschide camera"))
+  assertFalse(RomanianLexicon.negated("Caută jazz și blues pe YouTube"))
+ }
  @Test fun unknown(){assertNull(NaturalToolCommands.parse("Ce este inteligența artificială?"))}
  @Test fun upstreamNavigation(){
   assertEquals("press_back",NaturalToolCommands.parse("go back")!!.tool)
