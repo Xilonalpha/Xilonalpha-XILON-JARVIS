@@ -20,6 +20,8 @@ object ModelCatalog {
  pose
  )
  val hand=Entry("Hand Landmarker","MediaPipe FP16","Leo-TX/mediapipe-hand","hand_landmarker.task",8,"6ed55322affd263688b9dfffda68a10545f15b95")
+ // Include the same verified hand model in Vision and Air Touch catalogs.
+ val visionModels:List<Entry> get()=vision+hand
  val silero=Entry("Silero VAD v6.2","Detectare vocală neuronală offline","snakers4/silero-vad","silero_vad.onnx",3,"v6.2",directUrl="https://raw.githubusercontent.com/snakers4/silero-vad/v6.2/src/silero_vad/data/silero_vad.onnx")
  val kokoro=Entry("Kokoro INT8","Voce engleză","k2-fsa/sherpa-onnx","kokoro-int8-en-v0_19.tar.bz2",256,directUrl=KokoroArchive.URL)
 }
