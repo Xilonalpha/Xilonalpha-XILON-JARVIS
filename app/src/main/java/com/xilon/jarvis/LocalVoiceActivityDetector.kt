@@ -18,12 +18,14 @@ import kotlin.math.sqrt
  */
 internal class LocalVoiceActivityDetector(private val context:Context):AutoCloseable {
  private val running=AtomicBoolean(false)
+ private val generation=java.util.concurrent.atomic.AtomicLong(0L)
  private val main=Handler(Looper.getMainLooper())
  @Volatile private var recorder:AudioRecord?=null
  @Volatile private var worker:Thread?=null
  fun start(onVoice:()->Unit,onError:(String)->Unit={}):Boolean {
   if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
   if(!running.compareAndSet(false,true))return false
+  val session=generation.incrementAndGet()
   val sampleRate=16000
   val min=AudioRecord.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
   if(min<=0){running.set(false);return false}
@@ -40,16 +42,23 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    val samples=ShortArray(320)
    var consecutive=0
    var detected=false
+   var noiseFloor=0.008
    try {
     record.startRecording()
     while(running.get()){
      val count=record.read(samples,0,samples.size)
-     if(count<=0)continue
+     if(count<=0){
+      if(count<0)break
+      continue
+     }
      var energy=0.0
      for(i in 0 until count){val v=samples[i].toDouble()/32768.0;energy+=v*v}
      val rms=sqrt(energy/count)
-     // Four consecutive 20 ms frames limit transient clicks.
-     consecutive=if(rms>=0.035)consecutive+1 else 0
+     // Track quiet background; speech must exceed both the absolute
+     // floor and the recent noise estimate. This is not echo cancellation.
+     if(rms<noiseFloor*2.0)noiseFloor=0.98*noiseFloor+0.02*rms
+     val threshold=maxOf(0.035,noiseFloor*3.5)
+     consecutive=if(rms>=threshold)consecutive+1 else 0
      if(consecutive>=4){
       running.set(false)
       detected=true
@@ -62,12 +71,13 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     runCatching{record.stop()}
     record.release()
     if(recorder===record)recorder=null
-    if(detected)main.post(onVoice)
+    if(detected)main.post{if(generation.get()==session)onVoice()}
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}
   return true
  }
  fun stop(){
+  generation.incrementAndGet()
   running.set(false)
   // Stop unblocks a blocking read; the worker owns release().
   runCatching{recorder?.stop()}
