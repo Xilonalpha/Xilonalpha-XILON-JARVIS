@@ -224,13 +224,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(speech!=null)worker.execute{runCatching{speech.close()}}
   }
  }
- private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();voice.stop();voiceEndedAt=android.os.SystemClock.elapsedRealtime();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
+ private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();piperVoice?.stop();voice.stop();voiceEndedAt=android.os.SystemClock.elapsedRealtime();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
   omegaCore.speaking=true;refreshOmegaStatus()
   try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Kokoro: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){omegaCore.speaking=false;refreshOmegaStatus();append("Kokoro: "+e.message);voice.speak(text)?.let{append(it)}}
  }
  private var englishNeuralVoice=false
+ private var romanianNeuralVoice=false
+ private var piperVoice:NeuralVoice?=null
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
  private lateinit var sendControl: android.view.View
@@ -383,6 +385,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
   settings.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
   settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
+  settings.addView(Button(this).apply { text="Voce neuronală RO Piper: OFF";setOnClickListener{
+   if(romanianNeuralVoice){romanianNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: OFF"}
+   else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
+   else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
+  }})
   settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
   settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
@@ -1831,6 +1838,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun speakReply(text:String,manual:Boolean=false){
   if((!manual && !speakReplies && !continuousVoice) || text.isBlank())return
   listening.close();echoGate.remember(text)
+  val piper=piperVoice
+  if(romanianNeuralVoice && piper!=null && piper.installed()){
+   playNeural(text,piper);return
+  }
   val neural=kokoroVoice
   if(englishNeuralVoice && neural!=null && neural.installed()){
    playNeural(text,neural);return
