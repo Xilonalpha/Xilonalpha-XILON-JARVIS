@@ -8,7 +8,7 @@ import java.nio.FloatBuffer
 import java.nio.LongBuffer
 
 /**
- * Silero VAD ONNX streaming adapter for the classic 16 kHz / 512-sample
+ * Silero VAD ONNX streaming adapter for the 16 kHz / 512-sample with 64-sample left context
  * interface (input, state, sr -> output, stateN). Model must be supplied locally.
  * Never downloads a model or invents neural predictions.
  */
@@ -20,6 +20,7 @@ internal class SileroVad16k(model:File):AutoCloseable {
  }
  private var state=FloatArray(2*1*128)
  private val window=FloatArray(512)
+ private val contextSamples=FloatArray(64)
  private var buffered=0
  private val gate=NeuralSpeechGate()
  init {
@@ -44,13 +45,18 @@ internal class SileroVad16k(model:File):AutoCloseable {
  fun reset(){
   state.fill(0f)
   window.fill(0f)
+  contextSamples.fill(0f)
   buffered=0
   gate.reset()
  }
  private fun infer():Float {
-  OnnxTensor.createTensor(env,FloatBuffer.wrap(window),longArrayOf(1,512)).use{audio->
+  val framed=FloatArray(576)
+  System.arraycopy(contextSamples,0,framed,0,64)
+  System.arraycopy(window,0,framed,64,512)
+  System.arraycopy(window,448,contextSamples,0,64)
+  OnnxTensor.createTensor(env,FloatBuffer.wrap(framed),longArrayOf(1,576)).use{audio->
    OnnxTensor.createTensor(env,FloatBuffer.wrap(state),longArrayOf(2,1,128)).use{memory->
-    OnnxTensor.createTensor(env,LongBuffer.wrap(longArrayOf(16000)),longArrayOf(1)).use{rate->
+    OnnxTensor.createTensor(env,LongBuffer.wrap(longArrayOf(16000)),longArrayOf()).use{rate->
      session.run(mapOf("input" to audio,"state" to memory,"sr" to rate)).use{outputs->
       val prediction=outputs.get("output").orElseThrow{
        IllegalStateException("Missing Silero output")
