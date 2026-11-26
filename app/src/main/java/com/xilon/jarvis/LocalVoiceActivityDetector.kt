@@ -39,6 +39,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   worker=Thread({
    val samples=ShortArray(320)
    var consecutive=0
+   var detected=false
    try {
     record.startRecording()
     while(running.get()){
@@ -51,7 +52,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      consecutive=if(rms>=0.035)consecutive+1 else 0
      if(consecutive>=4){
       running.set(false)
-      main.post(onVoice)
+      detected=true
       break
      }
     }
@@ -61,6 +62,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     runCatching{record.stop()}
     record.release()
     if(recorder===record)recorder=null
+    if(detected)main.post(onVoice)
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}
   return true
