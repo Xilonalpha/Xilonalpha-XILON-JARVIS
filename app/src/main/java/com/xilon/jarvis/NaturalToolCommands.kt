@@ -44,6 +44,16 @@ object NaturalToolCommands {
   // The single-intent YouTube forms are handled once, above the lexicon.
   match("(?:caută|cauta) pe youtube (.+)")?.let{return call("youtube_search","query" to JsonPrimitive(it.groupValues[1]))}
   match("(?:navighează|navigheaza|du-mă|du-ma|condu-mă|condu-ma) (?:la|către|catre|spre) (.+)")?.let{return call("maps_navigate","destination" to JsonPrimitive(it.groupValues[1]))}
+  // Romanian natural alarm times must bypass GGUF planning.
+  foldedMatch("(?:seteaza|pune|programeaza) (?:o |un )?alarma (?:la )?(?:ora )?(\\d{1,2})(?::(\\d{2}))? ?(dimineata|seara|dupa-amiaza|dupa amiaza)?")?.let{
+   var h=it.groupValues[1].toInt()
+   val m=it.groupValues[2].ifBlank{"0"}.toInt()
+   val period=it.groupValues[3]
+   if(period=="seara" || period.startsWith("dupa")){if(h in 1..11)h+=12}
+   if(period=="dimineata" && h==12)h=0
+   if(h in 0..23 && m in 0..59)
+    return call("set_alarm","hour" to JsonPrimitive(h),"minute" to JsonPrimitive(m))
+  }
   match("(?:setează|seteaza) alarma (?:la )?(\\d{1,2}):(\\d{2})")?.let{
    val h=it.groupValues[1].toInt();val m=it.groupValues[2].toInt()
    if(h in 0..23 && m in 0..59)return call("set_alarm","hour" to JsonPrimitive(h),"minute" to JsonPrimitive(m))
