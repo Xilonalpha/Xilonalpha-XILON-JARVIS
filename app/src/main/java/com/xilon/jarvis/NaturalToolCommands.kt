@@ -12,8 +12,13 @@ object NaturalToolCommands {
   val ytSuffix=Regex("^(?:pune|redă|reda|pornește|porneste) (?:muzică |muzica |melodia |piesa )?(.+) (?:pe|în|in) youtube$",RegexOption.IGNORE_CASE)
   val ytQuery=(ytPrefix.matchEntire(yt) ?: ytSuffix.matchEntire(yt))?.groupValues?.get(1)?.trim()
   if(!ytQuery.isNullOrBlank() && !Regex("\\b(?:și|si|apoi)\\s+(?:deschide|trimite|apelează|apeleaza|șterge|sterge|cumpără|cumpara)\\b",RegexOption.IGNORE_CASE).containsMatchIn(ytQuery))
-   return PlannedAction("youtube_search",JsonObject(mapOf("query" to JsonPrimitive(ytQuery))))
+   return PlannedAction("youtube_search",JsonObject(mapOf("query" to JsonPrimitive(ytQuery),"play" to JsonPrimitive(!yt.contains(Regex("\\b(?:caută|cauta)\\b",RegexOption.IGNORE_CASE))) )))
   if(RegistryIntent.compound(input))return null
+  val wa=Regex("^(?:scrie|trimite) (?:un )?mesaj (?:pe |prin )?whatsapp (?:lui |către |catre )?(.+?)\\s+(?:întreabă|intreaba)\\s+(?:ce face|cum se simte)\\s*[.!?]?$",RegexOption.IGNORE_CASE).matchEntire(input.trim())
+  if(wa!=null){
+   val body=if(wa.value.contains(Regex("cum se simte",RegexOption.IGNORE_CASE))) "Cum te simți?" else "Ce faci?"
+   return PlannedAction("whatsapp_message",JsonObject(mapOf("contact" to JsonPrimitive(wa.groupValues[1].trim()),"message" to JsonPrimitive(body))))
+  }
   // A lexicon rule is accepted only for a single intent. A compound request
   // needs a multi-step plan with per-action verification.
   RomanianLexicon.parse(input)?.let { return it }

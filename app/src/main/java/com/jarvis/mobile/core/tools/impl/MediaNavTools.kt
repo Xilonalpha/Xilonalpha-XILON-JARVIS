@@ -41,7 +41,7 @@ class OpenUrlTool : Tool(
 class YoutubeSearchTool : Tool(
     ToolSpec(
         "youtube_search", "Search on YouTube and open the results (plays the top result if the user taps it).",
-        listOf(com.jarvis.mobile.core.tools.ParamSpec("query", "string", true, "search text")),
+        listOf(com.jarvis.mobile.core.tools.ParamSpec("query", "string", true, "search text"), com.jarvis.mobile.core.tools.ParamSpec("play", "bool", false, "request playback instead of search only")),
         com.jarvis.mobile.core.tools.Risk.LOW,
     ),
 ) {
@@ -49,6 +49,15 @@ class YoutubeSearchTool : Tool(
         val q = T.str(args, "query") ?: return ToolResult.fail("Missing required arg: query.")
         val enc = URLEncoder.encode(q, "UTF-8")
         val context = ToolEnvironment.context
+        if (T.bool(args, "play") == true) {
+            val play = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
+                setPackage("com.google.android.youtube")
+                putExtra(android.app.SearchManager.QUERY, q)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (runCatching { context.startActivity(play) }.isSuccess)
+                return ToolResult.ok("Am solicitat redarea pe YouTube; aplicația decide dacă pornește automat.", Verification.UNVERIFIED)
+        }
         val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$enc")).apply {
             setPackage("com.google.android.youtube")
         }
@@ -77,7 +86,7 @@ class MapsNavigateTool : Tool(
 
 class SetAlarmTool : Tool(
     ToolSpec(
-        "set_alarm", "Set an alarm in the clock app (shows the alarm UI for the user to save).",
+        "set_alarm", "Request direct alarm creation in the clock app.",
         listOf(
             com.jarvis.mobile.core.tools.ParamSpec("hour", "int", true, "hour 0-23 (24h format)"),
             com.jarvis.mobile.core.tools.ParamSpec("minute", "int", true, "minute 0-59"),
@@ -93,10 +102,10 @@ class SetAlarmTool : Tool(
         val i = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, hour)
             putExtra(AlarmClock.EXTRA_MINUTES, minute)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
             T.str(args, "label")?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
         }
-        return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Alarm configuration requested; save in clock app.", detail = "alarm=$hour:$minute") else it }
+        return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Am solicitat setarea directă a alarmei. Aplicația Ceas nu oferă confirmare de rezultat.", detail = "alarm=$hour:$minute") else it }
     }
 }
 
@@ -118,7 +127,7 @@ class SetTimerTool : Tool(
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             T.str(args, "label")?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
         }
-        return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Timer configuration requested; confirm in clock app.", detail = "timer=${s}s") else it }
+        return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Am solicitat pornirea directă a temporizatorului.", detail = "timer=${s}s") else it }
     }
 }
 
