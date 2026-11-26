@@ -15,7 +15,7 @@ class OfflineVadModelInstallerTest {
    val bytes=byteArrayOf(1,2,3,4)
    assertEquals(4L,OfflineVadModelInstaller.install(ByteArrayInputStream(bytes),target))
    assertArrayEquals(bytes,target.readBytes())
-   assertFalse(File(target.parentFile,target.name+".part").exists())
+   assertTrue(target.parentFile.listFiles()?.none { it.name.endsWith(".part") }==true)
   }finally{dir.deleteRecursively()}
  }
  @Test fun emptyStreamDoesNotPublishModel() {
@@ -27,7 +27,7 @@ class OfflineVadModelInstallerTest {
     fail("Expected rejection")
    }catch(_:IOException){}
    assertFalse(target.exists())
-   assertFalse(File(dir,"silero_vad.onnx.part").exists())
+   assertTrue(dir.listFiles()?.none { it.name.endsWith(".part") }==true)
   }finally{dir.deleteRecursively()}
  }
  @Test fun rejectsOversizedModelWithoutPublishing() {
