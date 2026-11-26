@@ -26,6 +26,17 @@ object ModelCatalog {
   streamingAsr[3]->"tokens.txt"
   else->error("Componentă streaming necunoscută")
  }
+ /** Romanian Piper voice: weights and JSON must be installed together. */
+ val romanianVoice=listOf(
+  Entry("Liana RO Medium • ONNX","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx",64),
+  Entry("Liana RO Medium • config","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx.json",1)
+ )
+ /** Transformers.js Whisper export, not directly loadable by Sherpa-ONNX. */
+ val romanianRecognition=listOf(
+  Entry("Whisper RO Q8 • encoder","ASR română • ONNX Transformers.js, necesită adaptor","Gntz/whisper-ro-onnx","onnx/encoder_model_quantized.onnx",100),
+  Entry("Whisper RO Q8 • decoder","ASR română • ONNX Transformers.js, necesită adaptor","Gntz/whisper-ro-onnx","onnx/decoder_model_merged_quantized.onnx",150)
+ )
+ val romanianModels:List<Entry> get()=romanianVoice+romanianRecognition
  val wake=listOf("hey_jarvis.onnx","melspectrogram.onnx","embedding_model.onnx").map{Entry(it,"Hey Jarvis experimental","Soulcreek2/speechkit-wakeword-models",it,2,"0795387053f80d32bcebbd3bf7f7009ef0e32db5")}
  val pose=Entry("Pose Landmarker Lite","33 repere corporale","litert-community/MediaPipe-PoseLandmarker-Lite","pose_landmarker_lite.task",6,"105f65f")
  val vision=listOf(

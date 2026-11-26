@@ -1443,6 +1443,44 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Catalog modele românești • STT și TTS";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val entries=ModelCatalog.romanianModels
+   val downloads=ModelDownloads(this@MainActivity)
+   android.app.AlertDialog.Builder(this@MainActivity)
+    .setTitle("Modele vocale românești • offline")
+    .setMessage("Liana este TTS Piper (CC BY-NC 4.0); Whisper RO este ASR ONNX pentru Transformers.js și necesită adaptor Android. Descărcarea nu înseamnă activare automată.")
+    .setItems(entries.map{it.name+" • "+downloads.status(it)}.toTypedArray()){_,index->
+     val entry=entries[index]
+     val uri=downloads.uri(entry)
+     val dialog=android.app.AlertDialog.Builder(this@MainActivity)
+      .setTitle(entry.name).setMessage(entry.role+"\\n"+downloads.status(entry)+"\\nAproximativ "+entry.mb+" MB")
+     if(uri!=null)dialog.setPositiveButton("Instalează fișierul"){_,_->if(!busy){busy=true;worker.execute{
+      val result=runCatching{
+       val ref=downloads.reference(entry)
+       val root=java.io.File(filesDir,"models/romanian").apply{check(isDirectory||mkdirs())}
+       val target=java.io.File(root,entry.file.substringAfterLast('/'))
+       val temp=java.io.File.createTempFile("romanian-", ".part",root)
+       try{
+        contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->src.copyTo(dst,65536)}}?:error("Fișier inaccesibil")
+        ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+        if(target.isFile && runCatching{ModelIntegrity.verify(target.inputStream(),ref.sha256,ref.bytes,ref.algorithm)}.isSuccess)"Fișier deja instalat și verificat."
+        else{
+         check(temp.renameTo(target)||(target.delete()&&temp.renameTo(target))){"Nu pot finaliza instalarea"}
+         "Fișier instalat și verificat în models/romanian. Integrarea în motorul vocal necesită adaptor compatibil."
+        }
+       }finally{temp.delete()}
+      }.getOrElse{"Instalare eșuată: "+it.message}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }}}
+     else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
+      val result=runCatching{downloads.start(entry);"Descărcarea modelului românesc a pornit."}.getOrElse{"Descărcare eșuată: "+it.message}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }}}
+     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
+     dialog.setNegativeButton("Închide",null).show()
+    }.setNegativeButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Catalog Sherpa Streaming • Full Duplex";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.streamingAsr

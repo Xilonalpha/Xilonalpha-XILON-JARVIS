@@ -19,7 +19,7 @@ class ModelDownloads(context:Context){
  private fun file(e:ModelCatalog.Entry)=File(root,e.file)
  private fun part(e:ModelCatalog.Entry)=File(root,e.file+".part")
  @Synchronized fun start(entry:ModelCatalog.Entry):Long{
-  require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.streamingAsr+ModelCatalog.wake+ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro,ModelCatalog.silero)))
+  require(entry in (ModelCatalog.entries+ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.streamingAsr+ModelCatalog.romanianModels+ModelCatalog.wake+ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro,ModelCatalog.silero)))
   check(active.putIfAbsent(entry.file,Transfer(DownloadManager.STATUS_PENDING,0,-1,0))==null){"Transfer deja activ"}
   val id=System.currentTimeMillis()
   try{
