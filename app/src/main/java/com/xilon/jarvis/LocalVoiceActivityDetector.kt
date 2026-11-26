@@ -59,10 +59,13 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   worker=Thread({
    val samples=ShortArray(320)
    val decision=VoiceActivityDecision()
+   val startedAt=android.os.SystemClock.elapsedRealtime()
    var detected=false
    try {
     record.startRecording()
     while(running.get()){
+     // Bound microphone ownership even when the environment remains silent.
+     if(android.os.SystemClock.elapsedRealtime()-startedAt>=6000L)break
      val count=record.read(samples,0,samples.size)
      if(count<=0){
       // An interrupted or failed AudioRecord read must not spin indefinitely.
