@@ -65,6 +65,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    val decision=VoiceActivityDecision()
    // Optional offline neural VAD. Energy gate remains available if the
    // model is absent or incompatible; no network access is performed.
+   var neuralFailure:String?=null
    val neural=runCatching{
     val model=java.io.File(context.filesDir,"models/silero_vad.onnx")
     // A real compatible model can be bundled at assets/models/silero_vad.onnx.
@@ -82,7 +83,10 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      }
     }
     if(model.isFile && model.length()>0)SileroVad16k(model) else null
-   }.getOrNull()
+   }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
+   if(neuralFailure!=null){
+    main.post{if(generation.get()==session)onError("Silero VAD: "+neuralFailure)}
+   }
    val startedAt=android.os.SystemClock.elapsedRealtime()
    var detected=false
    try {
