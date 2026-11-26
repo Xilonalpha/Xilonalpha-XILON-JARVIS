@@ -14,15 +14,19 @@ import java.nio.LongBuffer
  */
 internal class SileroVad16k(model:File):AutoCloseable {
  private val env=OrtEnvironment.getEnvironment()
- private val session=env.createSession(model.absolutePath,OrtSession.SessionOptions())
+ private val session=OrtSession.SessionOptions().use { options ->
+  require(model.isFile && model.length()>0){"Missing local Silero VAD model"}
+  env.createSession(model.absolutePath,options)
+ }
  private var state=FloatArray(2*1*128)
  private val window=FloatArray(512)
  private var buffered=0
  private var active=0
  init {
-  require(model.isFile && model.length()>0){"Missing local Silero VAD model"}
-  require(session.inputNames.containsAll(setOf("input","state","sr"))){"Unsupported Silero VAD ONNX inputs"}
-  require(session.outputNames.containsAll(setOf("output","stateN"))){"Unsupported Silero VAD ONNX outputs"}
+  try {
+   require(session.inputNames.containsAll(setOf("input","state","sr"))){"Unsupported Silero VAD ONNX inputs"}
+   require(session.outputNames.containsAll(setOf("output","stateN"))){"Unsupported Silero VAD ONNX outputs"}
+  }catch(e:Exception){session.close();throw e}
  }
  fun accept(samples:ShortArray,count:Int):Boolean {
   require(count in 0..samples.size)
@@ -43,17 +47,26 @@ internal class SileroVad16k(model:File):AutoCloseable {
    OnnxTensor.createTensor(env,FloatBuffer.wrap(state),longArrayOf(2,1,128)).use{memory->
     OnnxTensor.createTensor(env,LongBuffer.wrap(longArrayOf(16000)),longArrayOf(1)).use{rate->
      session.run(mapOf("input" to audio,"state" to memory,"sr" to rate)).use{outputs->
-      val prediction=(outputs[0].value as Array<*>)[0] as FloatArray
-      val next=outputs[1].value as Array<*>
+      val prediction=outputs.get("output").orElseThrow{
+       IllegalStateException("Missing Silero output")
+      }.value as Array<*>
+      val probability=(prediction.first() as FloatArray).first()
+      val next=outputs.get("stateN").orElseThrow{
+       IllegalStateException("Missing Silero recurrent state")
+      }.value as Array<*>
       val updated=FloatArray(256)
       var pos=0
       for(layer in next){
        for(batch in layer as Array<*>){
-        for(value in batch as FloatArray)updated[pos++]=value
+        for(value in batch as FloatArray){
+         require(pos<updated.size){"Unexpected Silero state dimensions"}
+         updated[pos++]=value
+        }
        }
       }
+      require(pos==updated.size && probability.isFinite()){"Invalid Silero output"}
       state=updated
-      return prediction[0]
+      return probability
      }
     }
    }
