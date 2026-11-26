@@ -131,6 +131,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(!busy && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
    else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))localVad.start({
     if(continuousVoice && conversationForeground && omegaCore.speaking && !isDestroyed){
+     // Stop playback as soon as VAD detects the user's speech, before ASR.
+     // This prevents the recognizer from hearing continued synthesized audio.
+     // Recognition still validates the transcript through the echo gate.
+     stopAllSpeech()
      // VAD releases AudioRecord before the Android recognizer takes the mic.
      listening.listen({text->
     if(conversationForeground && continuousVoice && text.isNotBlank()){
