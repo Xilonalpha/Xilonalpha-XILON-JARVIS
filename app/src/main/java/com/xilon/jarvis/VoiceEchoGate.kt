@@ -25,11 +25,14 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
  fun isEcho(text:String):Boolean {
   val command=normalize(text)
   if(command.isBlank())return false
-  return recent().any{it==command || (command.length>=16 && it.contains(command))}
+  val chunks=recent()
+  val combined=chunks.joinToString(" ")
+  return chunks.any{it==command || (command.length>=16 && it.contains(command))} ||
+   (command.length>=16 && combined.contains(command))
  }
  fun isStop(text:String):Boolean {
   val command=normalize(text)
   val recent=recent()
-  return command in setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde") && recent.none{it.contains(command)}
+  return command in setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde") && recent.none{it.contains(command)} && !recent.joinToString(" ").contains(command)
  }
 }

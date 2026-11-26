@@ -14,5 +14,18 @@ class VoiceEchoGateTest {
   now=1200L
   assertFalse(g.isEcho("Aceasta este prima propoziție vorbită."))
  }
+ @Test fun echoAcrossStreamingChunkBoundary(){
+  val g=VoiceEchoGate()
+  g.remember("Pentru a termina spune Jarvis")
+  g.remember("oprește iar apoi poți continua")
+  assertTrue(g.isEcho("spune Jarvis oprește iar apoi"))
+  assertFalse(g.isStop("Jarvis oprește"))
+ }
+ @Test fun unrelatedStopStillWorksAfterStreaming(){
+  val g=VoiceEchoGate()
+  g.remember("Vremea de astăzi este frumoasă")
+  g.remember("Poți ieși la plimbare")
+  assertTrue(g.isStop("Jarvis oprește"))
+ }
  @Test fun expandedStopCommands(){val g=VoiceEchoGate();assertTrue(g.isStop("Jarvis, liniște!"));assertTrue(g.isStop("Jarvis, întrerupe"));assertFalse(g.isStop("Jarvis nu opri"));g.remember("Jarvis pauză");assertFalse(g.isStop("Jarvis pauză"))}
 }
