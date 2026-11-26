@@ -25,8 +25,6 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
  @Volatile private var recorder:AudioRecord?=null
  @Volatile private var worker:Thread?=null
  private val lifecycleLock=Any()
- @Volatile private var echoCanceler:AcousticEchoCanceler?=null
- @Volatile private var noiseSuppressor:NoiseSuppressor?=null
  fun start(onVoice:()->Unit,onError:(String)->Unit={}):Boolean {
   if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
   val session=synchronized(lifecycleLock){
@@ -54,11 +52,11 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   if(!accepted){record.release();return false}
   // Platform DSP is optional: hardware/OS support differs across devices.
   // It reduces playback leakage but does not guarantee full-duplex echo removal.
-  echoCanceler=runCatching {
+  val sessionEcho=runCatching {
    if(AcousticEchoCanceler.isAvailable())AcousticEchoCanceler.create(record.audioSessionId)?.also{it.enabled=true}
    else null
   }.getOrNull()
-  noiseSuppressor=runCatching {
+  val sessionNoise=runCatching {
    if(NoiseSuppressor.isAvailable())NoiseSuppressor.create(record.audioSessionId)?.also{it.enabled=true}
    else null
   }.getOrNull()
@@ -107,10 +105,9 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    }finally {
     runCatching{neural?.close()}
     runCatching{record.stop()}
-    runCatching{echoCanceler?.release()}
-    runCatching{noiseSuppressor?.release()}
-    echoCanceler=null
-    noiseSuppressor=null
+    // Effects belong to this AudioRecord, never to a newer session.
+    runCatching{sessionEcho?.release()}
+    runCatching{sessionNoise?.release()}
     record.release()
     synchronized(lifecycleLock){
      if(recorder===record)recorder=null
