@@ -238,6 +238,29 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var sendControl: android.view.View
  private var autoVoiceSend=false
  private var continuousVoice=false
+ private var continuousVoiceButton:Button?=null
+ private fun updateContinuousVoiceButton(){
+  continuousVoiceButton?.apply{
+   text=if(continuousVoice)"∞ ON" else "∞ OFF"
+   contentDescription=if(continuousVoice)"Oprește conversația continuă" else "Activează conversația continuă"
+   isSelected=continuousVoice
+   alpha=if(continuousVoice)1f else 0.7f
+  }
+ }
+ private fun toggleContinuousVoice(){
+  if(continuousVoice){stopVoiceLoop();updateContinuousVoiceButton();append("Conversație continuă oprită.");return}
+  if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+   requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
+   append("Acordă permisiunea microfonului, apoi apasă din nou ∞ OFF.")
+   return
+  }
+  if(!conversationForeground){append("Deschide conversația JARVIS pentru a activa ascultarea continuă.");return}
+  continuousVoice=true
+  voiceLoopHandler.removeCallbacks(voiceLoop)
+  voiceLoopHandler.postDelayed(voiceLoop,500L)
+  updateContinuousVoiceButton()
+  append("Conversație continuă activată în prim-plan.")
+ }
  private var voiceInterrupt=true
  private val echoGate=VoiceEchoGate()
  private var voiceEndedAt=0L
@@ -313,7 +336,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
  }}
- private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
+ private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
@@ -462,6 +485,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
   toolbar.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer,LinearLayout.LayoutParams(-1,-2))
   actions.addView(composerIcon("mic","Microfon offline").apply{setOnClickListener{startMicrophone()}},LinearLayout.LayoutParams(dp(48),dp(48)))
+  continuousVoiceButton=Button(this).apply{
+   textSize=11f
+   isAllCaps=false
+   minWidth=0
+   minimumWidth=0
+   minHeight=0
+   minimumHeight=0
+   setPadding(dp(2),0,dp(2),0)
+   setOnClickListener{toggleContinuousVoice()}
+  }
+  actions.addView(continuousVoiceButton,LinearLayout.LayoutParams(dp(56),dp(48)))
+  updateContinuousVoiceButton()
   settings.addView(Button(this).apply { text="Instrucțiuni pentru aplicații";setOnClickListener{
    if(busy)return@setOnClickListener
    val prefs=getSharedPreferences("app_tips",MODE_PRIVATE)
@@ -698,7 +733,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
     if(normalizedRomanian=="conversatie continua"){
      if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){append("Acordă întâi permisiunea microfonului.");return@setOnClickListener}
-     continuousVoice=true;voiceLoopHandler.removeCallbacks(voiceLoop);voiceLoopHandler.postDelayed(voiceLoop,500L);append("Conversație continuă activată în prim-plan.");return@setOnClickListener
+     continuousVoice=true;voiceLoopHandler.removeCallbacks(voiceLoop);voiceLoopHandler.postDelayed(voiceLoop,500L);updateContinuousVoiceButton();append("Conversație continuă activată în prim-plan.");return@setOnClickListener
     }
     if(normalizedRomanian=="opreste conversatia continua"){
      stopVoiceLoop();stopNeural();listening.close();voice.stop();kokoroVoice?.stop();append("Conversație continuă oprită.");return@setOnClickListener
