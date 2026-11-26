@@ -25,6 +25,9 @@ internal class RealtimeVoiceTurn(
  /** Returns false when the producer must pause to avoid unbounded memory. */
  @Synchronized fun offer(id:Long,delta:String):Boolean {
   if(!active || id!=generation)return false
+  // Reject oversized producer batches before modifying buffered speech.
+  // Streaming callers should supply small deltas and retry only when false.
+  if(delta.length>maxChunkChars*maxQueuedChunks)return false
   // Refuse new tokens before consuming them when the queue is saturated.
   if(queue.size>=maxQueuedChunks)return false
   val chunks=speech.append(delta)

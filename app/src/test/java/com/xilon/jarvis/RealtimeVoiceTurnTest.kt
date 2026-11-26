@@ -34,6 +34,15 @@ class RealtimeVoiceTurnTest {
   assertTrue(turn.offer(id,"A doua."))
   assertEquals("A doua.",turn.poll(id))
  }
+ @Test fun oversizedDeltaCanBeRetriedWithoutLosingBufferedSpeech(){
+  val turn=RealtimeVoiceTurn(minChunkChars=4,maxChunkChars=20,maxQueuedChunks=1)
+  val id=turn.start()
+  assertTrue(turn.offer(id,"Salut "))
+  assertFalse(turn.offer(id,"a".repeat(21)))
+  assertTrue(turn.isCurrent(id))
+  assertTrue(turn.offer(id,"prietene."))
+  assertEquals("Salut prietene.",turn.poll(id))
+ }
  @Test fun resetInvalidatesPreviousGeneration(){
   val turn=RealtimeVoiceTurn(minChunkChars=4)
   val first=turn.start()
