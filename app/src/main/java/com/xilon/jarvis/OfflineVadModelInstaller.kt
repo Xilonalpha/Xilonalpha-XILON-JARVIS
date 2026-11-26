@@ -14,7 +14,7 @@ internal object OfflineVadModelInstaller {
   require(!destination.exists()){"Model already exists"}
   val parent=destination.parentFile ?: throw IOException("Missing model directory")
   if(!parent.isDirectory && !parent.mkdirs())throw IOException("Cannot create model directory")
-  val temporary=File(parent,destination.name+".part")
+  val temporary=File.createTempFile(destination.name+".", ".part", parent)
   var copied=0L
   try {
    temporary.outputStream().use{output->
