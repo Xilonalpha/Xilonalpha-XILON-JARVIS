@@ -755,6 +755,24 @@ class MainActivity : androidx.activity.ComponentActivity() {
      var lastInferenceProgress=inferenceStarted
      var inferenceStage="Aștept execuția motorului..."
      var inferenceFinished=false
+     val voiceStream=RealtimeVoiceTurn()
+     val voiceStreamId=voiceStream.start()
+     val streamSpeechEnabled=(speakReplies || continuousVoice) && !englishNeuralVoice
+     var firstSpeechChunk=true
+     var streamingSpeechStarted=false
+     fun drainSpeechChunks(){
+      if(!streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return
+      while(true){
+       val chunk=voiceStream.poll(voiceStreamId) ?: break
+       if(chunk.isBlank())continue
+       if(firstSpeechChunk){listening.close();echoGate.remember(chunk)}
+       val error=voice.speakStreamChunk(chunk,first=firstSpeechChunk)
+       if(error!=null){append(error);voiceStream.interrupt();break}
+       streamingSpeechStarted=true
+       firstSpeechChunk=false
+      }
+     }
+
      val slowInferenceNotice=object:Runnable {
       override fun run(){
        if(inferenceFinished || isDestroyed)return
@@ -776,6 +794,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
      nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && !inferenceFinished) {
       lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
       streamingBubble.text="JARVIS: "+partial
+      if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
+       if(voiceStream.offerSnapshot(voiceStreamId,partial))drainSpeechChunks()
+      }
       scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
      } } }
      worker.execute {
@@ -839,7 +860,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
         busy=false
         streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
         archiveMessage(streamingBubble.text.toString())
-        if(nativeModel?.isCancelled()!=true) speakReply(answer)
+        if(nativeModel?.isCancelled()!=true){
+         if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
+          // Final output can differ from streaming snapshots (e.g. reflection).
+          // Never voice an unverified revision after speaking an earlier draft.
+          if(!streamingSpeechStarted || answer.startsWith(streamingBubble.text.toString().removePrefix("JARVIS: "))){
+           voiceStream.finish(voiceStreamId)
+           drainSpeechChunks()
+          }else voiceStream.interrupt()
+          if(!streamingSpeechStarted)speakReply(answer)
+         }else if(!streamingSpeechStarted)speakReply(answer)
+        }else voiceStream.interrupt()
        }
       }
      }
