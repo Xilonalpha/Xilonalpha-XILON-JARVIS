@@ -57,6 +57,20 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){delete reinterpret_cast<ModelState*>(h);}
 extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
  auto* state=reinterpret_cast<ModelState*>(h); auto* m=state->model; auto* v=llama_model_get_vocab(m);
+ // Report native phases before the first generated token. Otherwise Android
+ // cannot distinguish long prompt evaluation from a deadlocked backend.
+ auto* stageClass=e->GetObjectClass(self);
+ auto stageMethod=e->GetMethodID(stageClass,"publishStage","(Ljava/lang/String;)V");
+ e->DeleteLocalRef(stageClass);
+ if(!stageMethod)return nullptr;
+ auto publishStage=[&](const std::string& status){
+  if(e->ExceptionCheck())return;
+  jstring msg=e->NewStringUTF(status.c_str());
+  if(!msg)return;
+  e->CallVoidMethod(self,stageMethod,msg);
+  e->DeleteLocalRef(msg);
+ };
+ publishStage("Pregătesc conversația...");
  const int trained=llama_model_n_ctx_train(m);
  if(trained>0)context=std::min<int>(context,trained);
  if(context<64){fail(e,"Model context too small");return nullptr;}
@@ -105,6 +119,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   while(end<chat.end()-1 && std::string(end->role)!="user" && std::string(end->role)!="system")++end;
   chat.erase(first,end);
  }
+ publishStage("Prompt tokenizat: "+std::to_string(n)+" tokenuri");
  // Retry with smaller context and batch sizes without dropping the current prompt.
  const int required=n+maxTokens;
  const int requested=context;
@@ -113,6 +128,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  }
  int batchSize=std::min<int>(requested,512);
  if(!state->context){
+  publishStage("Inițializez contextul GGUF...");
   for(int attempt=requested;;attempt=std::max(required,attempt/2)){
    auto cp=llama_context_default_params();
    cp.n_ctx=attempt;cp.n_batch=std::min<int>(attempt,512);
@@ -175,11 +191,16 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch);
  };
  bool ready=true;
+ publishStage("Evaluez promptul: 0/"+std::to_string(n)+" tokenuri");
  for(int offset=0;offset<n;offset+=batchSize){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
   const int count=std::min(batchSize,n-offset);
   if(decode(tokens.data()+offset,count,offset,offset+count==n)!=0){ok=e->CallBooleanMethod(self,cancel);ready=false;break;}
+  if((offset/batchSize)%2==0 || offset+count==n){
+   publishStage("Evaluez promptul: "+std::to_string(offset+count)+"/"+std::to_string(n)+" tokenuri");
+  }
  }
+ if(ready)publishStage("Generez primul token...");
  for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
@@ -203,6 +224,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   auto partial=e->NewByteArray(out.size());
   if(partial){e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));if(!e->ExceptionCheck())e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);}
  }
+ publishStage("Finalizez răspunsul...");
  llama_synchronize(ctx);if(batch)llama_batch_ext_free(batch);llama_set_abort_callback(ctx,nullptr,nullptr);llama_sampler_free(sampler);e->DeleteGlobalRef(owner);
  if(e->ExceptionCheck())return nullptr;
  if(!ok){fail(e,"Inference failed");return nullptr;}

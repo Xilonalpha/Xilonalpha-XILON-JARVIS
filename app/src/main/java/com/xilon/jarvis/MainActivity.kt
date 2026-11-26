@@ -748,19 +748,28 @@ class MainActivity : androidx.activity.ComponentActivity() {
      nativeModel?.resetCancellation()
      val streamingBubble=messageBubble("JARVIS: …")
      val inferenceHandler=android.os.Handler(android.os.Looper.getMainLooper())
-     var lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
+     val inferenceStarted=android.os.SystemClock.elapsedRealtime()
+     var lastInferenceProgress=inferenceStarted
+     var inferenceStage="Aștept execuția motorului..."
      var inferenceFinished=false
      val slowInferenceNotice=object:Runnable {
       override fun run(){
        if(inferenceFinished || isDestroyed)return
-       if(android.os.SystemClock.elapsedRealtime()-lastInferenceProgress>=30000L &&
-          streamingBubble.text.toString().startsWith("JARVIS: …")){
-        streamingBubble.text="JARVIS: Modelul local încă procesează cererea (fără tokenuri după 30 s). Poți apăsa Oprește. Verifică dimensiunea GGUF și memoria liberă."
+       if(nativeModel?.generatedTokens==0 &&
+          android.os.SystemClock.elapsedRealtime()-inferenceStarted>=30000L){
+        val seconds=(android.os.SystemClock.elapsedRealtime()-inferenceStarted)/1000
+        streamingBubble.text="JARVIS: "+inferenceStage+" ("+seconds+" s fără răspuns). Poți apăsa Oprește."
        }
        inferenceHandler.postDelayed(this,15000L)
       }
      }
      inferenceHandler.postDelayed(slowInferenceNotice,30000L)
+     nativeModel?.onStage = { stage -> runOnUiThread {
+      if(!isDestroyed && !inferenceFinished && nativeModel?.generatedTokens==0) {
+       inferenceStage=stage
+       streamingBubble.text="JARVIS: "+stage
+      }
+     } }
      nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && !inferenceFinished) {
       lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
       streamingBubble.text="JARVIS: "+partial
@@ -815,6 +824,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        sourced
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
+      nativeModel?.onStage=null
       runOnUiThread {
        inferenceFinished=true
        inferenceHandler.removeCallbacks(slowInferenceNotice)

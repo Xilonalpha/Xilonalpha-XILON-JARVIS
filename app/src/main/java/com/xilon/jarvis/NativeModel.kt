@@ -6,7 +6,9 @@ class NativeModel(private val gpuLayers:Int=0) : AutoCloseable {
  fun isCancelled(): Boolean = cancelled
  fun resetCancellation() { cancelled = false }
  @Volatile var onProgress: ((String) -> Unit)? = null
+ @Volatile var onStage: ((String) -> Unit)? = null
  fun publishProgress(bytes: ByteArray) { onProgress?.invoke(bytes.toString(Charsets.UTF_8)) }
+ fun publishStage(stage: String) { onStage?.invoke(stage) }
  @Volatile var generatedTokens:Int=0
  private set
  @Volatile var firstTokenNanos:Long=0
