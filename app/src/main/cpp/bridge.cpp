@@ -219,6 +219,16 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
    std::chrono::steady_clock::now()-batchStarted).count();
   if(status!=0){
    const bool cancelled=e->CallBooleanMethod(self,cancel);
+   // A cache-compatible position range does not guarantee a successful backend decode.
+   // Retry once from an empty memory, before any generated output is published.
+   if(!cancelled && !e->ExceptionCheck() && reused>0){
+    llama_synchronize(ctx);
+    llama_memory_clear(memory,true);
+    reused=0;
+    offset=-batchSize;
+    publishStage("KV Cache incompatibil; reevaluez promptul complet...");
+    continue;
+   }
    if(!cancelled){
     ok=false;
     publishStage("Eroare evaluare GGUF la tokenul "+std::to_string(offset)+
@@ -238,6 +248,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   // A cancelled or failed prefill must never be returned as a successful
   // empty answer. Clean up the native resources before leaving JNI.
   llama_synchronize(ctx);
+  llama_memory_clear(memory,true);
   if(batch)llama_batch_ext_free(batch);
   llama_set_abort_callback(ctx,nullptr,nullptr);
   llama_sampler_free(sampler);
@@ -286,9 +297,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  }
  publishStage("Finalizez răspunsul...");
  llama_synchronize(ctx);if(batch)llama_batch_ext_free(batch);llama_set_abort_callback(ctx,nullptr,nullptr);llama_sampler_free(sampler);e->DeleteGlobalRef(owner);
- if(e->ExceptionCheck())return nullptr;
- if(!ok){fail(e,"Inference failed");return nullptr;}
- if(generationCancelled){fail(e,"GGUF generation cancelled");return nullptr;}
+ if(e->ExceptionCheck() || !ok || generationCancelled){
+  llama_memory_clear(memory,true);
+  if(e->ExceptionCheck())return nullptr;
+  fail(e,generationCancelled?"GGUF generation cancelled":"Inference failed");return nullptr;
+ }
  state->cachedTokens=std::move(evaluated);
  auto bytes=e->NewByteArray(out.size());if(!bytes)return nullptr;
  e->SetByteArrayRegion(bytes,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));
