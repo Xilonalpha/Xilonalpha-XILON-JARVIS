@@ -57,7 +57,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
    try{
     if(id!=epoch.get())return@execute
     val tts=runtime()
-    val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback={if(id==epoch.get())1 else 0})
+    val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { id==epoch.get() })
     if(id!=epoch.get())return@execute
     val samples=audio.samples
     val sampleRate=audio.sampleRate

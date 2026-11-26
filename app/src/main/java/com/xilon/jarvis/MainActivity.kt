@@ -1704,6 +1704,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
   }})
+  settings.addView(Switch(this).apply {
+   text="Voce: preferă Whisper Small RO când este instalat"
+   val prefs=getSharedPreferences("speech_models",MODE_PRIVATE)
+   isChecked=prefs.getBoolean("prefer_whisper_small_ro",false)
+   setOnCheckedChangeListener { _, enabled -> prefs.edit().putBoolean("prefer_whisper_small_ro",enabled).apply() }
+  })
   settings.addView(Button(this).apply{text="Diagnostic voce română offline";setOnClickListener{
    if(busy)return@setOnClickListener
    val root=java.io.File(filesDir,"models/romanian")
@@ -1719,7 +1725,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val status=message+"\nPiper RO complet: "+(if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență")
    val status2=status+"\nWhisper RO: "+(if(whisper)"Componente Whisper Tiny native prezente; testează încărcarea" else "Fișiere lipsă")
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Diagnostic vocal • offline")
-    .setMessage(status2+"\nSherpa streaming: "+(if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă")+
+    .setMessage(status2+"\nWhisper Small RO: "+(if(RomanianWhisperOnnx.available(root))"Componente instalate" else "Instalează cele 4 fișiere din catalogul românesc")+"\nSherpa streaming: "+(if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă")+
      "\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
     .setPositiveButton("Închide",null).show()
   }})

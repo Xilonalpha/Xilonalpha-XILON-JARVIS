@@ -5,6 +5,8 @@ on:
     paths:
       - 'app/src/sherpa/**'
       - 'app/src/androidTest/**'
+      - 'app/src/sherpaAndroidTest/**'
+      - 'app/src/main/java/com/xilon/jarvis/*Whisper*.kt'
       - 'app/src/main/java/com/xilon/jarvis/*Voice*.kt'
       - 'app/src/main/java/com/xilon/jarvis/*Archive.kt'
       - 'app/src/main/assets/liana-sherpa-metadata.pb'
@@ -47,7 +49,15 @@ jobs:
           for name in ro_RO-liana-medium.onnx ro_RO-liana-medium.onnx.json; do
             curl -fLsS --retry 3 "$liana/$name" -o "$name"
           done
+          whisper=https://huggingface.co/Gntz/whisper-ro-onnx/resolve/25ccec388c51ae98b5fd928f9ee798b1b6d313be
+          for file in onnx/encoder_model_quantized.onnx onnx/decoder_model_merged_quantized.onnx vocab.json generation_config.json; do
+            curl -fLsS --retry 3 "$whisper/$file" -o "${file##*/}"
+          done
           sha256sum --check <<'HASHES'
+          f85cbd849954ad3d39126b6201c70cce99bf8f1208141624a42277af85853564  decoder_model_merged_quantized.onnx
+          d0bab17eb61e349d7ce200122dfbaf61c9c4e5e76cb7cec4de42eb4eb6e088ff  encoder_model_quantized.onnx
+          8f680bba319e01a653d2e8a5dbc17a9157179e0576e6ce74ce0c06356c6e24f9  vocab.json
+          09e6337fe07a191f0a8a28dda1e95004f41988124807c3f999dcb6c263f29f10  generation_config.json
           c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd  kokoro-int8-en-v0_19.tar.bz2
           cfbee3cdc25cf063339f69e189f4d93cc3be6610d267567537323ced3cf87f4d  vits-piper-ro_RO-mihai-medium.tar.bz2
           40c6cbe08905ba702f4df5966a3a8de2bcc232db8ad3784db74bbd948d9953d3  ro_RO-liana-medium.onnx
@@ -63,7 +73,7 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          disk-size: 4096M
+          disk-size: 6144M
           ram-size: 3072M
           script: gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireVoiceFixtures=true -PenableSherpa=true --stacktrace
       - uses: actions/upload-artifact@v4

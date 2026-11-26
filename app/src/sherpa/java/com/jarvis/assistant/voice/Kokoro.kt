@@ -193,7 +193,7 @@ object Kokoro {
                     val heard = if (stock) ArrayList<FloatArray>() else null
                     val t0 = SystemClock.elapsedRealtime()
                     makePaced(text, pacer, SAMPLE_RATE, out = { speech.audio += it; !speech.cancelled }) { piece, emit ->
-                        engine.generateWithCallback(piece, speaker, speed, ChunkCallback { samples ->
+                        engine.generateWithCallback(piece, speaker, speed, SherpaAudioCallback { samples ->
                             heard?.add(samples)
                             emit(samples)
                         })
@@ -246,9 +246,7 @@ object Kokoro {
      * code looks up `invoke(float[]): Integer` by name, and Kotlin 2 compiles lambdas without that method
      * (calling it then fails with NoSuchMethodError and no audio plays).
      */
-    private class ChunkCallback(private val onChunk: (FloatArray) -> Boolean) : (FloatArray) -> Int {
-        override fun invoke(samples: FloatArray): Int = if (onChunk(samples)) 1 else 0 // 0 = stop generating
-    }
+
 
     private fun engine(context: Context): OfflineTts? {
         tts?.let { return it }

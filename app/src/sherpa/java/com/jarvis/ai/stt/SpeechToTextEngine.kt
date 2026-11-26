@@ -1,5 +1,6 @@
 package com.jarvis.ai.stt
 
+import com.xilon.jarvis.RomanianWhisperOnnx
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -87,8 +88,35 @@ class SpeechToTextEngine(context: Context) : Closeable {
         modelDirectory.listFiles()?.filter{it.isFile && it.length()>0L}.orEmpty()
     )!=null
 
+    private val fineTunedDir = File(modelDirectory, "romanian")
+    private var fineTuned: RomanianWhisperOnnx? = null
+    private var fineTunedRevision: List<Pair<Long,Long>>? = null
+
+    private fun useFineTuned() = RomanianWhisperOnnx.available(fineTunedDir) &&
+        (!hasRomanianWhisper() || appContext.getSharedPreferences("speech_models", Context.MODE_PRIVATE)
+            .getBoolean("prefer_whisper_small_ro", false))
+
+    private fun releaseFineTuned() {
+        fineTuned?.close()
+        fineTuned = null
+        fineTunedRevision = null
+    }
+
+    private fun fineTunedRecognizer(): RomanianWhisperOnnx {
+        releaseOnline()
+        releaseOffline()
+        val revision = RomanianWhisperOnnx.files.map { name ->
+            File(fineTunedDir, name).let { it.length() to it.lastModified() }
+        }
+        if (revision != fineTunedRevision) releaseFineTuned()
+        return fineTuned ?: RomanianWhisperOnnx(fineTunedDir, speechThreadBudget()).also {
+            fineTuned = it
+            fineTunedRevision = revision
+        }
+    }
+
     /** Streaming is selected only when the preferred Romanian Whisper model is absent. */
-    fun supportsConcurrentPlayback():Boolean = !hasRomanianWhisper() && hasStreamingModelFiles()
+    fun supportsConcurrentPlayback():Boolean = !hasRomanianWhisper() && !useFineTuned() && hasStreamingModelFiles()
 
     private fun streamingFiles(): List<File>? {
         val directory = File(modelDirectory, "streaming-asr")
@@ -104,7 +132,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         kotlinx.coroutines.runBlocking {
             operationMutex.withLock {
                 check(!closed) { "Speech engine closed" }
-                if (hasRomanianWhisper()) ensureRecognizer()
+                if (useFineTuned()) fineTunedRecognizer()
+                else if (hasRomanianWhisper()) ensureRecognizer()
                 else if (ensureOnlineRecognizer() == null) ensureRecognizer()
             }
         }
@@ -124,6 +153,13 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
+            if (useFineTuned()) {
+                val engine = fineTunedRecognizer()
+                val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
+                if (cancelled()) return@withContext ""
+                val recording = captureUtterance(requestEpoch)
+                return@withContext if (cancelled()) "" else engine.transcribe(recording, cancelled)
+            }
             val online = if (hasRomanianWhisper()) null else ensureOnlineRecognizer()
             if (online != null) return@withContext captureStreaming(online, requestEpoch, onPartial)
             val activeRecognizer = ensureRecognizer()
@@ -160,6 +196,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             operationMutex.withLock {
                 activeRecorder = null
                 releaseVad()
+                releaseFineTuned()
                 releaseOffline()
                 releaseOnline()
             }
@@ -172,6 +209,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
      * The same Sherpa JNI processes 100 ms frames and produces partial hypotheses.
      */
     private fun ensureOnlineRecognizer(): OnlineRecognizer? {
+        releaseFineTuned()
         val files = streamingFiles()
         val revision = files?.map { Triple(it.absolutePath, it.length(), it.lastModified()) }
         if (revision != onlineRevision) {
@@ -303,6 +341,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     private fun ensureRecognizer(): OfflineRecognizer {
+        releaseFineTuned()
         releaseOnline()
         val files = modelDirectory.listFiles()?.filter { it.isFile && it.length() > 0L }.orEmpty()
         val senseVoice = ModelStore.senseVoiceFiles(files)

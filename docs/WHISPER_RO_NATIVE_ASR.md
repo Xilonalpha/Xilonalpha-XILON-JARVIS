@@ -1,22 +1,7 @@
-# Romanian Whisper native ASR
+# Offline Romanian speech recognition
 
-Android speech recognition is implemented by SpeechToTextEngine using the Sherpa-ONNX
-OfflineRecognizer and OfflineWhisperModelConfig(language = "ro", task = "transcribe").
-Install the three files from ModelCatalog.whisper into files/models/:
-- tiny-encoder.int8.onnx
-- tiny-decoder.int8.onnx
-- tiny-tokens.txt
+“Instalează Whisper română offline” installs multilingual Whisper Tiny for Sherpa. This is the lighter option. The engine sets the language to Romanian and transcribes audio captured at 16 kHz.
 
-These files are from the Sherpa-compatible multilingual Whisper Tiny export.
-When a compatible Whisper encoder/decoder/tokens triple is present, the engine
-now prioritizes it over the English-only streaming Zipformer model. Recording,
-offline inference, and returned text use the existing microphone pipeline.
+The Romanian model catalog also offers Gntz/whisper-ro-onnx, a fine-tuned Whisper Small model at revision 25ccec388c51ae98b5fd928f9ee798b1b6d313be. Install its quantized encoder, merged decoder, vocabulary and generation configuration. Installing the two older ONNX downloads alone leaves the package incomplete. The Kotlin adapter computes the model's 80-channel log-Mel features, uses ONNX Runtime and decodes Romanian tokens with cached attention state. Recognition runs locally after installation.
 
-The separately listed Gntz/whisper-ro-onnx encoder_model_quantized.onnx and
-decoder_model_merged_quantized.onnx are Transformers.js artifacts. They are NOT
-loaded by this Sherpa adapter: they need a dedicated Transformers.js-compatible
-decoder, tokenizer, and mel preprocessing implementation. Downloading them alone
-does not enable native ASR. This change deliberately avoids claiming otherwise.
-
-This is offline Romanian Whisper transcription, not a Romanian streaming Whisper
-decoder or a proof of full-duplex. Test recognition and latency on a physical phone.
+When both models are installed, Tiny remains the default. Enable “Voce: preferă Whisper Small RO când este instalat” to switch at the next utterance. The existing English streaming transducer remains available for English. Neither offline Whisper model emits streaming partial results. The end-to-end device test for microphone, echo and barge-in remains separate from offline decoding of recorded audio.

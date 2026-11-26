@@ -1,6 +1,7 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
  namespace = "com.xilon.jarvis"
+ androidResources { noCompress += listOf("onnx", "bz2") }
  compileSdk = 36
  ndkVersion = "27.2.12479018"
  externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
@@ -30,6 +31,7 @@ dependencies {
 val sherpaEnabled = providers.gradleProperty("enableSherpa").orNull != "false"
 if (sherpaEnabled) {
  android.sourceSets.getByName("main").java.srcDir("src/sherpa/java")
+ android.sourceSets.getByName("androidTest").java.srcDir("src/sherpaAndroidTest/java")
  dependencies { implementation("com.github.k2-fsa:sherpa-onnx:v1.12.38") }
 }
 
@@ -42,3 +44,5 @@ dependencies { implementation("org.apache.commons:commons-compress:1.27.1") }
 dependencies { implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3") }
 
 dependencies { androidTestImplementation("androidx.test:runner:1.6.2"); androidTestImplementation("junit:junit:4.13.2") }
+
+dependencies { implementation("com.github.wendykierp:JTransforms:3.1") }

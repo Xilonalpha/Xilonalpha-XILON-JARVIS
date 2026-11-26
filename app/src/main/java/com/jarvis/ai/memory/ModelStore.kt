@@ -98,7 +98,8 @@ object ModelStore {
         val names = files.map { it.name }.sorted()
         val wakeReady = fileNamed(files, MEL_MODEL) != null &&
             fileNamed(files, EMBEDDING_MODEL) != null && wakeModelFile(files) != null
-        val speechReady = senseVoiceFiles(files) != null || whisperFiles(files) != null
+        val speechReady = senseVoiceFiles(files) != null || whisperFiles(files) != null ||
+            com.xilon.jarvis.RomanianWhisperOnnx.available(File(directory, "romanian"))
         return Snapshot(
             wakeReady = wakeReady,
             speechReady = speechReady,

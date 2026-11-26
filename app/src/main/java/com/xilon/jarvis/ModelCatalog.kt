@@ -34,11 +34,13 @@ object ModelCatalog {
   Entry("Liana RO Medium • ONNX","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx",64,"acfc14ae87bb4c124947f0cb7ee0023ffceb0005"),
   Entry("Liana RO Medium • config","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx.json",1,"acfc14ae87bb4c124947f0cb7ee0023ffceb0005")
  )
- /** Transformers.js Whisper export, not directly loadable by Sherpa-ONNX. */
+ /** Romanian fine-tuned Whisper Small, decoded locally with ONNX Runtime. */
  val romanianRecognition=listOf(
-  Entry("Whisper RO Q8 • encoder","ASR română • ONNX Transformers.js, necesită adaptor","Gntz/whisper-ro-onnx","onnx/encoder_model_quantized.onnx",100),
-  Entry("Whisper RO Q8 • decoder","ASR română • ONNX Transformers.js, necesită adaptor","Gntz/whisper-ro-onnx","onnx/decoder_model_merged_quantized.onnx",150)
- )
+  Triple("Whisper RO Q8 • encoder","onnx/encoder_model_quantized.onnx",93L),
+  Triple("Whisper RO Q8 • decoder","onnx/decoder_model_merged_quantized.onnx",156L),
+  Triple("Whisper RO • vocabular","vocab.json",1L),
+  Triple("Whisper RO • configurare decodare","generation_config.json",1L)
+ ).map{(name,file,mb)->Entry(name,"Whisper Small română • instalează toate cele 4 componente","Gntz/whisper-ro-onnx",file,mb,"25ccec388c51ae98b5fd928f9ee798b1b6d313be")}
  val romanianModels:List<Entry> get()=romanianVoice+romanianRecognition
  val wake=listOf("hey_jarvis.onnx","melspectrogram.onnx","embedding_model.onnx").map{Entry(it,"Hey Jarvis experimental","Soulcreek2/speechkit-wakeword-models",it,2,"0795387053f80d32bcebbd3bf7f7009ef0e32db5")}
  val pose=Entry("Pose Landmarker Lite","33 repere corporale","litert-community/MediaPipe-PoseLandmarker-Lite","pose_landmarker_lite.task",6,"105f65f")

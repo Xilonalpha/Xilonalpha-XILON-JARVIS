@@ -3,6 +3,10 @@ package com.xilon.jarvis
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
+import com.k2fsa.sherpa.onnx.OfflineTts
+import com.k2fsa.sherpa.onnx.OfflineTtsConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -48,12 +52,33 @@ class OfflineSpeechTest {
             }
             context.getSharedPreferences("piper_voice", Context.MODE_PRIVATE).edit().putString("speaker", "liana").commit()
             play(piper, "Bună! Sunt Liana.")
+            for (name in RomanianWhisperOnnx.files) fixture(name, File(dir, name))
+            val speech = makeSpeechAt16k(File(dir, "mihai"))
+            RomanianWhisperOnnx(dir, 2).use { model ->
+                val transcript = model.transcribe(speech) { false }
+                assertTrue("Unexpected Romanian transcription: $transcript", transcript.contains("astăzi", ignoreCase = true))
+            }
             KokoroArchive.install(context, Uri.fromFile(fixture(ModelCatalog.kokoro.file)))
             assertTrue(ModelInventory.installed(context, ModelCatalog.kokoro))
             play(checkNotNull(NeuralVoiceFactory.create(context)), "Hello. This is Jarvis.")
         } finally {
             context.deleteSharedPreferences(root.name + "-piper_voice")
             root.deleteRecursively()
+        }
+    }
+
+    private fun makeSpeechAt16k(dir: File): FloatArray {
+        val model = OfflineTtsVitsModelConfig(model = File(dir, "ro_RO-mihai-medium.onnx").path,
+            tokens = File(dir, "tokens.txt").path, dataDir = File(dir, "espeak-ng-data").path)
+        val engine = OfflineTts(config = OfflineTtsConfig(model = OfflineTtsModelConfig(vits = model, numThreads = 2)))
+        val audio = try { engine.generate("Bună! Sunt Jarvis. Cu ce te pot ajuta astăzi?") } finally { engine.release() }
+        val ratio = audio.sampleRate / 16000.0
+        return FloatArray((audio.samples.size / ratio).toInt()) { index ->
+            val pos = index * ratio
+            val left = pos.toInt()
+            val fraction = (pos - left).toFloat()
+            val right = minOf(left + 1, audio.samples.lastIndex)
+            audio.samples[left] * (1 - fraction) + audio.samples[right] * fraction
         }
     }
 
