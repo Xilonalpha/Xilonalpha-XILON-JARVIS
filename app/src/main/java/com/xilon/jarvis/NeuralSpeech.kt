@@ -4,6 +4,7 @@ interface NeuralSpeech : java.io.Closeable {
  suspend fun listen():String
  /** Interim hypotheses are UI hints only; never dispatch them as commands. */
  suspend fun listen(onPartial:(String)->Unit):String=listen()
+ fun supportsConcurrentPlayback():Boolean=false
  fun stop()
 }
 object NeuralSpeechFactory {

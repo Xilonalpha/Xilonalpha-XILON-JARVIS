@@ -24,6 +24,37 @@ class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var speechClosing=false
  private val partialVoiceGate=VoicePartialGate()
  private val speechCapture=VoiceCaptureGate()
+ @Volatile private var duplexListening=false
+ private var duplexUnavailable=false
+ private fun startConcurrentSpeechCapture(){
+  if(duplexListening || duplexUnavailable || speechClosing || speechCapture.active() || voiceBargeIn.active() || wake!=null || !conversationForeground || !continuousVoice || !omegaCore.speaking)return
+  if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return
+  val ticket=speechSessions.begin()
+  if(!speechCapture.begin(ticket))return
+  duplexListening=true
+  speechWorker.execute {
+   var engine:NeuralSpeech?=null
+   val recognized=try {
+    engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
+    if(engine?.supportsConcurrentPlayback()!=true){duplexUnavailable=true;""}
+    else kotlinx.coroutines.runBlocking{engine!!.listen()}
+   }catch(e:Exception){runOnUiThread{if(!isDestroyed)modelStatus.text="Duplex ASR: "+e.message};""}
+   finally{speechCapture.finish(ticket);duplexListening=false}
+   runOnUiThread {
+    if(isDestroyed || speechClosing || !speechSessions.isCurrent(ticket) || !conversationForeground || !continuousVoice || recognized.isBlank())return@runOnUiThread
+    if(echoGate.isEcho(recognized))return@runOnUiThread
+    stopAllSpeech()
+    if(echoGate.isStop(recognized)){
+     pendingVoiceInterruption=null
+     if(busy)nativeModel?.stop()
+    }else if(busy){
+     pendingVoiceInterruption=recognized
+     nativeModel?.stop()
+    }else acceptVoice(recognized)
+   }
+  }
+ }
+
  private val voiceBargeIn=VoiceBargeInState()
  private val voiceBargeInTimeout=android.os.Handler(android.os.Looper.getMainLooper())
  private var voiceBargeInTimeoutTask:Runnable?=null
@@ -211,6 +242,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!omegaCore.listening && wake==null && voiceRetry.ready(now)){
    if(!busy && !speechCapture.active() && !voiceBargeIn.active() && !omegaCore.speaking){
     if(now-voiceEndedAt>=400L)startMicrophone()
+   }else if(voiceInterrupt && omegaCore.speaking && !duplexUnavailable && !duplexListening && !speechCapture.active() && !voiceBargeIn.active()){
+    startConcurrentSpeechCapture()
    }else if(VoiceCapturePolicy.mayMonitorPlayback(conversationForeground,continuousVoice,voiceInterrupt,omegaCore.speaking,speechCapture.active(),voiceBargeIn.active()) && !omegaCore.listening && voiceInterruptGate.ready(now)){
     val ticket=beginBargeIn()
     if(ticket!=null){
@@ -265,7 +298,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
  }}
- private fun stopVoiceLoop(){localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
+ private fun stopVoiceLoop(){stopNeural();duplexListening=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
