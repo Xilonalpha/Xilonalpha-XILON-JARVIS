@@ -191,9 +191,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
-  stopLiveVision()
   if(!java.io.File(filesDir,"hand_landmarker.task").isFile){append("Importă modelul MediaPipe.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return}
+  if(liveVision!=null){combinedAirVision=true;stopLiveVision()}
   cursor.visibility=android.view.View.VISIBLE
   airTouch=AirTouchController(this,this,cursor,{append(it)},{stopAirTouch()},if(combinedAirVision){{report:String->if(conversationForeground && airTouch!=null){visualObservation.put(report,android.os.SystemClock.elapsedRealtime());modelStatus.text=report.take(300)}}}else null).also{it.start()}
  }
@@ -358,7 +358,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(liveVision!=null)return
   if(busy){append("Camera live: așteaptă finalizarea operației active.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),59);return}
-  stopAirTouch()
+  if(airTouch!=null){combinedAirVision=true;stopAirTouch();startAirTouch();return}
   liveVision=LiveVisionController(this,this,{report->if(conversationForeground && liveVision!=null){visualObservation.put(report,android.os.SystemClock.elapsedRealtime());modelStatus.text=report.take(300)}},{message->append(message);stopLiveVision()}).also{it.start()}
  }
  private val localVad by lazy { LocalVoiceActivityDetector(this) }
@@ -1354,7 +1354,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    override fun onStopTrackingTouch(bar:android.widget.SeekBar?){}
   })})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch + vedere frontală (local)";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_combined",false);combinedAirVision=isChecked;setOnCheckedChangeListener{_,checked->combinedAirVision=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_combined",checked).apply();if(airTouch!=null){stopAirTouch();startAirTouch()}}})
-  settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn 1s: oprire)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
+  settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn: oprire opțională)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   val aiControls=setOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Diagnostic voce română offline","Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
