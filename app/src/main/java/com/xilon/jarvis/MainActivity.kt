@@ -15,16 +15,58 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceRetry=VoiceRetryPolicy()
  private val voiceTurnGuard=VoiceTurnGuard()
  private val voiceInterruptGate=VoiceInterruptGate()
- private fun stopNeural(){neuralCancelled=true;neural?.stop()}
+ // Separate speech capture from the GGUF executor so microphone reads cannot
+ // monopolize model inference or be queued behind a long generation.
+ private val speechWorker=java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+  Thread(task,"xilon-speech-io").apply { isDaemon=true }
+ }
+ private val speechGeneration=java.util.concurrent.atomic.AtomicLong(0L)
+ private fun stopNeural(){
+  neuralCancelled=true
+  speechGeneration.incrementAndGet()
+  neural?.stop()
+  if(::omegaCore.isInitialized && omegaCore.listening){
+   omegaCore.listening=false
+   busy=false
+   refreshOmegaStatus()
+  }
+ }
  private fun startNeural(fallback:Boolean=false){
-  if(busy || wake!=null)return
+  if(busy || wake!=null || !conversationForeground)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
-  val engine=try{cachedNeural ?: NeuralSpeechFactory.create(this).also{cachedNeural=it}}catch(e:Exception){modelStatus.text="Sherpa indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}catch(e:LinkageError){modelStatus.text="Sherpa nativ indisponibil: "+e.message;if(fallback)startAndroidMicrophone();return}
-  if(engine==null){if(fallback)startAndroidMicrophone() else modelStatus.text="Motor Sherpa indisponibil.";return}
-  listening.close();stopAllSpeech();busy=true;neuralCancelled=false;neural=engine;omegaCore.listening=true;refreshOmegaStatus()
-  worker.execute{
-   val result=try{Result.success(kotlinx.coroutines.runBlocking{engine.listen()})}catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}finally{neural=null}
-   runOnUiThread{if(!isDestroyed){busy=false;omegaCore.listening=false;refreshOmegaStatus();if(!neuralCancelled && conversationForeground)result.fold({if(it.isBlank()){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text="Nicio comandă detectată."} else {voiceRetry.reset();acceptVoice(it)}},{cachedNeural=null;worker.execute{runCatching{engine.close()}};voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text="Eroare Sherpa: "+it.message;if(fallback)startAndroidMicrophone()})}}
+  val turn=speechGeneration.incrementAndGet()
+  listening.close();stopAllSpeech();busy=true;neuralCancelled=false
+  omegaCore.listening=true;refreshOmegaStatus()
+  speechWorker.execute {
+   var engine:NeuralSpeech?=null
+   val result:Result<String> = try {
+    engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
+    if(engine==null) Result.failure(IllegalStateException("Motor Sherpa indisponibil."))
+    else if(turn!=speechGeneration.get() || neuralCancelled) Result.success("")
+    else {
+     neural=engine
+     Result.success(kotlinx.coroutines.runBlocking{engine!!.listen()})
+    }
+   }catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}
+   finally{neural=null}
+   runOnUiThread {
+    if(isDestroyed || turn!=speechGeneration.get())return@runOnUiThread
+    busy=false;omegaCore.listening=false;refreshOmegaStatus()
+    if(neuralCancelled || !conversationForeground)return@runOnUiThread
+    result.fold({recognized->
+     if(recognized.isBlank()){
+      voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
+      modelStatus.text="Nicio comandă detectată."
+     }else{voiceRetry.reset();acceptVoice(recognized)}
+    },{error->
+     cachedNeural=null
+     val failedEngine=engine
+     speechWorker.execute{runCatching{failedEngine?.close()}}
+     voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
+     modelStatus.text="Eroare Sherpa: "+error.message
+     if(fallback)startAndroidMicrophone()
+    })
+   }
   }
  }
  private var wake:WakeController?=null
@@ -2395,7 +2437,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   voice.close()
   nativeModel?.stop()
   stopNeural();val speech=cachedNeural;cachedNeural=null
-  worker.execute { runCatching{speech?.close()};nativeModel?.close(); nativeModel=null }
+  speechWorker.execute { runCatching{speech?.close()} }
+  speechWorker.shutdown()
+  worker.execute { nativeModel?.close(); nativeModel=null }
   worker.shutdown()
   super.onDestroy()
  }
