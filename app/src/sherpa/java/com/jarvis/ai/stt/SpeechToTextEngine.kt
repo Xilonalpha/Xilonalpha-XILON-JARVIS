@@ -94,7 +94,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             if (online != null) return@withContext captureStreaming(online, requestEpoch, onPartial)
             val activeRecognizer = ensureRecognizer()
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
-            val recording = captureUtterance()
+            val recording = captureUtterance(requestEpoch)
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get() || recording.isEmpty()) return@withContext ""
 
             val stream = activeRecognizer.createStream()
@@ -189,7 +189,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
             error("Microfonul nu poate fi inițializat.")
         }
         activeRecorder = recorder
-        val stream = online.createStream()
+        val stream = try { online.createStream() } catch (failure: Throwable) {
+            activeRecorder = null
+            recorder.release()
+            throw failure
+        }
         val pcm = ShortArray(FRAME_SAMPLES)
         val normalizedFrame = FloatArray(FRAME_SAMPLES)
         var lastPartial = ""
@@ -300,7 +304,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         ).also { recognizer = it }
     }
 
-    private fun captureUtterance(): FloatArray {
+    private fun captureUtterance(epoch: Long): FloatArray {
         val minimumBufferBytes = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -308,7 +312,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         )
         check(minimumBufferBytes > 0) { "This device does not support 16 kHz microphone capture." }
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -346,7 +350,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             runCatching { aec?.setEnabled(true) }
             runCatching { ns?.setEnabled(true) }
             recorder.startRecording()
-            while (!closed && !captureCancelled && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
+            while (!closed && !captureCancelled && epoch == cancellationEpoch.get() && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val count = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {
                     if (captureCancelled || closed) break
@@ -398,7 +402,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
 
         // Reject transient clicks and playback leakage shorter than 180 ms.
-        if (closed || captureCancelled || !started || voicedSamples < MIN_VOICED_SAMPLES || peakSpeechRms < SPEECH_RMS_THRESHOLD || capturedCount == 0) return FloatArray(0)
+        if (closed || captureCancelled || epoch != cancellationEpoch.get() || !started || voicedSamples < MIN_VOICED_SAMPLES || peakSpeechRms < SPEECH_RMS_THRESHOLD || capturedCount == 0) return FloatArray(0)
         return captured.copyOf(capturedCount)
     }
 
