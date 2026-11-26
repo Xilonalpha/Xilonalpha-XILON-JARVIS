@@ -269,9 +269,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck()){generationCancelled=true;break;}
   const auto t=llama_sampler_sample(sampler,ctx,-1);
-  // Advance grammar and repetition-penalty state for every sampled token.
-  // Without accept(), each step samples against stale sampler history.
-  llama_sampler_accept(sampler,t);
+  // llama_sampler_sample already accepts the token; do not advance grammar twice.
   if(llama_vocab_is_eog(v,t))break;
   std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
