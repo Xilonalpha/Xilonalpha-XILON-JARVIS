@@ -23,6 +23,13 @@ class NaturalToolCommandsTest {
   assertNull(NaturalToolCommands.parse("Nu deschide YouTube și pune muzica jazz"))
   assertNull(NaturalToolCommands.parse("Deschide YouTube și trimite un mesaj"))
  }
+ @Test fun genericCapabilityRoutingRejectsMultiActionAsAppName(){
+  assertEquals("open_app",NaturalToolCommands.parse("Deschide WhatsApp")?.tool)
+  assertNull(NaturalToolCommands.parse("Deschide WhatsApp și trimite un mesaj"))
+  assertNull(NaturalToolCommands.parse("Nu deschide WhatsApp"))
+  assertEquals("control_flashlight",NaturalToolCommands.parse("Aprinde lanterna")?.tool)
+  assertEquals("maps_navigate",NaturalToolCommands.parse("Navighează către București")?.tool)
+ }
  @Test fun unknown(){assertNull(NaturalToolCommands.parse("Ce este inteligența artificială?"))}
  @Test fun upstreamNavigation(){
   assertEquals("press_back",NaturalToolCommands.parse("go back")!!.tool)

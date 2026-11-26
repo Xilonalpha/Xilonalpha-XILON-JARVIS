@@ -13,8 +13,10 @@ object NaturalToolCommands {
   val ytQuery=(ytPrefix.matchEntire(yt) ?: ytSuffix.matchEntire(yt))?.groupValues?.get(1)?.trim()
   if(!ytQuery.isNullOrBlank() && !Regex("\\b(?:și|si|apoi)\\s+(?:deschide|trimite|apelează|apeleaza|șterge|sterge|cumpără|cumpara)\\b",RegexOption.IGNORE_CASE).containsMatchIn(ytQuery))
    return PlannedAction("youtube_search",JsonObject(mapOf("query" to JsonPrimitive(ytQuery))))
-  RomanianLexicon.parse(input)?.let { return it }
   if(RegistryIntent.compound(input))return null
+  // A lexicon rule is accepted only for a single intent. A compound request
+  // needs a multi-step plan with per-action verification.
+  RomanianLexicon.parse(input)?.let { return it }
   val q=RomanianLexicon.canonicalCommand(input).trim().trimEnd('!','?')
   fun call(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
   fun match(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(q)
@@ -25,7 +27,12 @@ object NaturalToolCommands {
    val v=it.groupValues[1].toInt();if(v in 0..100)return call("control_volume","value" to JsonPrimitive(v))
   }
   match("(?:deschide site-ul|deschide pagina) (.+)")?.let{return call("open_url","url" to JsonPrimitive(it.groupValues[1]))}
-  match("(?:deschide|lansează|lanseaza) (?:aplicația |aplicatia )?(.+)")?.let{return call("open_app","app" to JsonPrimitive(it.groupValues[1]))}
+  match("(?:deschide|lansează|lanseaza) (?:aplicația |aplicatia )?(.+)")?.let{
+   val app=it.groupValues[1].trim()
+   // Reject free-form clauses; do not pass them as a fake app name.
+   if(!Regex("\\b(?:și|si|apoi|iar|după aceea|dupa aceea)\\b",RegexOption.IGNORE_CASE).containsMatchIn(app))
+    return call("open_app","app" to JsonPrimitive(app))
+  }
   // Recognize common Romanian YouTube requests before the generic open-app
   // matcher. A search intent does not guarantee playback.
   match("(?:deschide|pornește|porneste|lansează|lanseaza) (?:aplicația |aplicatia )?youtube (?:și|si|iar|apoi) (?:pune|redă|reda|pornește|porneste|caută|cauta) (?:muzică|muzica|melodia|piesa|un cântec|un cantec|niște muzică|niste muzica)?\\s*(.+)")?.let{

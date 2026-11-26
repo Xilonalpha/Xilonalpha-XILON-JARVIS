@@ -702,10 +702,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val lexicalCompound=RomanianLexicon.split(commandQ).size>1
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
-    val lexicalTool=if(lexicalCompound) null else RomanianLexicon.parse(commandQ)
-    if(lexicalTool!=null){executeRequestedTool(lexicalTool.tool,lexicalTool.args);return@setOnClickListener}
-    val naturalTool=NaturalToolCommands.parse(commandQ)
-    if(naturalTool!=null && !lexicalCompound && !RegistryIntent.compound(commandQ)){
+    // Use one guarded deterministic capability router, not competing
+    // lexicon shortcuts that can swallow multi-action requests as open_app.
+    val naturalTool=if(!lexicalCompound && !RegistryIntent.compound(commandQ))
+     NaturalToolCommands.parse(commandQ) else null
+    if(naturalTool!=null){
      executeRequestedTool(naturalTool.tool,naturalTool.args)
      return@setOnClickListener
     }
