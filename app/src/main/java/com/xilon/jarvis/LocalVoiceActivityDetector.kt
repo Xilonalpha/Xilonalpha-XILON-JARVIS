@@ -66,11 +66,15 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      }
     }
    }catch(e:Exception){
-    if(running.getAndSet(false))main.post{onError(e.message ?: "Eroare VAD local")}
+    if(running.getAndSet(false))main.post{
+     if(generation.get()==session)onError(e.message ?: "Eroare VAD local")
+    }
    }finally {
     runCatching{record.stop()}
     record.release()
     if(recorder===record)recorder=null
+    // Release ownership before allowing another session to start.
+    if(generation.get()==session)running.set(false)
     if(detected)main.post{if(generation.get()==session)onVoice()}
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}
