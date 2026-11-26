@@ -76,13 +76,14 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     }
     if(model.isFile && model.length()>0)SileroVad16k(model) else null
    }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
-   val startedAt=android.os.SystemClock.elapsedRealtime()
+   var startedAt=0L
    var detected=false
    try {
     if(neuralFailure!=null){
      main.post{if(generation.get()==session)onError("Silero VAD: "+neuralFailure)}
     }else if(running.get() && generation.get()==session){
      record.startRecording()
+     startedAt=android.os.SystemClock.elapsedRealtime()
     }
     while(neuralFailure==null && running.get() && generation.get()==session){
      // Bound microphone ownership even when the environment remains silent.
@@ -92,9 +93,6 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
       // An interrupted or failed AudioRecord read must not spin indefinitely.
       break
      }
-     var energy=0.0
-     for(i in 0 until count){val v=samples[i].toDouble()/32768.0;energy+=v*v}
-     val rms=sqrt(energy/count)
      val activity=if(neural!=null){
       // Do not silently reinterpret a failed neural inference as speech.
       // A model failure ends this capture; the next session can use energy VAD.
@@ -103,7 +101,11 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
        main.post{if(generation.get()==session)onError("Silero VAD: "+(e.message?:"inferență eșuată"))}
        break
       }
-     }else decision.accept(rms)
+     }else {
+      var energy=0.0
+      for(i in 0 until count){val v=samples[i].toDouble()/32768.0;energy+=v*v}
+      decision.accept(sqrt(energy/count))
+     }
      if(activity){
       detected=true
       break
