@@ -25,7 +25,7 @@ object RomanianPiperArchive {
      if(name==PREFIX.removeSuffix("/"))continue
      require(name.startsWith(PREFIX)){"Cale neașteptată: $name"}
      val relative=name.removePrefix(PREFIX)
-     require(relative in setOf("ro_RO-mihai-medium.onnx","tokens.txt","ro_RO-mihai-medium.onnx.json","README.md","LICENSE","espeak-ng-data")||relative.startsWith("espeak-ng-data/")){"Fișier nepermis"}
+     require(relative in setOf("ro_RO-mihai-medium.onnx","tokens.txt","ro_RO-mihai-medium.onnx.json","MODEL_CARD","README.md","LICENSE","espeak-ng-data")||relative.startsWith("espeak-ng-data/")){"Fișier nepermis"}
      require(relative.split("/").none{it=="."||it==".."||it.isBlank()}){"Cale nesigură"}
      val out=File(temp,relative).canonicalFile
      require(out.path.startsWith(temp.canonicalPath+File.separator)&&seen.add(out.path))

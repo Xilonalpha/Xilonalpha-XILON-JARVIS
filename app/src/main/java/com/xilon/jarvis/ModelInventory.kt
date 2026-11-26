@@ -13,6 +13,15 @@ object ModelInventory {
    in ModelCatalog.entries->{val name=context.getSharedPreferences("catalog_inventory",Context.MODE_PRIVATE).getString(entry.file,null)?:return false;if(!name.matches(Regex("model-[a-f0-9-]+\\.gguf")))return false;File(root,name)}
    in ModelCatalog.ocr->File(root,"tesseract/tessdata/"+entry.file)
    in ModelCatalog.whisper->File(root,"models/"+entry.file)
+   in ModelCatalog.streamingAsr->File(root,"models/streaming-asr/"+ModelCatalog.streamingTarget(entry))
+   in ModelCatalog.romanianModels->File(root,"models/romanian/"+entry.file.substringAfterLast('/'))
+   ModelCatalog.mihai->{
+    val dir=File(root,"models/romanian/mihai")
+    return listOf("ro_RO-mihai-medium.onnx","tokens.txt","espeak-ng-data/phondata").all {
+     val component=File(dir,it)
+     component.isFile && component.length()>0
+    }
+   }
    in ModelCatalog.wake->File(root,"models/"+if(entry.file=="hey_jarvis.onnx")"jarvis_wake_word.onnx" else entry.file)
    ModelCatalog.pose->File(root,entry.file)
    in ModelCatalog.vision->File(root,if(entry==ModelCatalog.vision[1])"face_detector.tflite" else "object_detector.tflite")

@@ -47,6 +47,8 @@ class ModelDownloads(context:Context){
     check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
    }
    val partial=part(entry)
+   val parent = checkNotNull(partial.parentFile)
+   check(parent.isDirectory || parent.mkdirs() || parent.isDirectory){"Nu pot crea directorul de descărcare"}
    // Never append bytes from a different release or changed model revision.
    val previousHash=prefs.getString(entry.file+".partial.sha",null)
    val previousBytes=prefs.getLong(entry.file+".partial.bytes",-1L)
