@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.atomic.AtomicBoolean
@@ -22,6 +24,8 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
  private val main=Handler(Looper.getMainLooper())
  @Volatile private var recorder:AudioRecord?=null
  @Volatile private var worker:Thread?=null
+ @Volatile private var echoCanceler:AcousticEchoCanceler?=null
+ @Volatile private var noiseSuppressor:NoiseSuppressor?=null
  fun start(onVoice:()->Unit,onError:(String)->Unit={}):Boolean {
   if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
   if(!running.compareAndSet(false,true))return false
@@ -38,6 +42,16 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    record.release();running.set(false);return false
   }
   recorder=record
+  // Platform DSP is optional: hardware/OS support differs across devices.
+  // It reduces playback leakage but does not guarantee full-duplex echo removal.
+  echoCanceler=runCatching {
+   if(AcousticEchoCanceler.isAvailable())AcousticEchoCanceler.create(record.audioSessionId)?.also{it.enabled=true}
+   else null
+  }.getOrNull()
+  noiseSuppressor=runCatching {
+   if(NoiseSuppressor.isAvailable())NoiseSuppressor.create(record.audioSessionId)?.also{it.enabled=true}
+   else null
+  }.getOrNull()
   worker=Thread({
    val samples=ShortArray(320)
    val decision=VoiceActivityDecision()
@@ -64,6 +78,10 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     }
    }finally {
     runCatching{record.stop()}
+    runCatching{echoCanceler?.release()}
+    runCatching{noiseSuppressor?.release()}
+    echoCanceler=null
+    noiseSuppressor=null
     record.release()
     if(recorder===record)recorder=null
     // Release ownership before allowing another session to start.
