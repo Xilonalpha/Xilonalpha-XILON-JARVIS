@@ -197,6 +197,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  for(int offset=0;offset<n;offset+=batchSize){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
   const int count=std::min(batchSize,n-offset);
+  // Publish before entering the synchronous native backend: a slow first
+  // decode otherwise leaves the UI at 0/N with no indication of the phase.
+  publishStage("GGUF: procesez lotul "+std::to_string(offset+1)+"-"+
+   std::to_string(offset+count)+"/"+std::to_string(n)+" tokenuri...");
   const auto batchStarted=std::chrono::steady_clock::now();
   const int status=decode(tokens.data()+offset,count,offset,offset+count==n);
   const auto elapsedMs=std::chrono::duration_cast<std::chrono::milliseconds>(
