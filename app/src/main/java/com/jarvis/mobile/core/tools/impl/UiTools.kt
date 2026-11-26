@@ -176,9 +176,10 @@ class ScrollTool : Tool(
     override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
         val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility service not connected.")
         val dir = T.str(args, "direction")?.lowercase()
+        // Direction names describe finger motion: swipe up advances the list.
         val forward = when (dir) {
-            "up" -> false
-            "down" -> true
+            "up" -> true
+            "down" -> false
             else -> T.bool(args, "forward") ?: true
         }
         // Horizontal directions ride a centered swipe gesture (pagers, galleries, tabs).
@@ -190,11 +191,12 @@ class ScrollTool : Tool(
             return if (ok) ToolResult.ok("Swiped $dir.", Verification.UNVERIFIED)
             else ToolResult.fail("Could not dispatch swipe gesture.")
         }
-        val before = T.freshObserve(0)?.elements?.map { it.text to it.top } ?: emptyList()
+        val before = T.freshObserve(0)
         val ok = svc.scrollCompleted(forward)
-        if (!ok) return ToolResult.fail("Could not scroll.")
-        val after = T.freshObserve(420)?.elements?.map { it.text to it.top } ?: emptyList()
-        val changed = before.isNotEmpty() && after.isNotEmpty() && before != after
+        if (!ok) return ToolResult.fail("Scroll gesture rejected, cancelled or timed out.")
+        val after = T.freshObserve(420)
+        val changed = before != null && after != null &&
+            (before.packageName != after.packageName || before.fingerprint() != after.fingerprint())
         return ToolResult(
             com.jarvis.mobile.core.tools.ToolStatus.SUCCESS,
             if (changed) "Scrolled ${if (forward) "forward" else "back"}." else "Scrolled (screen may already be at the ${if (forward) "end" else "top"}).",
