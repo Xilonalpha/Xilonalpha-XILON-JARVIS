@@ -84,14 +84,15 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     }
     if(model.isFile && model.length()>0)SileroVad16k(model) else null
    }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
-   if(neuralFailure!=null){
-    main.post{if(generation.get()==session)onError("Silero VAD: "+neuralFailure)}
-   }
    val startedAt=android.os.SystemClock.elapsedRealtime()
    var detected=false
    try {
-    record.startRecording()
-    while(running.get()){
+    if(neuralFailure!=null){
+     main.post{if(generation.get()==session)onError("Silero VAD: "+neuralFailure)}
+    }else if(running.get() && generation.get()==session){
+     record.startRecording()
+    }
+    while(neuralFailure==null && running.get() && generation.get()==session){
      // Bound microphone ownership even when the environment remains silent.
      if(android.os.SystemClock.elapsedRealtime()-startedAt>=6000L)break
      val count=record.read(samples,0,samples.size)
