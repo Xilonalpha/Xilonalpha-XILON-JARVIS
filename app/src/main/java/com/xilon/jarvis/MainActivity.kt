@@ -123,12 +123,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
   stopAirTouch()
   liveVision=LiveVisionController(this,this,{report->if(conversationForeground && liveVision!=null){visualObservation.put(report,android.os.SystemClock.elapsedRealtime());modelStatus.text=report.take(300)}},{message->append(message);stopLiveVision()}).also{it.start()}
  }
+ private val localVad by lazy { LocalVoiceActivityDetector(this) }
  private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!busy && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->
+   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))localVad.start({
+    if(continuousVoice && conversationForeground && omegaCore.speaking && !isDestroyed){
+     // VAD releases AudioRecord before the Android recognizer takes the mic.
+     listening.listen({text->
     if(conversationForeground && continuousVoice && text.isNotBlank()){
      when {
       echoGate.isStop(text)->{
@@ -149,11 +153,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }
      }
     }
-   },{_->})
+     },{_->})
+    }
+   })
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset()}
+ private fun stopVoiceLoop(){localVad.stop();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || (omegaCore.speaking && echoGate.isEcho(text)) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
