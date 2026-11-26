@@ -27,6 +27,17 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private fun phonemeData():File?=listOf(mihaiEspeak,alternateEspeak,espeak).firstOrNull{it.isDirectory && it.list()?.isNotEmpty()==true}
  private val executor=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
+ // Worker-owned cache: never release native inference while generation is active.
+ private var cachedTts:OfflineTts?=null
+ private var cachedKey:String?=null
+ private fun releaseCached(){runCatching{cachedTts?.release()};cachedTts=null;cachedKey=null}
+ private fun runtime():OfflineTts {
+  val m=model;val t=tokens;val d=checkNotNull(phonemeData()){"Lipsesc datele eSpeak"}
+  val key=listOf(m.absolutePath,m.lastModified().toString(),m.length().toString(),t.absolutePath,t.lastModified().toString(),d.absolutePath).joinToString("|")
+  if(cachedKey==key)cachedTts?.let{return it}
+  releaseCached()
+  return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(vits=OfflineTtsVitsModelConfig(model=m.absolutePath,tokens=t.absolutePath,dataDir=d.absolutePath),numThreads=2))).also{cachedTts=it;cachedKey=key}
+ }
  @Volatile private var track:AudioTrack?=null
  override fun installed()=model.isFile && model.length()>0 && (useMihai() || (config.isFile && config.length()>0)) && tokens.isFile && tokens.length()>0 && phonemeData()!=null
  override fun speak(text:String){speakTracked(text){}}
@@ -35,13 +46,10 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}
   val id=epoch.incrementAndGet()
   executor.execute{
-   var tts:OfflineTts?=null
    var error:String?=null
    try{
     if(id!=epoch.get())return@execute
-    tts=OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(
-     vits=OfflineTtsVitsModelConfig(model=model.absolutePath,tokens=tokens.absolutePath,dataDir=checkNotNull(phonemeData()){"Lipsesc datele eSpeak pentru limba română"}.absolutePath),
-     numThreads=2)))
+    val tts=runtime()
     val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback={if(id==epoch.get())1 else 0})
     if(id!=epoch.get())return@execute
     val samples=audio.samples
@@ -73,8 +81,8 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      }
     }finally{track=null;runCatching{player.stop()};player.release()}
    }catch(e:Exception){error=e.message?:"Eroare Piper"}catch(e:LinkageError){error=e.message?:"Motor Sherpa indisponibil"}
-   finally{runCatching{tts?.release()};if(id==epoch.get())done(error)}
+   finally{if(error!=null)releaseCached();if(id==epoch.get())done(error)}
   }
  }
- override fun stop(){epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()}}
+ override fun stop(){epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};val stopped=epoch.get();executor.execute{if(epoch.get()==stopped)releaseCached()}}
 }
