@@ -132,13 +132,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(conversationForeground && continuousVoice && text.isNotBlank()){
      when {
       echoGate.isStop(text)->{
+       pendingVoiceInterruption=null
        stopAllSpeech()
        if(busy)nativeModel?.stop()
        append("Răspuns vocal întrerupt.")
       }
       !echoGate.isEcho(text)->{
-       // User speech takes precedence over playback. Never dispatch
-       // a recognized echo or a second command while inference is busy.
+       // User speech takes precedence over playback. Echoes are ignored,
+       // and the new command is deferred until the active worker exits.
        stopAllSpeech()
        if(busy){
         // Interrupt inference, then dispatch only after its worker has exited.
@@ -242,7 +243,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
   corePanel.addView(activityStatus)
   listening.onLevel={level->omegaCore.level=level}
   listening.onSpeechStart={}
-  listening.onPartialText={partial->if(continuousVoice && conversationForeground && !busy){if(omegaCore.speaking){if(voiceInterrupt && echoGate.isStop(partial)){stopAllSpeech();append("Răspuns vocal întrerupt.")}}else if(!echoGate.isEcho(partial)){modelStatus.text=partial.take(200)}}}
+  listening.onPartialText={partial->
+   if(continuousVoice && conversationForeground){
+    if(omegaCore.speaking){
+     if(voiceInterrupt && echoGate.isStop(partial)){
+      // Stop immediately on partial recognition; do not wait for final ASR.
+      listening.close()
+      stopAllSpeech()
+      if(busy)nativeModel?.stop()
+      append("Răspuns vocal întrerupt.")
+     }
+    }else if(!busy && !echoGate.isEcho(partial)){
+     modelStatus.text=partial.take(200)
+    }
+   }
+  }
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
   voice.onFailure={message->append(message)}
   voice.onSpeaking={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
