@@ -244,7 +244,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(isDestroyed)return
    worker.execute{releaseVisualCaches()}
    speechWorker.execute{
-    if(!speechCapture.active && !voiceBargeIn.active){
+    if(!speechCapture.active() && !voiceBargeIn.active()){
      val speech=cachedNeural;cachedNeural=null
      runCatching{speech?.close()}
     }
