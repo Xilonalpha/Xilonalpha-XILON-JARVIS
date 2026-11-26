@@ -9,6 +9,13 @@ internal object ResourceBudget {
     manufacturer.equals("Redmi",ignoreCase=true) ||
     manufacturer.equals("POCO",ignoreCase=true))
 
+ // One policy for automatic and experimental inference selection.
+ // Explicit device exclusions override user opt-in to avoid native process aborts.
+ fun inferenceGpuLayers(manufacturer:String,device:String,experimental:Boolean,
+  availableMiB:Long,lowMemory:Boolean,thermal:Int,powerSave:Boolean):Int =
+  if(!experimental || vulkanBlocked(manufacturer,device))0
+  else gpuLayers(availableMiB,lowMemory,thermal,powerSave)
+
  fun gpuLayers(availableMiB:Long,lowMemory:Boolean,thermal:Int,powerSave:Boolean):Int = when {lowMemory || thermal>=3 || powerSave || availableMiB<1536 -> 0;availableMiB<2560 || thermal>=2 -> 4;availableMiB<4096 -> 8;else -> 16}
  fun maxConcurrentOptionalVision(availableMiB:Long,lowMemory:Boolean,thermal:Int,powerSave:Boolean):Int =
   if(lowMemory || powerSave || thermal>=3 || availableMiB<1024)0 else 1

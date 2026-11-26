@@ -12,6 +12,14 @@ class ResourceBudgetTest {
   assertFalse(ResourceBudget.vulkanBlocked("Redmi","other"))
   assertFalse(ResourceBudget.vulkanBlocked("Other","kunzite"))
  }
+ @Test fun inferencePolicyRequiresOptInAndBlocksAffectedDevices(){
+  assertEquals(0,ResourceBudget.inferenceGpuLayers("Xiaomi","kunzite",true,8192,false,0,false))
+  assertEquals(0,ResourceBudget.inferenceGpuLayers("Redmi","kunzite",true,8192,false,0,false))
+  assertEquals(0,ResourceBudget.inferenceGpuLayers("Other","safe",false,8192,false,0,false))
+  assertEquals(16,ResourceBudget.inferenceGpuLayers("Other","safe",true,8192,false,0,false))
+  assertEquals(0,ResourceBudget.inferenceGpuLayers("Other","safe",true,8192,true,0,false))
+  assertEquals(0,ResourceBudget.inferenceGpuLayers("Other","safe",true,8192,false,3,false))
+ }
  @Test fun planningBoundaries(){
   assertEquals(1024,ResourceBudget.planningContext(767,false,0))
   assertEquals(2048,ResourceBudget.planningContext(768,false,0))
