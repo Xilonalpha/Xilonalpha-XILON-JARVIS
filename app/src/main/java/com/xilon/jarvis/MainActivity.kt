@@ -760,6 +760,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val streamSpeechEnabled=(speakReplies || continuousVoice) && !englishNeuralVoice
      var firstSpeechChunk=true
      var streamingSpeechStarted=false
+     var streamingSpeechFailed=false
      fun drainSpeechChunks(){
       if(!streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return
       while(true){
@@ -767,7 +768,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
        if(chunk.isBlank())continue
        if(firstSpeechChunk){listening.close();echoGate.remember(chunk)}
        val error=voice.speakStreamChunk(chunk,first=firstSpeechChunk)
-       if(error!=null){append(error);voiceStream.interrupt();break}
+       if(error!=null){
+        append(error)
+        streamingSpeechFailed=true
+        voiceStream.interrupt()
+        stopAllSpeech()
+        break
+       }
        streamingSpeechStarted=true
        firstSpeechChunk=false
       }
@@ -794,7 +801,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && !inferenceFinished) {
       lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
       streamingBubble.text="JARVIS: "+partial
-      if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
+      if(streamSpeechEnabled && !streamingSpeechFailed && voiceStream.isCurrent(voiceStreamId)){
        if(voiceStream.offerSnapshot(voiceStreamId,partial))drainSpeechChunks()
       }
       scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
@@ -862,16 +869,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
         streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
         archiveMessage(streamingBubble.text.toString())
         if(nativeModel?.isCancelled()!=true){
-         if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
+         if(streamSpeechEnabled && streamingSpeechFailed && !streamingSpeechStarted){
+          // Streaming TTS was unavailable: try the ordinary voice path once.
+          speakReply(answer)
+         }else if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
           // Final output can differ from streaming snapshots (e.g. reflection).
           // Never voice an unverified revision after speaking an earlier draft.
           if(!streamingSpeechStarted || answer.startsWith(lastStreamSnapshot)){
            // Include final tokens not yet delivered through onProgress.
-           if(lastStreamSnapshot.isNotBlank() && answer.startsWith(lastStreamSnapshot))
+           if(answer.startsWith(lastStreamSnapshot))
             voiceStream.offerSnapshot(voiceStreamId,answer)
            voiceStream.finish(voiceStreamId)
            drainSpeechChunks()
-           if(streamingSpeechStarted)voice.finishStream()?.let{append(it)}
+           if(streamingSpeechStarted && !streamingSpeechFailed)
+           voice.finishStream()?.let{append(it)}
           }else {
            voiceStream.interrupt()
            // The final answer was revised: do not append conflicting audio.
