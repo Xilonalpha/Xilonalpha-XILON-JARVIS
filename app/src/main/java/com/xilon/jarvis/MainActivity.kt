@@ -747,7 +747,25 @@ class MainActivity : androidx.activity.ComponentActivity() {
      busy=true
      nativeModel?.resetCancellation()
      val streamingBubble=messageBubble("JARVIS: …")
-     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && busy) { streamingBubble.text="JARVIS: "+partial; scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) } } } }
+     val inferenceHandler=android.os.Handler(android.os.Looper.getMainLooper())
+     var lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
+     var inferenceFinished=false
+     val slowInferenceNotice=object:Runnable {
+      override fun run(){
+       if(inferenceFinished || isDestroyed)return
+       if(android.os.SystemClock.elapsedRealtime()-lastInferenceProgress>=30000L &&
+          streamingBubble.text.toString().startsWith("JARVIS: …")){
+        streamingBubble.text="JARVIS: Modelul local încă procesează cererea (fără tokenuri după 30 s). Poți apăsa Oprește. Verifică dimensiunea GGUF și memoria liberă."
+       }
+       inferenceHandler.postDelayed(this,15000L)
+      }
+     }
+     inferenceHandler.postDelayed(slowInferenceNotice,30000L)
+     nativeModel?.onProgress = { partial -> runOnUiThread { if(!isDestroyed && !inferenceFinished) {
+      lastInferenceProgress=android.os.SystemClock.elapsedRealtime()
+      streamingBubble.text="JARVIS: "+partial
+      scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+     } } }
      worker.execute {
       val lexicalHint=runCatching {
        if(nativeModel!=null || q.length > 160 || q.contains('?') || RegistryIntent.compound(q) || RomanianLexicon.negated(q)) null
@@ -795,7 +813,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
        sourced
       } ?: "Selectează și încarcă un model GGUF." } catch(e:Exception) { "Eroare inferență: "+e.message } catch(e:LinkageError) { "Biblioteca nativă indisponibilă: "+e.message }
       nativeModel?.onProgress=null
-      runOnUiThread { if(!isDestroyed) { busy=false; streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""; archiveMessage(streamingBubble.text.toString()); if(nativeModel?.isCancelled()!=true) speakReply(answer) } }
+      runOnUiThread {
+       inferenceFinished=true
+       inferenceHandler.removeCallbacks(slowInferenceNotice)
+       if(!isDestroyed) {
+        busy=false
+        streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
+        archiveMessage(streamingBubble.text.toString())
+        if(nativeModel?.isCancelled()!=true) speakReply(answer)
+       }
+      }
      }
     }
    }
