@@ -72,6 +72,17 @@ class ModelDownloads(context:Context){
   }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry)}
  }
  fun reference(entry:ModelCatalog.Entry):ModelMetadata.Reference{
+  if(prefs.getString(entry.file+".sha",null)==null && file(entry).isFile){
+   // Recover metadata for older completed downloads without trusting file presence.
+   val recovered=when(entry){
+    ModelCatalog.hand -> ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned-hand")
+    ModelCatalog.silero -> ModelMetadata.Reference("1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",2327524L,"pinned-silero")
+    ModelCatalog.kokoro -> ModelMetadata.kokoro()
+    else -> ModelMetadata.fetch(entry)
+   }
+   ModelIntegrity.verify(file(entry).inputStream(),recovered.sha256,recovered.bytes,recovered.algorithm)
+   check(prefs.edit().putString(entry.file+".sha",recovered.sha256).putLong(entry.file+".bytes",recovered.bytes).putString(entry.file+".revision",recovered.revision).putString(entry.file+".algorithm",recovered.algorithm).commit()){"Nu pot salva metadatele recuperate"}
+  }
   val hash=prefs.getString(entry.file+".sha",null)?:error("Lipsesc metadatele; descarcă din nou")
   val revision=prefs.getString(entry.file+".revision",null)?:error("Lipsește revizia")
   val bytes=prefs.getLong(entry.file+".bytes",-1)
