@@ -71,6 +71,36 @@ class LocalScreen:AccessibilityService(){
   * Wait for Android's gesture completion callback. Dispatch acceptance alone
   * does not mean the gesture actually finished.
   */
+ /**
+  * Completion-aware tap, double-tap and long-press for agent UI actions.
+  * An Android callback confirms gesture completion, NOT the intended UI effect.
+  */
+ internal suspend fun elementGestureCompleted(x:Int,y:Int,mode:String,pkg:String?,fingerprint:String):Boolean {
+  val obs=structuredScreen()?:return false
+  if(pkg==null||obs.packageName!=pkg||obs.fingerprint()!=fingerprint)return false
+  val m=resources.displayMetrics
+  if(x !in 0 until m.widthPixels||y !in 0 until m.heightPixels)return false
+  if(mode !in setOf("tap","double","long"))return false
+  val path=android.graphics.Path().apply{moveTo(x.toFloat(),y.toFloat())}
+  val builder=android.accessibilityservice.GestureDescription.Builder()
+  builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,if(mode=="long")650L else 60L))
+  if(mode=="double")builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,120,60))
+  val gesture=builder.build()
+  return kotlinx.coroutines.withTimeoutOrNull(2500L) {
+   kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { continuation ->
+    val callback=object:AccessibilityService.GestureResultCallback(){
+     override fun onCompleted(gestureDescription:android.accessibilityservice.GestureDescription?){
+      if(continuation.isActive)continuation.resume(true){}
+     }
+     override fun onCancelled(gestureDescription:android.accessibilityservice.GestureDescription?){
+      if(continuation.isActive)continuation.resume(false){}
+     }
+    }
+    val accepted=runCatching{dispatchGesture(gesture,callback,null)}.getOrDefault(false)
+    if(!accepted&&continuation.isActive)continuation.resume(false){}
+   }
+  } ?: false
+ }
  internal suspend fun swipeCompleted(x1:Int,y1:Int,x2:Int,y2:Int):Boolean {
   val m=resources.displayMetrics
   if(listOf(x1,x2).any{it !in 0 until m.widthPixels}||listOf(y1,y2).any{it !in 0 until m.heightPixels})return false
