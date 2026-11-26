@@ -38,6 +38,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
     @Volatile
     private var closed = false
 
+    @Volatile
+    private var captureCancelled = false
+
     /** Actually constructs the native recognizer; file presence alone is not readiness. */
     fun validateModelLoad(): Boolean {
         check(!closed) { "Speech engine closed" }
@@ -54,15 +57,18 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     PackageManager.PERMISSION_GRANTED,
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
+            captureCancelled = false
             val activeRecognizer = ensureRecognizer()
+            if (captureCancelled || closed) return@withContext ""
             val recording = captureUtterance()
-            if (recording.isEmpty()) return@withContext ""
+            if (captureCancelled || closed || recording.isEmpty()) return@withContext ""
 
             val stream = activeRecognizer.createStream()
             try {
                 stream.acceptWaveform(recording, SAMPLE_RATE)
+                if (captureCancelled || closed) return@withContext ""
                 activeRecognizer.decode(stream)
-                activeRecognizer.getResult(stream).text.trim()
+                if (captureCancelled || closed) "" else activeRecognizer.getResult(stream).text.trim()
             } finally {
                 stream.release()
             }
@@ -71,6 +77,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
     /** Stops any active microphone read and releases Sherpa's native recognizer. */
     fun stopCapture() {
+        captureCancelled = true
         runCatching { activeRecorder?.stop() }
     }
 
@@ -164,16 +171,17 @@ class SpeechToTextEngine(context: Context) : Closeable {
             runCatching { aec?.setEnabled(true) }
             runCatching { ns?.setEnabled(true) }
             recorder.startRecording()
-            while (!closed && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
+            while (!closed && !captureCancelled && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val count = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {
+                    if (captureCancelled || closed) break
                     if (count == AudioRecord.ERROR_DEAD_OBJECT) error("The microphone was disconnected.")
                     error("Android microphone capture failed ($count).")
                 }
                 if (count == 0) {
                     // Some Android audio drivers repeatedly return zero after interruption.
                     // Do not spin forever or monopolize the voice worker.
-                    if (closed || ++emptyReads >= 30) break
+                    if (closed || captureCancelled || ++emptyReads >= 30) break
                     Thread.sleep(10)
                     continue
                 }
@@ -212,7 +220,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
 
         // Reject transient clicks and playback leakage shorter than 180 ms.
-        if (!started || voicedSamples < MIN_VOICED_SAMPLES || captured.isEmpty()) return FloatArray(0)
+        if (closed || captureCancelled || !started || voicedSamples < MIN_VOICED_SAMPLES || captured.isEmpty()) return FloatArray(0)
         return captured.toFloatArray()
     }
 
