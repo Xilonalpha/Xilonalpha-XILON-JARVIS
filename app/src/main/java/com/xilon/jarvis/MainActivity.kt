@@ -976,6 +976,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
    }}
   }})
+  settings.addView(Button(this).apply { text="Verifică încărcarea Kokoro";setOnClickListener{
+   if(!busy){busy=true;worker.execute{
+    val result=runCatching{
+     val type=Class.forName("com.xilon.jarvis.KokoroVoice")
+     val engine=type.getConstructor(android.content.Context::class.java).newInstance(this@MainActivity)
+     check(type.getMethod("validateModelLoad").invoke(engine)==true){"Motor TTS indisponibil"}
+     "Kokoro: motorul nativ a încărcat modelul. Redarea audio rămâne de testat."
+    }.getOrElse{"Kokoro: încărcare eșuată: "+(it.cause?.message?:it.message)}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+   }}
+  }})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
