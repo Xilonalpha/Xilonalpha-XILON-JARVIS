@@ -163,12 +163,15 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
         activeRecorder = recorder
 
-        val captured = ArrayList<Float>(SAMPLE_RATE * MAX_RECORDING_SECONDS)
+        // Allocate only for speech actually captured; 20 seconds of boxed Floats
+        // otherwise creates substantial GC pressure during voice turns.
+        val captured = ArrayList<Float>(SAMPLE_RATE * 3)
         val preRoll = ArrayDeque<FloatArray>()
         val pcm = ShortArray(FRAME_SAMPLES)
         var started = false
         var silentSamples = 0
         var voicedSamples = 0
+        var peakSpeechRms = 0f
         var totalSamples = 0
         var zeroReads = 0
         var emptyReads = 0
@@ -202,6 +205,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 for (sample in chunk) power += sample * sample
                 val rms = sqrt(power / count).toFloat()
                 val threshold = SPEECH_RMS_THRESHOLD
+                if (rms > peakSpeechRms) peakSpeechRms = rms
                 if (!started) {
                     preRoll.addLast(chunk)
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
@@ -215,7 +219,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 } else {
                     captured.addAll(chunk.asIterable())
                     if (rms >= threshold) { silentSamples = 0; voicedSamples += count } else silentSamples += count
-                    if (silentSamples >= SILENCE_SAMPLES) break
+                    // A long utterance can contain brief natural pauses. Avoid
+                    // ending on a weak trailing frame until speech has been heard.
+                    if (silentSamples >= SILENCE_SAMPLES && voicedSamples >= MIN_VOICED_SAMPLES) break
                 }
             }
         } finally {
@@ -227,7 +233,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
 
         // Reject transient clicks and playback leakage shorter than 180 ms.
-        if (closed || captureCancelled || !started || voicedSamples < MIN_VOICED_SAMPLES || captured.isEmpty()) return FloatArray(0)
+        if (closed || captureCancelled || !started || voicedSamples < MIN_VOICED_SAMPLES || peakSpeechRms < SPEECH_RMS_THRESHOLD || captured.isEmpty()) return FloatArray(0)
         return captured.toFloatArray()
     }
 
