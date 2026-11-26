@@ -137,6 +137,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     result.fold({recognized->
      if(recognized.isBlank()){
       voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
+      wakeCommandPending=false
       modelStatus.text="Nicio comandă detectată."
      }else{voiceRetry.reset();acceptVoice(recognized)}
     },{error->
@@ -146,7 +147,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      if(!speechClosing)speechWorker.execute{runCatching{failedEngine?.close()}}
      voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
      modelStatus.text="Eroare Sherpa: "+error.message
-     if(fallback)startAndroidMicrophone()
+     if(fallback)startAndroidMicrophone() else wakeCommandPending=false
     })
    }
   }
@@ -156,13 +157,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val wakeHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val wakeRearm=object:Runnable{override fun run(){
   if(!wakeEnabled || !conversationForeground || isDestroyed)return
-  if(wake==null && !busy && !continuousVoice && !wakeCommandPending && !wakeReplyPending && !speechCapture.active() && !voiceBargeIn.active() && ::omegaCore.isInitialized && !omegaCore.speaking && !omegaCore.listening)startWake()
+  if(wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime()) && !busy && !continuousVoice && !wakeCommandPending && !wakeReplyPending && !speechCapture.active() && !voiceBargeIn.active() && ::omegaCore.isInitialized && !omegaCore.speaking && !omegaCore.listening)startWake()
   wakeHandler.postDelayed(this,1500L)
  }}
  private var wake:WakeController?=null
  private var wakeCommandPending=false
  private var wakeReplyPending=false
- private fun stopWake(){wake?.stop();wake=null;wakeCommandPending=false}
+ private fun stopWake(){wake?.stop();wake=null;wakeCommandPending=false;wakeReplyPending=false}
  private fun startWake(){
   if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
@@ -435,7 +436,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
-  if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
+  if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime())){wakeCommandPending=false;return}
   partialVoiceGate.reset()
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
   val fromWake=wakeCommandPending
@@ -2024,7 +2025,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   stopAllSpeech()
-  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română")||error.startsWith("Recunoașterea offline nu este disponibilă"))stopVoiceLoop()} })
+  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){wakeCommandPending=false;voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română")||error.startsWith("Recunoașterea offline nu este disponibilă"))stopVoiceLoop()} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
@@ -2032,7 +2033,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==59){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED){window.decorView.post{if(!isDestroyed && conversationForeground)startLiveVision() else if(!isDestroyed)pendingLiveVisionStart=true}} else append("Permisiunea camerei a fost refuzată.")}
   if(requestCode==44){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startAirTouch() else append("Permisiunea camerei a fost refuzată.")}
-  if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone() else append("Permisiunea microfonului a fost refuzată.")}
+  if(requestCode==42){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startMicrophone(fromWake=wakeCommandPending) else {wakeCommandPending=false;append("Permisiunea microfonului a fost refuzată.")}}
  }
  private fun refreshOmegaStatus(){
   if(!::activityStatus.isInitialized || !::omegaCore.isInitialized)return
