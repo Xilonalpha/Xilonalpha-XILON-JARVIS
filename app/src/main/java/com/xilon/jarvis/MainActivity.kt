@@ -2883,7 +2883,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerQueue.clear()
   super.onPause()
  }
- override fun onStop(){stopAllSpeech();stopNeural();stopWake();stopAirTouch();super.onStop()}
+ override fun onStop(){
+  stopAllSpeech();stopNeural();stopWake();stopAirTouch()
+  val info=android.app.ActivityManager.MemoryInfo()
+  getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+  if(info.lowMemory || info.availMem<1024L*1024*1024){
+   worker.execute{
+    releaseVisualCaches()
+    runCatching{nativeModel?.releaseContext()}
+   }
+  }
+  super.onStop()
+ }
  override fun onDestroy() {
   wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm)
   whisperInstallHandler.removeCallbacks(whisperInstallPoll)
