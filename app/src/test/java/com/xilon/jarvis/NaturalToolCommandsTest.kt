@@ -42,6 +42,13 @@ class NaturalToolCommandsTest {
   assertEquals("maps_navigate",NaturalToolCommands.parse("Du-mă spre Brașov")?.tool)
   assertNull(NaturalToolCommands.parse("Nu da drumul la lanternă"))
  }
+ @Test fun conjunctionInArgumentsDoesNotBecomeMultipleActions(){
+  assertEquals(1,RomanianLexicon.split("Caută pe YouTube jazz și blues").size)
+  assertEquals(1,RomanianLexicon.split("Deschide aplicația Tom și Jerry").size)
+  assertEquals(2,RomanianLexicon.split("Aprinde lanterna și deschide WhatsApp").size)
+  assertEquals(2,RomanianLexicon.split("Aprinde lanterna; deschide WhatsApp").size)
+  assertEquals("youtube_search",NaturalToolCommands.parse("Caută pe YouTube jazz și blues")?.tool)
+ }
  @Test fun unknown(){assertNull(NaturalToolCommands.parse("Ce este inteligența artificială?"))}
  @Test fun upstreamNavigation(){
   assertEquals("press_back",NaturalToolCommands.parse("go back")!!.tool)

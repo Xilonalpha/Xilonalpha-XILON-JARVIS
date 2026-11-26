@@ -566,7 +566,16 @@ object RomanianLexicon {
   return reverseGlossary[key] ?: romanianDefinitionMatches(text).takeIf { it.isNotEmpty() }?.joinToString(" / ")?.let { "Potriviri lexicale RO: " + it }
  }
  // Preserve quoted arguments and split only outside quotation marks.
- private val separators = Regex("\\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\\s+|;\\s*", RegexOption.IGNORE_CASE)
+ // Split only when the next clause starts with a recognized action verb.
+ // Ordinary object conjunctions ("jazz și blues", "Andrei și Maria") are
+ // arguments, not separate commands. Keep semicolons as explicit separators.
+ private val separators get() = Regex(
+  "(?:\\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\\s+|;\\s*)(?=(?:(?:te rog|jarvis)[,\\s]+)*(?:"
+   + (verbs + listOf("aprinde","stinge","sună","suna","pune","redă","reda","trimite","du-mă","du-ma","mergi","dă","da"))
+    .map { Regex.escape(normalize(it)) }.distinct().joinToString("|")
+   + ")\\b)",
+  RegexOption.IGNORE_CASE
+ )
  fun split(text: String): List<String> {
   val source = clean(text)
   val parts = ArrayList<String>()
