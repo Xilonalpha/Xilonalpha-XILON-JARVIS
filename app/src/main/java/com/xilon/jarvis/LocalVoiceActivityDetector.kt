@@ -74,7 +74,10 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      val stream=runCatching{context.assets.open("models/silero_vad.onnx")}.getOrNull()
      stream?.use{source->OfflineVadModelInstaller.install(source,model)}
     }
-    if(model.isFile && model.length()>0)SileroVad16k(model) else null
+    if(model.isFile){
+     require(model.length() in 1..OfflineVadModelInstaller.MAX_BYTES){"Invalid Silero model size"}
+     SileroVad16k(model)
+    }else null
    }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
    var startedAt=0L
    var detected=false
