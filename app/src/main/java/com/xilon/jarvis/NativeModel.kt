@@ -36,5 +36,7 @@ class NativeModel(private val gpuLayers:Int=0) : AutoCloseable {
  private external fun probeVision(handle:Long,path:String):Boolean
  private external fun openModel(path:String,gpuLayers:Int):Long
  private external fun infer(handle:Long,roles:Array<String>,messages:Array<ByteArray>,threads:Int,context:Int,maxTokens:Int,grammar:String):String
+ @Synchronized fun releaseContext(){if(handle!=0L)trimContext(handle)}
+ private external fun trimContext(handle:Long)
  private external fun freeModel(handle:Long)
 }

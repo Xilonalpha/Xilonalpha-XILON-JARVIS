@@ -58,6 +58,12 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
  return reinterpret_cast<jlong>(new ModelState{m});
 }
 extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_freeModel(JNIEnv*,jobject,jlong h){delete reinterpret_cast<ModelState*>(h);}
+extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_trimContext(JNIEnv*,jobject,jlong h){
+ auto* state=reinterpret_cast<ModelState*>(h);
+ if(!state)return;
+ if(state->context){llama_synchronize(state->context);llama_free(state->context);state->context=nullptr;}
+ state->cachedTokens.clear();state->size=0;state->requestedSize=0;
+}
 extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
  auto* state=reinterpret_cast<ModelState*>(h); auto* m=state->model; auto* v=llama_model_get_vocab(m);
  // Report native phases before the first generated token. Otherwise Android

@@ -242,7 +242,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   super.onTrimMemory(level)
   if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN || (android.os.Build.VERSION.SDK_INT<34 && level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)){
    if(isDestroyed)return
-   worker.execute{releaseVisualCaches()}
+   val trimModel=level>=android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND || (android.os.Build.VERSION.SDK_INT<34 && level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && level<android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
+   worker.execute{
+    releaseVisualCaches()
+    if(trimModel)runCatching{nativeModel?.releaseContext()}
+   }
    speechWorker.execute{
     if(!speechCapture.active() && !voiceBargeIn.active()){
      val speech=cachedNeural;cachedNeural=null
