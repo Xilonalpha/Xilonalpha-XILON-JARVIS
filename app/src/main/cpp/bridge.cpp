@@ -133,8 +133,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   publishStage("Inițializez contextul GGUF...");
   for(int attempt=requested;;attempt=std::max(required,attempt/2)){
    auto cp=llama_context_default_params();
-   cp.n_ctx=attempt;cp.n_batch=std::min<int>(attempt,512);
-   cp.n_ubatch=std::min<int>(attempt,128);
+   cp.n_ctx=attempt;cp.n_batch=std::min<int>(attempt,64);
+   cp.n_ubatch=std::min<int>(attempt,32);
    cp.n_threads=threads;cp.n_threads_batch=threads;
    state->context=llama_init_from_model(m,cp);
    if(state->context){state->size=attempt;state->requestedSize=requested;state->threads=threads;batchSize=cp.n_batch;break;}
@@ -144,7 +144,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  auto* ctx=state->context;
  if(!ctx){fail(e,"Context allocation failed even at minimum prompt budget; reduce history or use a smaller GGUF");return nullptr;}
  if(state->threads!=threads){llama_set_n_threads(ctx,threads,threads);state->threads=threads;}
- batchSize=std::min<int>(state->size,512);
+ batchSize=std::min<int>(state->size,64);
  llama_memory_clear(llama_get_memory(ctx), true);
  auto* sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler){fail(e,"Sampler allocation failed");return nullptr;}
@@ -197,7 +197,20 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  for(int offset=0;offset<n;offset+=batchSize){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck()){ready=false;break;}
   const int count=std::min(batchSize,n-offset);
-  if(decode(tokens.data()+offset,count,offset,offset+count==n)!=0){ok=e->CallBooleanMethod(self,cancel);ready=false;break;}
+  const auto batchStarted=std::chrono::steady_clock::now();
+  const int status=decode(tokens.data()+offset,count,offset,offset+count==n);
+  const auto elapsedMs=std::chrono::duration_cast<std::chrono::milliseconds>(
+   std::chrono::steady_clock::now()-batchStarted).count();
+  if(status!=0){
+   ok=e->CallBooleanMethod(self,cancel);
+   if(!ok)publishStage("Eroare evaluare GGUF la tokenul "+std::to_string(offset)+
+    " (cod "+std::to_string(status)+")");
+   ready=false;break;
+  }
+  if(elapsedMs>2000){
+   publishStage("Evaluare GGUF lentă: "+std::to_string(offset+count)+"/"+
+    std::to_string(n)+" tokenuri, ultimul lot "+std::to_string(elapsedMs)+" ms");
+  }
   if((offset/batchSize)%2==0 || offset+count==n){
    publishStage("Evaluez promptul: "+std::to_string(offset+count)+"/"+std::to_string(n)+" tokenuri");
   }
