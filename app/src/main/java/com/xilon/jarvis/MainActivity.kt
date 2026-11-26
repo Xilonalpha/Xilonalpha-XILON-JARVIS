@@ -21,9 +21,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   Thread(task,"xilon-speech-io").apply { isDaemon=true }
  }
  private val speechGeneration=java.util.concurrent.atomic.AtomicLong(0L)
+ private val partialVoiceGate=VoicePartialGate()
  private fun stopNeural(){
   neuralCancelled=true
   speechGeneration.incrementAndGet()
+  partialVoiceGate.reset()
   neural?.stop()
   if(::omegaCore.isInitialized && omegaCore.listening){
    omegaCore.listening=false
@@ -35,6 +37,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(busy || wake!=null || !conversationForeground)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
   val turn=speechGeneration.incrementAndGet()
+  partialVoiceGate.reset()
   listening.close();stopAllSpeech();busy=true;neuralCancelled=false
   omegaCore.listening=true;refreshOmegaStatus()
   speechWorker.execute {
@@ -47,7 +50,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     else {
      neural=engine
      Result.success(kotlinx.coroutines.runBlocking{engine!!.listen { partial ->
-      if(partial.isNotBlank() && turn==speechGeneration.get() && !neuralCancelled){
+      if(partialVoiceGate.shouldPublish(partial,android.os.SystemClock.elapsedRealtime()) && turn==speechGeneration.get() && !neuralCancelled){
        runOnUiThread { if(!isDestroyed && conversationForeground && turn==speechGeneration.get() && omegaCore.listening) modelStatus.text="Ascult: "+partial.take(160) }
       }
      }})
@@ -214,6 +217,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || (omegaCore.speaking && echoGate.isEcho(text)) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
+  partialVoiceGate.reset()
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
   if((autoVoiceSend||continuousVoice)&&::sendControl.isInitialized&&!busy)sendControl.performClick()
  }

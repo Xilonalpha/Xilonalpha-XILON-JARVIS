@@ -167,6 +167,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         activeRecorder = recorder
         val stream = online.createStream()
         val pcm = ShortArray(FRAME_SAMPLES)
+        val normalizedFrame = FloatArray(FRAME_SAMPLES)
         var lastPartial = ""
         var totalSamples = 0
         var zeroReads = 0
@@ -198,8 +199,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 }
                 zeroReads = 0
                 totalSamples += n
-                val samples = FloatArray(n) { pcm[it] / 32768.0f }
-                stream.acceptWaveform(samples, SAMPLE_RATE)
+                for (i in 0 until n) normalizedFrame[i] = pcm[i] / 32768.0f
+                // Normal 100-ms reads reuse the same array rather than allocating every frame.
+                stream.acceptWaveform(if (n == normalizedFrame.size) normalizedFrame else normalizedFrame.copyOf(n), SAMPLE_RATE)
                 while (!captureCancelled && !closed && online.isReady(stream)) {
                     online.decode(stream)
                 }
@@ -214,7 +216,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
             }
             if (captureCancelled || closed || epoch != cancellationEpoch.get()) return ""
             stream.inputFinished()
-            while (online.isReady(stream)) online.decode(stream)
+            while (!captureCancelled && !closed && epoch == cancellationEpoch.get() && online.isReady(stream)) online.decode(stream)
+            if (captureCancelled || closed || epoch != cancellationEpoch.get()) return ""
             return online.getResult(stream).text.trim().ifBlank { lastPartial }
         } finally {
             runCatching { recorder.stop() }
