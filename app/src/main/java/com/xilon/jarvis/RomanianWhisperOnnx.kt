@@ -42,7 +42,10 @@ internal class RomanianWhisperOnnx(root: File, threads: Int) : AutoCloseable {
         }
     }
 
-    fun transcribe(samples: FloatArray, cancelled: () -> Boolean): String {
+    private var closed = false
+
+    @Synchronized fun transcribe(samples: FloatArray, cancelled: () -> Boolean): String {
+        check(!closed) { "Whisper decoder closed" }
         if (samples.isEmpty() || cancelled()) return ""
         val values = features.extract(samples)
         OnnxTensor.createTensor(env, FloatBuffer.wrap(values), longArrayOf(1,80,3000)).use { input ->
@@ -80,13 +83,15 @@ internal class RomanianWhisperOnnx(root: File, threads: Int) : AutoCloseable {
                     previous = result
                     val logits = result.get("logits").get() as OnnxTensor
                     val scores = logits.floatBuffer
-                    val offset = scores.limit() - logits.info.shape.last().toInt()
+                    val width = logits.info.shape.last().toInt()
+                    check(width > eos && scores.limit() >= width) { "Invalid Whisper logits shape" }
+                    val offset = scores.limit() - width
                     var best = -1
                     var score = Float.NEGATIVE_INFINITY
                     for (token in 0..eos) {
                         if (token in blocked || (step == 0 && token in initialBlocked)) continue
                         val value = scores[offset + token]
-                        if (value > score) { best = token; score = value }
+                        if (value.isFinite() && value > score) { best = token; score = value }
                     }
                     check(best >= 0) { "Whisper a returnat scoruri invalide" }
                     if (best == eos) return if (cancelled()) "" else bytes.toString("UTF-8").trim()
@@ -101,5 +106,9 @@ internal class RomanianWhisperOnnx(root: File, threads: Int) : AutoCloseable {
         }
     }
 
-    override fun close() { try { decoder.close() } finally { encoder.close() } }
+    @Synchronized override fun close() {
+        if (closed) return
+        closed = true
+        try { decoder.close() } finally { encoder.close() }
+    }
 }
