@@ -94,7 +94,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
             senseVoice != null && whisper == null -> OfflineModelConfig(
                 senseVoice = OfflineSenseVoiceModelConfig(
                     model = senseVoice.first.absolutePath,
-                    language = "en",
+                    // SenseVoice supports automatic language detection; do not force English
+                    // for Romanian utterances when this model is the installed recognizer.
+                    language = "auto",
                     useInverseTextNormalization = true,
                 ),
                 tokens = senseVoice.second.absolutePath,
@@ -154,6 +156,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var silentSamples = 0
         var totalSamples = 0
         var zeroReads = 0
+        var emptyReads = 0
         val aec=runCatching { if(android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId) else null }.getOrNull()
         val ns=runCatching { if(android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId) else null }.getOrNull()
         try {
@@ -166,7 +169,14 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     if (count == AudioRecord.ERROR_DEAD_OBJECT) error("The microphone was disconnected.")
                     error("Android microphone capture failed ($count).")
                 }
-                if (count == 0) continue
+                if (count == 0) {
+                    // Some Android audio drivers repeatedly return zero after interruption.
+                    // Do not spin forever or monopolize the voice worker.
+                    if (closed || ++emptyReads >= 30) break
+                    Thread.sleep(10)
+                    continue
+                }
+                emptyReads = 0
                 // Digital silence detection adapted from judejulius/jarvis VoiceInput.kt.
                 if (isDigitalSilence(pcm, count)) { if (++zeroReads >= 30) error("Microfon blocat sau dezactivat de Android.") } else zeroReads = 0
                 totalSamples += count
