@@ -7,6 +7,8 @@ class ResourceBudgetTest {
  @Test fun confirmedVulkanCrashDeviceIsBlocked(){
   assertTrue(ResourceBudget.vulkanBlocked("Redmi","kunzite"))
   assertTrue(ResourceBudget.vulkanBlocked("redmi","KUNZITE"))
+  assertTrue(ResourceBudget.vulkanBlocked("Xiaomi","kunzite"))
+  assertTrue(ResourceBudget.vulkanBlocked("POCO","kunzite"))
   assertFalse(ResourceBudget.vulkanBlocked("Redmi","other"))
   assertFalse(ResourceBudget.vulkanBlocked("Other","kunzite"))
  }
