@@ -13,6 +13,18 @@ class NaturalToolCommandsTest {
  }
  @Test fun app(){assertEquals(JsonPrimitive("WhatsApp"),NaturalToolCommands.parse("Deschide WhatsApp")!!.args["app"])}
  @Test fun alarm(){assertNull(NaturalToolCommands.parse("Setează alarma la 25:00"));assertEquals(JsonPrimitive(30),NaturalToolCommands.parse("Setează alarma la 07:30")!!.args["minute"])}
+ @Test fun naturalRomanianAlarmsBypassLlmPlanner(){
+  val morning=NaturalToolCommands.parse("Setează alarma la ora 8 dimineață")
+  assertEquals("set_alarm",morning?.tool)
+  assertEquals(JsonPrimitive(8),morning?.args?.get("hour"))
+  assertEquals(JsonPrimitive(0),morning?.args?.get("minute"))
+  val evening=NaturalToolCommands.parse("Pune alarma la 9 seara")
+  assertEquals("set_alarm",evening?.tool)
+  assertEquals(JsonPrimitive(21),evening?.args?.get("hour"))
+  assertEquals(JsonPrimitive(30),NaturalToolCommands.parse("Programează alarma la 7:30")?.args?.get("minute"))
+  assertNull(NaturalToolCommands.parse("Setează alarma la ora 25 dimineața"))
+  assertNull(NaturalToolCommands.parse("Nu seta alarma la ora 8 dimineața"))
+ }
  @Test fun timer(){assertEquals(JsonPrimitive(300),NaturalToolCommands.parse("Pornește un temporizator de 5 minute")!!.args["seconds"])}
  @Test fun youtubeMusicRoutesWithoutLlmPlanning(){
   val jazz=NaturalToolCommands.parse("Deschide YouTube și pune muzica jazz")
