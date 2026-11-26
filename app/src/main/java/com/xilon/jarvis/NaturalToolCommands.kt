@@ -3,9 +3,18 @@ import kotlinx.serialization.json.*
 import com.jarvis.mobile.core.tools.PlannedAction
 object NaturalToolCommands {
  fun parse(input:String):PlannedAction? {
+  // The dedicated single-intent YouTube rule must run before the generic
+  // lexicon (which can mistake "deschide YouTube și..." for open_app).
+  // Do not bypass the negation and compound-action safety guards.
+  if(RomanianLexicon.negated(input))return null
+  val yt=input.trim().trimEnd('!','?','.').replace(Regex("\\s+")," ")
+  val ytPrefix=Regex("^(?:deschide|pornește|porneste|lansează|lanseaza) (?:aplicația |aplicatia )?youtube (?:și|si) (?:pune|redă|reda|pornește|porneste|caută|cauta) (?:muzică |muzica |melodia |piesa |un cântec |un cantec |niște muzică |niste muzica )?(.+)$",RegexOption.IGNORE_CASE)
+  val ytSuffix=Regex("^(?:pune|redă|reda|pornește|porneste) (?:muzică |muzica |melodia |piesa )?(.+) (?:pe|în|in) youtube$",RegexOption.IGNORE_CASE)
+  val ytQuery=(ytPrefix.matchEntire(yt) ?: ytSuffix.matchEntire(yt))?.groupValues?.get(1)?.trim()
+  if(!ytQuery.isNullOrBlank() && !Regex("\\b(?:și|si|apoi)\\s+(?:deschide|trimite|apelează|apeleaza|șterge|sterge|cumpără|cumpara)\\b",RegexOption.IGNORE_CASE).containsMatchIn(ytQuery))
+   return PlannedAction("youtube_search",JsonObject(mapOf("query" to JsonPrimitive(ytQuery))))
   RomanianLexicon.parse(input)?.let { return it }
   if(RegistryIntent.compound(input))return null
-  if(RomanianLexicon.negated(input))return null
   val q=RomanianLexicon.canonicalCommand(input).trim().trimEnd('!','?')
   fun call(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
   fun match(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(q)
