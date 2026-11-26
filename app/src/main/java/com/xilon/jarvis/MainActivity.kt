@@ -128,10 +128,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!busy && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->
+   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->
     if(conversationForeground && continuousVoice && text.isNotBlank()){
      when {
-      echoGate.isStop(text)->{stopAllSpeech();append("Răspuns vocal întrerupt.")}
+      echoGate.isStop(text)->{
+       stopAllSpeech()
+       if(busy)nativeModel?.stop()
+       append("Răspuns vocal întrerupt.")
+      }
       !echoGate.isEcho(text)->{
        // User speech takes precedence over playback. Never dispatch
        // a recognized echo or a second command while inference is busy.
@@ -889,7 +893,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         val lastStreamSnapshot=streamingBubble.text.toString().removePrefix("JARVIS: ")
         streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
         archiveMessage(streamingBubble.text.toString())
-        if(nativeModel?.isCancelled()!=true){
+        if(nativeModel?.isCancelled()!=true && interruptedByUser==null){
          if(streamSpeechEnabled && streamingSpeechFailed && !streamingSpeechStarted){
           // Streaming TTS was unavailable: try the ordinary voice path once.
           speakReply(answer)
@@ -913,6 +917,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
          }else if(!streamingSpeechStarted)speakReply(answer)
         }else voiceStream.interrupt()
         if(interruptedByUser!=null && continuousVoice && conversationForeground){
+         voiceStream.interrupt()
          stopAllSpeech()
          acceptVoice(interruptedByUser)
         }
