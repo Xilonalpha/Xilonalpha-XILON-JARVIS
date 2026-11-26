@@ -28,8 +28,10 @@ internal object OfflineVadModelInstaller {
      output.write(buffer,0,read)
     }
     output.flush()
+    output.fd.sync()
    }
    if(copied==0L)throw IOException("Empty ONNX model")
+   if(destination.exists())throw IOException("Model installed concurrently")
    if(!temporary.renameTo(destination))throw IOException("Cannot finalize ONNX model")
    return copied
   }finally{temporary.delete()}

@@ -30,6 +30,29 @@ class OfflineVadModelInstallerTest {
    assertFalse(File(dir,"silero_vad.onnx.part").exists())
   }finally{dir.deleteRecursively()}
  }
+ @Test fun rejectsOversizedModelWithoutPublishing() {
+  val dir=Files.createTempDirectory("xilon-vad").toFile()
+  try {
+   val target=File(dir,"silero_vad.onnx")
+   val oversized=object:java.io.InputStream(){
+    var remaining=OfflineVadModelInstaller.MAX_BYTES+1
+    override fun read():Int=if(remaining-->0)1 else -1
+    override fun read(b:ByteArray,off:Int,len:Int):Int {
+     if(remaining<=0)return -1
+     val n=minOf(len.toLong(),remaining).toInt()
+     java.util.Arrays.fill(b,off,off+n,1.toByte())
+     remaining-=n
+     return n
+    }
+   }
+   try {
+    OfflineVadModelInstaller.install(oversized,target)
+    fail("Expected oversized model rejection")
+   }catch(_:IOException){}
+   assertFalse(target.exists())
+   assertFalse(File(dir,"silero_vad.onnx.part").exists())
+  }finally{dir.deleteRecursively()}
+ }
  @Test fun doesNotOverwriteExistingModel() {
   val dir=Files.createTempDirectory("xilon-vad").toFile()
   try {
