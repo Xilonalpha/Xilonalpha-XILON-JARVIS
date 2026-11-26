@@ -124,7 +124,7 @@ class WaitForChangeTool : Tool(
             while(after == null) {
                 kotlinx.coroutines.delay(150)
                 val next = T.freshObserve(0)
-                if(next != null && next.fingerprint() != before.fingerprint()) after = next
+                if(next != null && (next.packageName != before.packageName || next.fingerprint() != before.fingerprint())) after = next
             }
             after
         }
