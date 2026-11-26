@@ -60,7 +60,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     /** Records until silence is detected, then runs local Sherpa-ONNX decoding. */
-    suspend fun listenForCommand(): String {
+    suspend fun listenForCommand(onPartial: (String) -> Unit = {}): String {
         val requestEpoch = cancellationEpoch.get()
         return operationMutex.withLock {
         withContext(Dispatchers.IO) {
@@ -73,7 +73,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
             captureCancelled = false
             val online = ensureOnlineRecognizer()
-            if (online != null) return@withContext captureStreaming(online, requestEpoch)
+            if (online != null) return@withContext captureStreaming(online, requestEpoch, onPartial)
             val activeRecognizer = ensureRecognizer()
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
             val recording = captureUtterance()
@@ -150,7 +150,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     /** True incremental decoding; no 20-second PCM accumulation or offline decode. */
-    private fun captureStreaming(online: OnlineRecognizer, epoch: Long): String {
+    private fun captureStreaming(online: OnlineRecognizer, epoch: Long, onPartial: (String) -> Unit): String {
         val minimum = AudioRecord.getMinBufferSize(
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
         )
@@ -205,7 +205,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 }
                 if (captureCancelled || closed || epoch != cancellationEpoch.get()) break
                 val partial = online.getResult(stream).text.trim()
-                if (partial.isNotBlank()) lastPartial = partial
+                if (partial.isNotBlank() && partial != lastPartial) {
+                    lastPartial = partial
+                    // A UI callback must not break the native capture loop.
+                    runCatching { onPartial(partial) }
+                }
                 if (online.isEndpoint(stream) && lastPartial.isNotBlank()) break
             }
             if (captureCancelled || closed || epoch != cancellationEpoch.get()) return ""

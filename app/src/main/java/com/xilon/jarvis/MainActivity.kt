@@ -38,6 +38,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   listening.close();stopAllSpeech();busy=true;neuralCancelled=false
   omegaCore.listening=true;refreshOmegaStatus()
   speechWorker.execute {
+   if(turn!=speechGeneration.get() || neuralCancelled)return@execute
    var engine:NeuralSpeech?=null
    val result:Result<String> = try {
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
@@ -45,7 +46,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
     else if(turn!=speechGeneration.get() || neuralCancelled) Result.success("")
     else {
      neural=engine
-     Result.success(kotlinx.coroutines.runBlocking{engine!!.listen()})
+     Result.success(kotlinx.coroutines.runBlocking{engine!!.listen { partial ->
+      if(partial.isNotBlank() && turn==speechGeneration.get() && !neuralCancelled){
+       runOnUiThread { if(!isDestroyed && conversationForeground && turn==speechGeneration.get() && omegaCore.listening) modelStatus.text="Ascult: "+partial.take(160) }
+      }
+     }})
     }
    }catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}
    finally{neural=null}

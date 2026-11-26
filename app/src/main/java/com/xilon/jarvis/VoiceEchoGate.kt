@@ -4,6 +4,7 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
  private data class Spoken(val value:String,val at:Long)
  private val recentChunks=ArrayDeque<Spoken>()
  private val maxChunks=12
+ private val stopCommands=setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde")
  private fun normalize(s:String)=java.text.Normalizer.normalize(s.lowercase(java.util.Locale.ROOT),java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"),"").replace(Regex("[^a-z0-9 ]")," ").replace(Regex("\\s+")," ").trim()
  @Synchronized fun remember(text:String){
   val normalized=normalize(text)
@@ -33,6 +34,6 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
  fun isStop(text:String):Boolean {
   val command=normalize(text)
   val recent=recent()
-  return command in setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde") && recent.none{it.contains(command)} && !recent.joinToString(" ").contains(command)
+  return command in stopCommands && recent.none{it.contains(command)} && !recent.joinToString(" ").contains(command)
  }
 }
