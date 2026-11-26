@@ -239,6 +239,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var autoVoiceSend=false
  private var continuousVoice=false
  private var continuousVoiceButton:Button?=null
+ private var initiativeButton:Button?=null
+ private fun initiativeEnabled()=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("initiative",false)
+ private fun updateInitiativeButton(){initiativeButton?.apply{
+  val enabled=initiativeEnabled()
+  text=if(enabled)"AI ON" else "AI OFF"
+  contentDescription=if(enabled)"Dezactivează inițiativa vocală JARVIS" else "Activează inițiativa vocală JARVIS"
+  isSelected=enabled
+  alpha=if(enabled)1f else 0.7f
+ }}
+ private fun toggleInitiative(){
+  val enabled=!initiativeEnabled()
+  getSharedPreferences("conversation",MODE_PRIVATE).edit().putBoolean("initiative",enabled).apply()
+  lastConversationActivity=android.os.SystemClock.elapsedRealtime()
+  updateInitiativeButton()
+  append(if(enabled)"Inițiativă vocală activată: după 10 minute fără activitate, JARVIS poate începe o conversație în prim-plan, dacă modelul local este încărcat." else "Inițiativă vocală dezactivată.")
+ }
  private fun updateContinuousVoiceButton(){
   continuousVoiceButton?.apply{
    text=if(continuousVoice)"∞ ON" else "∞ OFF"
@@ -497,6 +513,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   actions.addView(continuousVoiceButton,LinearLayout.LayoutParams(dp(56),dp(48)))
   updateContinuousVoiceButton()
+  initiativeButton=Button(this).apply{
+   textSize=11f;isAllCaps=false;minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
+   setPadding(dp(2),0,dp(2),0)
+   setOnClickListener{toggleInitiative()}
+  }
+  actions.addView(initiativeButton,LinearLayout.LayoutParams(dp(56),dp(48)))
+  updateInitiativeButton()
   settings.addView(Button(this).apply { text="Instrucțiuni pentru aplicații";setOnClickListener{
    if(busy)return@setOnClickListener
    val prefs=getSharedPreferences("app_tips",MODE_PRIVATE)
@@ -843,6 +866,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(normalizedRomanian in listOf("activeaza initiativa conversationala","dezactiveaza initiativa conversationala")){
      val enabled=normalizedRomanian.startsWith("activeaza")
      getSharedPreferences("conversation",MODE_PRIVATE).edit().putBoolean("initiative",enabled).apply()
+     lastConversationActivity=android.os.SystemClock.elapsedRealtime()
+     updateInitiativeButton()
      append(if(enabled)"Inițiativă activată: pot propune un subiect după 10 minute de inactivitate, numai cu aplicația deschisă." else "Inițiativă dezactivată.")
      return@setOnClickListener
     }
@@ -2214,7 +2239,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
       lastInitiative=result
       lastConversationActivity=android.os.SystemClock.elapsedRealtime()
       append("JARVIS: "+result)
-      speakReply(result)
+      // Initiative is an explicit opt-in: speak even when ordinary voice replies are disabled.
+      if(initiativeEnabled())speakReply(result,manual=true)
      }
     }
    }
