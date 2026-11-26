@@ -78,6 +78,10 @@ object NaturalToolCommands {
    return direct("control_volume","direction" to JsonPrimitive(when(v){"opreste"->"mute";"scade","redu","micsoreaza"->"down";else->"up"}))
   }
   when(RomanianLexicon.normalize(raw).trimEnd('?')){
+   "schimba melodia","urmatoarea melodie","urmatoarea piesa","treci la urmatoarea melodie" -> return direct("media_play_pause","action" to JsonPrimitive("next"))
+   "melodia anterioara","piesa anterioara" -> return direct("media_play_pause","action" to JsonPrimitive("previous"))
+   "opreste muzica","pune muzica pe pauza","pauza muzica","opreste redarea" -> return direct("media_play_pause","action" to JsonPrimitive("pause"))
+   "continua muzica","reia muzica","reia redarea","continua redarea" -> return direct("media_play_pause","action" to JsonPrimitive("play"))
    "unde sunt","arata locatia mea","locatia mea" -> return direct("get_location")
    "ce am in calendar","arata calendarul","citeste calendarul","ce am de facut azi" -> return direct("read_calendar","days" to JsonPrimitive(1))
    "citeste notificarile","ce notificari am" -> return direct("read_notifications")

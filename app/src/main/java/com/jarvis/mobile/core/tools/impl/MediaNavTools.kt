@@ -124,7 +124,7 @@ class SetTimerTool : Tool(
         if (s <= 0 || s > 86_400) return ToolResult.fail("seconds must be 1-86400.")
         val i = Intent(AlarmClock.ACTION_SET_TIMER).apply {
             putExtra(AlarmClock.EXTRA_LENGTH, s)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
             T.str(args, "label")?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
         }
         return CommStart.start(i).let { if(it.status == com.jarvis.mobile.core.tools.ToolStatus.SUCCESS) it.copy(message = "Am solicitat pornirea directă a temporizatorului.", detail = "timer=${s}s") else it }
@@ -132,14 +132,23 @@ class SetTimerTool : Tool(
 }
 
 class MediaPlayPauseTool : Tool(
-    ToolSpec("media_play_pause", "Toggle play/pause on the current media session.", emptyList(), com.jarvis.mobile.core.tools.Risk.LOW),
+    ToolSpec("media_play_pause", "Control current media: toggle, play, pause, next, previous.", listOf(com.jarvis.mobile.core.tools.ParamSpec("action", "string", false, "toggle|play|pause|next|previous")), com.jarvis.mobile.core.tools.Risk.LOW),
 ) {
     override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
         val am = ToolEnvironment.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val action = T.str(args, "action") ?: "toggle"
+        val key = when(action) {
+            "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
+            "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
+            "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
+            "previous" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+            else -> return ToolResult.fail("Comandă media necunoscută.")
+        }
         return runCatching {
-            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-            ToolResult.ok("Play/pause sent to the active media session.", Verification.UNVERIFIED)
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
+            ToolResult.ok("Comanda media a fost transmisă; redarea nu este verificată.", Verification.UNVERIFIED)
         }.getOrElse { ToolResult.fail("Media key failed: ${it.message?.take(60)}") }
     }
 }
