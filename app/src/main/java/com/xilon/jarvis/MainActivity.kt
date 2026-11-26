@@ -696,18 +696,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
      append("Comandă cu negație: nu execut acțiuni.")
      return@setOnClickListener
     }
-    val lexicalCompound=RomanianLexicon.split(q).size>1
-    val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(q) else null
+    // A greeting before an imperative must not send a phone command to chat inference.
+    // Keep the original utterance for display and all unrelated conversation branches.
+    val commandQ=CommandGreeting.stripBeforeCommand(q)
+    val lexicalCompound=RomanianLexicon.split(commandQ).size>1
+    val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
-    val lexicalTool=if(lexicalCompound) null else RomanianLexicon.parse(q)
+    val lexicalTool=if(lexicalCompound) null else RomanianLexicon.parse(commandQ)
     if(lexicalTool!=null){executeRequestedTool(lexicalTool.tool,lexicalTool.args);return@setOnClickListener}
-    val naturalTool=NaturalToolCommands.parse(q)
-    if(naturalTool!=null && !lexicalCompound && !RegistryIntent.compound(q)){
+    val naturalTool=NaturalToolCommands.parse(commandQ)
+    if(naturalTool!=null && !lexicalCompound && !RegistryIntent.compound(commandQ)){
      executeRequestedTool(naturalTool.tool,naturalTool.args)
      return@setOnClickListener
     }
-    if(RegistryIntent.matches(q)){
-     startRegistryPlan(q)
+    if(RegistryIntent.matches(commandQ)){
+     startRegistryPlan(commandQ)
      return@setOnClickListener
     }
     if(q.equals("instrumente",true)){
