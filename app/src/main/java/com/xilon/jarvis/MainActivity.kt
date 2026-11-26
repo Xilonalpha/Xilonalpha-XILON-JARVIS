@@ -1300,7 +1300,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply{text="Catalog Vision";setOnClickListener{
    if(busy)return@setOnClickListener
    val downloads=ModelDownloads(this@MainActivity)
-   val entries=ModelCatalog.vision
+   val entries=ModelCatalog.visionModels
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Vision • modele locale").setItems(entries.map{it.name+" • "+ModelInventory.display(ModelInventory.installed(this@MainActivity,it),downloads.transfer(it))}.toTypedArray()){_,index->
     val entry=entries[index];val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(ModelInventory.display(ModelInventory.installed(this@MainActivity,entry),downloads.transfer(entry)))
@@ -1308,7 +1308,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val result=runCatching{
       val ref=downloads.reference(entry)
       contentResolver.openInputStream(uri)?.let{ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)}?:error("Fișier inaccesibil")
-      if(entry==ModelCatalog.pose)LocalPose.install(this@MainActivity,uri) else LocalVision.install(this@MainActivity,uri,index==1)
+      when(entry){
+       ModelCatalog.hand -> {
+        val target=java.io.File(filesDir,entry.file)
+        val temp=java.io.File.createTempFile("hand-", ".part",filesDir)
+        try {
+         contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->src.copyTo(dst)}} ?: error("Fișier inaccesibil")
+         ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+         check(temp.renameTo(target)){"Salvarea modelului MediaPipe a eșuat"}
+        } finally {temp.delete()}
+       }
+       ModelCatalog.pose -> LocalPose.install(this@MainActivity,uri)
+       else -> LocalVision.install(this@MainActivity,uri,entry==ModelCatalog.vision[1])
+      }
       "Model Vision instalat și validat."
      }.getOrElse{"Instalare eșuată: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=result}}
@@ -1403,7 +1415,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
    center.addView(resources)
    val manager=ModelDownloads(this@MainActivity)
-   val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Vision" to ModelCatalog.visionModels,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
    val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
