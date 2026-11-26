@@ -27,13 +27,18 @@ internal class WhisperLogMel {
         }
     }
 
-    fun extract(samples: FloatArray): FloatArray {
+    fun extract(samples: FloatArray): FloatArray = checkNotNull(extractCancellable(samples) { false })
+
+    fun extractCancellable(samples: FloatArray, cancelled: () -> Boolean): FloatArray? {
         require(samples.size in 1..480000)
+        if (cancelled()) return null
+        require(samples.all { it.isFinite() }) { "Invalid audio samples" }
         val mel = FloatArray(80 * 3000) { -10f }
         val frame = FloatArray(400)
         val power = FloatArray(201)
         var peak = -10f
         for (time in 0 until minOf(3000, (samples.size + 359) / 160)) {
+            if (cancelled()) return null
             for (i in frame.indices) {
                 val pos = abs(time * 160 + i - 200)
                 val index = if (pos >= 480000) 959998 - pos else pos
@@ -51,6 +56,7 @@ internal class WhisperLogMel {
                 peak = maxOf(peak, energy)
             }
         }
+        if (cancelled()) return null
         for (i in mel.indices) mel[i] = (maxOf(mel[i], peak - 8f) + 4f) / 4f
         return mel
     }

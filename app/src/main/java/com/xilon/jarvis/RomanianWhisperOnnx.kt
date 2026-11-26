@@ -47,7 +47,7 @@ internal class RomanianWhisperOnnx(root: File, threads: Int) : AutoCloseable {
     @Synchronized fun transcribe(samples: FloatArray, cancelled: () -> Boolean): String {
         check(!closed) { "Whisper decoder closed" }
         if (samples.isEmpty() || cancelled()) return ""
-        val values = features.extract(samples)
+        val values = features.extractCancellable(samples, cancelled) ?: return ""
         OnnxTensor.createTensor(env, FloatBuffer.wrap(values), longArrayOf(1,80,3000)).use { input ->
             if (cancelled()) return ""
             encoder.run(mapOf("input_features" to input)).use { encoded ->
