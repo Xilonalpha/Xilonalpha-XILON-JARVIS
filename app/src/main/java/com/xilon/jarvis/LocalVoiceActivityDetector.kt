@@ -45,7 +45,13 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   if(record.state!=AudioRecord.STATE_INITIALIZED){
    record.release();running.set(false);return false
   }
-  recorder=record
+  // Stop may have arrived while AudioRecord was being constructed.
+  // Never start an obsolete session or publish its recorder to a new turn.
+  val accepted=synchronized(lifecycleLock){
+   if(generation.get()!=session || !running.get())false
+   else {recorder=record;true}
+  }
+  if(!accepted){record.release();return false}
   // Platform DSP is optional: hardware/OS support differs across devices.
   // It reduces playback leakage but does not guarantee full-duplex echo removal.
   echoCanceler=runCatching {
