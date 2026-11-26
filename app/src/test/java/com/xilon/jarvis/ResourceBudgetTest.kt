@@ -1,7 +1,15 @@
 package com.xilon.jarvis
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 class ResourceBudgetTest {
+ @Test fun confirmedVulkanCrashDeviceIsBlocked(){
+  assertTrue(ResourceBudget.vulkanBlocked("Redmi","kunzite"))
+  assertTrue(ResourceBudget.vulkanBlocked("redmi","KUNZITE"))
+  assertFalse(ResourceBudget.vulkanBlocked("Redmi","other"))
+  assertFalse(ResourceBudget.vulkanBlocked("Other","kunzite"))
+ }
  @Test fun planningBoundaries(){
   assertEquals(1024,ResourceBudget.planningContext(767,false,0))
   assertEquals(2048,ResourceBudget.planningContext(768,false,0))

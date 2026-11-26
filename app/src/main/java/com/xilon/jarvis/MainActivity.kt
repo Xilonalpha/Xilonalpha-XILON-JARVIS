@@ -87,7 +87,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   // GPU is explicitly experimental until device-specific stability is verified.
   val experimentalGpu=getSharedPreferences("jarvis_model",MODE_PRIVATE)
    .getBoolean("enable_experimental_gpu",false)
-  val layers=if(experimentalGpu) ResourceBudget.gpuLayers(
+  val layers=if(experimentalGpu && !ResourceBudget.vulkanBlocked(android.os.Build.MANUFACTURER,android.os.Build.DEVICE)) ResourceBudget.gpuLayers(
    info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode
   ) else 0
   return NativeModel(layers)

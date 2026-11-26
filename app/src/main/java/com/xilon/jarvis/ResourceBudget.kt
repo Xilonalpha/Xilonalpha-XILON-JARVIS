@@ -1,6 +1,12 @@
 package com.xilon.jarvis
 
 internal object ResourceBudget {
+ // Confirmed native Vulkan device-lost crash during llama_decode on this Redmi family.
+ // Keep the GPU backend in the APK, but never auto-enable it on affected devices.
+ fun vulkanBlocked(manufacturer:String,device:String):Boolean =
+  manufacturer.equals("Redmi",ignoreCase=true) &&
+   device.equals("kunzite",ignoreCase=true)
+
  fun gpuLayers(availableMiB:Long,lowMemory:Boolean,thermal:Int,powerSave:Boolean):Int = when {lowMemory || thermal>=3 || powerSave || availableMiB<1536 -> 0;availableMiB<2560 || thermal>=2 -> 4;availableMiB<4096 -> 8;else -> 16}
  fun maxConcurrentOptionalVision(availableMiB:Long,lowMemory:Boolean,thermal:Int,powerSave:Boolean):Int =
   if(lowMemory || powerSave || thermal>=3 || availableMiB<1024)0 else 1
