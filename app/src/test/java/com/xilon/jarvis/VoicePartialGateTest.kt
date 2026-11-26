@@ -18,6 +18,12 @@ class VoicePartialGateTest {
   assertTrue(gate.shouldPublish("primul",5000))
   assertTrue(gate.shouldPublish("al doilea",100))
  }
+ @Test fun partialsAreNeverCommands(){
+  val gate=VoicePartialGate()
+  assertTrue(gate.shouldPublish("deschide",100))
+  assertFalse(gate.shouldPublish("deschide",500))
+  assertTrue(gate.shouldPublish("deschide camera",510))
+ }
  @Test fun resetAllowsNewSession(){
   val gate=VoicePartialGate()
   assertFalse(gate.shouldPublish(" ",0))

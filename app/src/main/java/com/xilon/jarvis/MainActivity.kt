@@ -214,10 +214,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){localVad.stop();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset()}
+ private fun stopVoiceLoop(){localVad.stop();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
-  if(text.isBlank() || (omegaCore.speaking && echoGate.isEcho(text)) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
+  if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
   partialVoiceGate.reset()
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
   if((autoVoiceSend||continuousVoice)&&::sendControl.isInitialized&&!busy)sendControl.performClick()

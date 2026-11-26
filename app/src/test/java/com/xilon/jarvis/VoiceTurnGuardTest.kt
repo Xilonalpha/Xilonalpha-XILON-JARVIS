@@ -9,6 +9,11 @@ class VoiceTurnGuardTest {
   assertTrue(guard.accept("deschide camera",3000))
   assertTrue(guard.accept("închide camera",3100))
  }
+ @Test fun clockRollbackAcceptsNextTurn(){
+  val guard=VoiceTurnGuard()
+  assertTrue(guard.accept("Deschide camera",5000))
+  assertTrue(guard.accept("Deschide camera",100))
+ }
  @Test fun emptyAndReset(){
   val guard=VoiceTurnGuard()
   assertFalse(guard.accept("  ",10))

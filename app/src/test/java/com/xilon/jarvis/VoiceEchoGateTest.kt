@@ -27,5 +27,19 @@ class VoiceEchoGateTest {
   g.remember("Poți ieși la plimbare")
   assertTrue(g.isStop("Jarvis oprește"))
  }
+ @Test fun shortGenericWordsAreNotClassifiedAsEcho(){
+  val g=VoiceEchoGate()
+  g.remember("Am deschis camera si poti continua.")
+  assertFalse(g.isEcho("camera"))
+  assertFalse(g.isEcho("continua"))
+ }
+ @Test fun staleSpeechIsNotEchoAfterClockRollback(){
+  var now=1000L
+  val g=VoiceEchoGate(echoWindowMs=1000L,clock={now})
+  g.remember("Jarvis opreste")
+  now=10L
+  assertFalse(g.isEcho("Jarvis opreste"))
+  assertTrue(g.isStop("Jarvis opreste"))
+ }
  @Test fun expandedStopCommands(){val g=VoiceEchoGate();assertTrue(g.isStop("Jarvis, liniște!"));assertTrue(g.isStop("Jarvis, întrerupe"));assertFalse(g.isStop("Jarvis nu opri"));g.remember("Jarvis pauză");assertFalse(g.isStop("Jarvis pauză"))}
 }

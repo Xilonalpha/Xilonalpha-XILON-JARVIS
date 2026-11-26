@@ -28,12 +28,14 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
   if(command.isBlank())return false
   val chunks=recent()
   val combined=chunks.joinToString(" ")
+  // A long ASR fragment may span TTS chunks; short generic words are not echoes.
   return chunks.any{it==command || (command.length>=16 && it.contains(command))} ||
    (command.length>=16 && combined.contains(command))
  }
  fun isStop(text:String):Boolean {
   val command=normalize(text)
   val recent=recent()
+  // Stop requests are accepted only if they are not part of our own recent TTS.
   return command in stopCommands && recent.none{it.contains(command)} && !recent.joinToString(" ").contains(command)
  }
 }
