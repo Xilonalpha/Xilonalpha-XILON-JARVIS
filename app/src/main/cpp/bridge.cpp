@@ -239,7 +239,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  bool generationCancelled=false;
  for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck()){generationCancelled=true;break;}
-  auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
+  const auto t=llama_sampler_sample(sampler,ctx,-1);
+  // Advance grammar and repetition-penalty state for every sampled token.
+  // Without accept(), each step samples against stale sampler history.
+  llama_sampler_accept(sampler,t);
+  if(llama_vocab_is_eog(v,t))break;
   std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
   if(len<0){ok=false;break;}out.append(piece.data(),len);
@@ -261,6 +265,9 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
     break;
    }}
  }
+ // Stop may arrive during the final decode or just after the last token.
+ // Never publish a successful final answer when cancellation was requested.
+ if(!generationCancelled && !e->ExceptionCheck() && e->CallBooleanMethod(self,cancel))generationCancelled=true;
  if(ok && !generationCancelled && !e->ExceptionCheck() && publishedBytes!=out.size()){
   auto partial=e->NewByteArray(out.size());
   if(partial){e->SetByteArrayRegion(partial,0,out.size(),reinterpret_cast<const jbyte*>(out.data()));if(!e->ExceptionCheck())e->CallVoidMethod(self,progress,partial);e->DeleteLocalRef(partial);}
