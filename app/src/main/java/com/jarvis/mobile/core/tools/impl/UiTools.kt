@@ -188,8 +188,8 @@ class ScrollTool : Tool(
             val cy = m.heightPixels / 2
             val ok = if (dir == "left") svc.swipeCompleted((m.widthPixels * 0.78).toInt(), cy, (m.widthPixels * 0.22).toInt(), cy)
             else svc.swipeCompleted((m.widthPixels * 0.22).toInt(), cy, (m.widthPixels * 0.78).toInt(), cy)
-            return if (ok) ToolResult.ok("Swiped $dir.", Verification.UNVERIFIED)
-            else ToolResult.fail("Could not dispatch swipe gesture.")
+            return if (ok) ToolResult.ok("Horizontal gesture completed; target effect not verified.", Verification.UNVERIFIED)
+            else ToolResult.fail("Horizontal gesture rejected, cancelled or timed out.")
         }
         val before = T.freshObserve(0)
         val ok = svc.scrollCompleted(forward)
@@ -201,7 +201,7 @@ class ScrollTool : Tool(
             com.jarvis.mobile.core.tools.ToolStatus.SUCCESS,
             if (changed) "Scrolled ${if (forward) "forward" else "back"}." else "Scrolled (screen may already be at the ${if (forward) "end" else "top"}).",
             if (changed) Verification.VERIFIED else Verification.UNVERIFIED,
-            recoveryHint = if (!changed && forward) "list-end" else null,
+            recoveryHint = if (!changed) "reobserve-or-try-opposite-direction" else null,
         )
     }
 }
