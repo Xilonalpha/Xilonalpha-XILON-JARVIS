@@ -34,14 +34,14 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   }
   val sampleRate=16000
   val min=AudioRecord.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
-  if(min<=0){running.set(false);return false}
+  if(min<=0){synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false}
   val bufferSize=maxOf(min,3200)
   val record=try {
    AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,sampleRate,
     AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,bufferSize)
-  }catch(_:Exception){running.set(false);return false}
+  }catch(_:Exception){synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false}
   if(record.state!=AudioRecord.STATE_INITIALIZED){
-   record.release();running.set(false);return false
+   record.release();synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false
   }
   // Stop may have arrived while AudioRecord was being constructed.
   // Never start an obsolete session or publish its recorder to a new turn.
@@ -130,7 +130,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      // Do not mark the recorder free until AudioRecord.release() completed.
      if(generation.get()==session)running.set(false)
     }
-    if(detected)main.post{if(generation.get()==session)onVoice()}
+    if(detected)main.post{if(generation.get()==session && !running.get() && recorder==null)onVoice()}
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}
   return true

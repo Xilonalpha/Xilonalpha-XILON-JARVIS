@@ -64,7 +64,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}
    finally{neural=null;speechCapture.finish(turn)}
    runOnUiThread {
-    if(isDestroyed || speechClosing || !speechSessions.isCurrent(turn))return@runOnUiThread
+    if(isDestroyed || speechClosing)return@runOnUiThread
+    if(!speechSessions.isCurrent(turn)){
+     if(!speechCapture.active()){busy=false;omegaCore.listening=false;refreshOmegaStatus()}
+     return@runOnUiThread
+    }
     busy=false;omegaCore.listening=false;refreshOmegaStatus()
     if(neuralCancelled || !conversationForeground)return@runOnUiThread
     result.fold({recognized->
@@ -185,7 +189,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
-   if(!busy && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
+   if(!busy && !speechCapture.active() && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
    else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))localVad.start({
     if(continuousVoice && conversationForeground && omegaCore.speaking && !isDestroyed){
      // Stop playback as soon as VAD detects the user's speech, before ASR.

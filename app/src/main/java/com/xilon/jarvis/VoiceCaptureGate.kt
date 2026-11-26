@@ -17,6 +17,6 @@ internal class VoiceCaptureGate {
   ticket=null
   return true
  }
- @Synchronized fun cancel(){ticket=null}
- @Synchronized fun close(){closed=true;ticket=null}
+ @Synchronized fun cancel(){/* Keep microphone leased until the capture worker finishes. */}
+ @Synchronized fun close(){closed=true;/* Worker still owns any active capture. */}
 }

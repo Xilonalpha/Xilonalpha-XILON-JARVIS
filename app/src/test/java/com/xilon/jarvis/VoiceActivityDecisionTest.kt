@@ -1,23 +1,24 @@
 package com.xilon.jarvis
-
 import org.junit.Assert.*
 import org.junit.Test
-
 class VoiceActivityDecisionTest {
- @Test fun requiresFourConsecutiveLoudFrames(){
-  val detector=VoiceActivityDecision()
-  repeat(3){assertFalse(detector.accept(0.10))}
-  assertTrue(detector.accept(0.10))
+ @Test fun rejectsSilenceAndInvalidSamples(){
+  val gate=VoiceActivityDecision()
+  repeat(100){assertFalse(gate.accept(0.0))}
+  assertFalse(gate.accept(Double.NaN))
+  assertFalse(gate.accept(Double.POSITIVE_INFINITY))
+  assertFalse(gate.accept(-1.0))
  }
- @Test fun resetsAfterQuietFrame(){
-  val detector=VoiceActivityDecision()
-  repeat(3){assertFalse(detector.accept(0.10))}
-  assertFalse(detector.accept(0.0))
-  repeat(3){assertFalse(detector.accept(0.10))}
-  assertTrue(detector.accept(0.10))
+ @Test fun requiresConsecutiveVoiceFrames(){
+  val gate=VoiceActivityDecision()
+  repeat(3){assertFalse(gate.accept(0.2))}
+  assertTrue(gate.accept(0.2))
  }
- @Test fun ignoresNoiseBelowAbsoluteFloor(){
-  val detector=VoiceActivityDecision()
-  repeat(50){assertFalse(detector.accept(0.01))}
+ @Test fun silenceResetsSpeechWindow(){
+  val gate=VoiceActivityDecision()
+  repeat(3){assertFalse(gate.accept(0.2))}
+  assertFalse(gate.accept(0.0))
+  repeat(3){assertFalse(gate.accept(0.2))}
+  assertTrue(gate.accept(0.2))
  }
 }
