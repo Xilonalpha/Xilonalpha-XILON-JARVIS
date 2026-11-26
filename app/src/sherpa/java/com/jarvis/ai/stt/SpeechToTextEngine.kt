@@ -28,6 +28,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private val modelDirectory = ModelStore.modelDirectory(appContext)
     private val operationMutex = Mutex()
+    // A stop must invalidate requests already waiting for the recognizer mutex.
+    private val cancellationEpoch = java.util.concurrent.atomic.AtomicLong(0L)
 
     @Volatile
     private var recognizer: OfflineRecognizer? = null
@@ -49,8 +51,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     /** Records until silence is detected, then runs local Sherpa-ONNX decoding. */
-    suspend fun listenForCommand(): String = operationMutex.withLock {
+    suspend fun listenForCommand(): String {
+        val requestEpoch = cancellationEpoch.get()
+        return operationMutex.withLock {
         withContext(Dispatchers.IO) {
+            if (requestEpoch != cancellationEpoch.get() || closed) return@withContext ""
             check(!closed) { "Speech recognition has stopped." }
             check(
                 ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
@@ -59,24 +64,26 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
             captureCancelled = false
             val activeRecognizer = ensureRecognizer()
-            if (captureCancelled || closed) return@withContext ""
+            if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
             val recording = captureUtterance()
-            if (captureCancelled || closed || recording.isEmpty()) return@withContext ""
+            if (captureCancelled || closed || requestEpoch != cancellationEpoch.get() || recording.isEmpty()) return@withContext ""
 
             val stream = activeRecognizer.createStream()
             try {
                 stream.acceptWaveform(recording, SAMPLE_RATE)
-                if (captureCancelled || closed) return@withContext ""
+                if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
                 activeRecognizer.decode(stream)
-                if (captureCancelled || closed) "" else activeRecognizer.getResult(stream).text.trim()
+                if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) "" else activeRecognizer.getResult(stream).text.trim()
             } finally {
                 stream.release()
             }
+        }
         }
     }
 
     /** Stops any active microphone read and releases Sherpa's native recognizer. */
     fun stopCapture() {
+        cancellationEpoch.incrementAndGet()
         captureCancelled = true
         runCatching { activeRecorder?.stop() }
     }
