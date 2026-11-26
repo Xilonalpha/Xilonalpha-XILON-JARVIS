@@ -35,6 +35,21 @@ class SpeechToTextEngine(context: Context) : Closeable {
     private val modelDirectory = ModelStore.modelDirectory(appContext)
     private val operationMutex = Mutex()
     // A stop must invalidate requests already waiting for the recognizer mutex.
+    private var cachedVad: com.xilon.jarvis.SileroVad16k? = null
+    private var vadRevision: Pair<Long, Long>? = null
+    private fun releaseVad() {
+        runCatching { cachedVad?.close() }
+        cachedVad = null
+        vadRevision = null
+    }
+    private fun acquireVad(file: File): com.xilon.jarvis.SileroVad16k? {
+        if (!file.isFile || file.length() !in 1..com.xilon.jarvis.OfflineVadModelInstaller.MAX_BYTES) { releaseVad(); return null }
+        val revision = file.lastModified() to file.length()
+        if (revision != vadRevision) releaseVad()
+        return runCatching {
+            (cachedVad ?: com.xilon.jarvis.SileroVad16k(file).also { cachedVad = it; vadRevision = revision }).also { it.reset() }
+        }.onFailure { releaseVad(); android.util.Log.w("XilonASR", "Silero unavailable; using energy VAD", it) }.getOrNull()
+    }
     private val cancellationEpoch = java.util.concurrent.atomic.AtomicLong(0L)
 
     @Volatile
@@ -125,6 +140,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         kotlinx.coroutines.runBlocking {
             operationMutex.withLock {
                 activeRecorder = null
+                releaseVad()
                 runCatching { recognizer?.release() }
                 recognizer = null
                 runCatching { onlineRecognizer?.release() }
@@ -345,9 +361,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var zeroReads = 0
         var emptyReads = 0
         val vadFile = File(modelDirectory, "silero_vad.onnx")
-        var neuralVad = if (vadFile.isFile) runCatching {
-            com.xilon.jarvis.SileroVad16k(vadFile)
-        }.onFailure { android.util.Log.w("XilonASR", "Silero unavailable; using energy VAD", it) }.getOrNull() else null
+        var neuralVad = acquireVad(vadFile)
         val aec=runCatching { if(android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId) else null }.getOrNull()
         val ns=runCatching { if(android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId) else null }.getOrNull()
         try {
@@ -381,7 +395,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 val voiced = neuralVad?.let { vad ->
                     try { vad.accept(pcm, count) } catch (e: Exception) {
                         android.util.Log.w("XilonASR", "Silero inference failed; using energy VAD", e)
-                        runCatching { vad.close() }; neuralVad = null; rms >= threshold
+                        releaseVad(); neuralVad = null; rms >= threshold
                     }
                 } ?: (rms >= threshold)
                 if (rms > peakSpeechRms) peakSpeechRms = rms
@@ -404,7 +418,6 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 }
             }
         } finally {
-            runCatching { neuralVad?.close() }
             runCatching { recorder.stop() }
             runCatching { aec?.release() }
             runCatching { ns?.release() }
