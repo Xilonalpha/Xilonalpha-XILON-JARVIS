@@ -201,7 +201,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         )
         check(minimum > 0) { "Microfonul nu acceptă captură la 16 kHz." }
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minimum, FRAME_SAMPLES * 4),
         )
@@ -233,12 +233,13 @@ class SpeechToTextEngine(context: Context) : Closeable {
         try {
             runCatching { aec?.enabled = true }
             runCatching { ns?.enabled = true }
+            if (closed || captureCancelled || epoch != cancellationEpoch.get()) return ""
             recorder.startRecording()
             while (!closed && !captureCancelled && epoch == cancellationEpoch.get() &&
                 totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val n = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
                 if (n < 0) {
-                    if (captureCancelled || closed) break
+                    if (captureCancelled || closed || epoch != cancellationEpoch.get()) break
                     error("Eroare de citire microfon ($n)")
                 }
                 if (n == 0) {
@@ -353,8 +354,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         // Allocate the bounded maximum once; no repeated GC during capture.
         val captured = FloatArray(SAMPLE_RATE * MAX_RECORDING_SECONDS)
         var capturedCount = 0
-        fun appendSamples(samples: FloatArray) {
-            val copyCount = minOf(samples.size, captured.size - capturedCount)
+        fun appendSamples(samples: FloatArray, count: Int = samples.size) {
+            val copyCount = minOf(count, captured.size - capturedCount)
             if (copyCount > 0) {
                 samples.copyInto(captured, capturedCount, 0, copyCount)
                 capturedCount += copyCount
@@ -362,6 +363,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
         val preRoll = ArrayDeque<FloatArray>()
         val pcm = ShortArray(FRAME_SAMPLES)
+        val normalized = FloatArray(FRAME_SAMPLES)
         var started = false
         var silentSamples = 0
         var voicedSamples = 0
@@ -375,11 +377,12 @@ class SpeechToTextEngine(context: Context) : Closeable {
         try {
             runCatching { aec?.setEnabled(true) }
             runCatching { ns?.setEnabled(true) }
+            if (closed || captureCancelled || epoch != cancellationEpoch.get()) return FloatArray(0)
             recorder.startRecording()
             while (!closed && !captureCancelled && epoch == cancellationEpoch.get() && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val count = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {
-                    if (captureCancelled || closed) break
+                    if (captureCancelled || closed || epoch != cancellationEpoch.get()) break
                     if (count == AudioRecord.ERROR_DEAD_OBJECT) error("The microphone was disconnected.")
                     error("Android microphone capture failed ($count).")
                 }
@@ -394,10 +397,10 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 // Digital silence detection adapted from judejulius/jarvis VoiceInput.kt.
                 if (isDigitalSilence(pcm, count)) { if (++zeroReads >= 30) error("Microfon blocat sau dezactivat de Android.") } else zeroReads = 0
                 totalSamples += count
-                val chunk = FloatArray(count) { index -> pcm[index] / 32768.0f }
+                for (index in 0 until count) normalized[index] = pcm[index] / 32768.0f
                 // Feed undistorted normalized PCM to Whisper.
                 var power = 0.0
-                for (sample in chunk) power += sample * sample
+                for (index in 0 until count) power += normalized[index] * normalized[index]
                 val rms = sqrt(power / count).toFloat()
                 val threshold = SPEECH_RMS_THRESHOLD
                 val voiced = neuralVad?.let { vad ->
@@ -407,7 +410,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     }
                 } ?: (rms >= threshold)
                 if (!started) {
-                    preRoll.addLast(chunk)
+                    preRoll.addLast(normalized.copyOf(count))
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
                     if (voiced) {
                         started = true
@@ -417,7 +420,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                         silentSamples = 0
                     }
                 } else {
-                    appendSamples(chunk)
+                    appendSamples(normalized, count)
                     if (voiced) { silentSamples = 0; voicedSamples += count } else silentSamples += count
                     // A long utterance can contain brief natural pauses. Avoid
                     // ending on a weak trailing frame until speech has been heard.
