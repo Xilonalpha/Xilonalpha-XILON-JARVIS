@@ -53,6 +53,33 @@ class OfflineVadModelInstallerTest {
    assertFalse(File(dir,"silero_vad.onnx.part").exists())
   }finally{dir.deleteRecursively()}
  }
+ @Test fun concurrentInstallationDoesNotCorruptPublishedModel() {
+  val dir=Files.createTempDirectory("xilon-vad-race").toFile()
+  try {
+   val target=File(dir,"models/silero_vad.onnx")
+   val ready=java.util.concurrent.CountDownLatch(2)
+   val go=java.util.concurrent.CountDownLatch(1)
+   val outcomes=java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+   val threads=(1..2).map { index ->
+    Thread {
+     ready.countDown()
+     go.await()
+     outcomes.add(runCatching {
+      OfflineVadModelInstaller.install(ByteArrayInputStream(ByteArray(4096){index.toByte()}),target)
+     }.isSuccess)
+    }.also { it.start() }
+   }
+   assertTrue(ready.await(5,java.util.concurrent.TimeUnit.SECONDS))
+   go.countDown()
+   threads.forEach { it.join(5000);assertFalse(it.isAlive) }
+   assertEquals(1,outcomes.count { it })
+   assertEquals(4096L,target.length())
+   val value=target.readBytes()[0]
+   assertTrue(value==1.toByte() || value==2.toByte())
+   assertTrue(target.readBytes().all { it==value })
+   assertTrue(target.parentFile.listFiles()?.none { it.name.endsWith(".part") }==true)
+  }finally {dir.deleteRecursively()}
+ }
  @Test fun doesNotOverwriteExistingModel() {
   val dir=Files.createTempDirectory("xilon-vad").toFile()
   try {
