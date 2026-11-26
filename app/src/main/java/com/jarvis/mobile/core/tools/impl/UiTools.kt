@@ -229,8 +229,8 @@ class TapTool : Tool(
         val id = T.str(args,"viewId")
         if(idx==null && label==null && id==null) return ToolResult.fail("Specify a visible element")
         val el = fresh.elements.filter { e -> (idx==null || e.idx==idx) && (label==null || e.text==label || e.desc==label) && (id==null || e.viewId==id) && !e.isPassword && !e.editable }.singleOrNull() ?: return ToolResult.fail("Target missing or ambiguous")
-        val ok = svc.elementGesture(el.centerX,el.centerY,"tap",fresh.packageName,fresh.fingerprint())
-        return if(ok) ToolResult.ok("Gesture dispatched.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
+        val ok = svc.elementGestureCompleted(el.centerX,el.centerY,"tap",fresh.packageName,fresh.fingerprint())
+        return if(ok) ToolResult.ok("Gesture completed; screen effect not verified.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
     }
 }
 
@@ -257,8 +257,8 @@ class DoubleTapTool : Tool(
         val id = T.str(args,"viewId")
         if(idx==null && label==null && id==null) return ToolResult.fail("Specify a visible element")
         val el = fresh.elements.filter { e -> (idx==null || e.idx==idx) && (label==null || e.text==label || e.desc==label) && (id==null || e.viewId==id) && !e.isPassword && !e.editable }.singleOrNull() ?: return ToolResult.fail("Target missing or ambiguous")
-        val ok = svc.elementGesture(el.centerX,el.centerY,"double",fresh.packageName,fresh.fingerprint())
-        return if(ok) ToolResult.ok("Gesture dispatched.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
+        val ok = svc.elementGestureCompleted(el.centerX,el.centerY,"double",fresh.packageName,fresh.fingerprint())
+        return if(ok) ToolResult.ok("Gesture completed; screen effect not verified.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
     }
 }
 
@@ -285,8 +285,8 @@ class LongPressTool : Tool(
         val id = T.str(args,"viewId")
         if(idx==null && label==null && id==null) return ToolResult.fail("Specify a visible element")
         val el = fresh.elements.filter { e -> (idx==null || e.idx==idx) && (label==null || e.text==label || e.desc==label) && (id==null || e.viewId==id) && !e.isPassword && !e.editable }.singleOrNull() ?: return ToolResult.fail("Target missing or ambiguous")
-        val ok = svc.elementGesture(el.centerX,el.centerY,"long",fresh.packageName,fresh.fingerprint())
-        return if(ok) ToolResult.ok("Gesture dispatched.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
+        val ok = svc.elementGestureCompleted(el.centerX,el.centerY,"long",fresh.packageName,fresh.fingerprint())
+        return if(ok) ToolResult.ok("Gesture completed; screen effect not verified.",Verification.UNVERIFIED) else ToolResult.fail("Gesture rejected")
     }
 }
 
