@@ -17,13 +17,19 @@ object NaturalToolCommands {
   // A lexicon rule is accepted only for a single intent. A compound request
   // needs a multi-step plan with per-action verification.
   RomanianLexicon.parse(input)?.let { return it }
+  // Reuse the Romanian normalization and conjugation tables for all
+  // deterministic tools, not only exact JSON phrases. Keep original values
+  // (contact names, app names, search text) where arguments are extracted.
   val q=RomanianLexicon.canonicalCommand(input).trim().trimEnd('!','?')
+  val folded=RomanianLexicon.normalize(q)
+  fun foldedMatch(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(folded)
   fun call(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
   fun match(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(q)
-  match("(?:aprinde|pornește|porneste|stinge|oprește|opreste) (?:lanterna|lanternă)")?.let{
-   return call("control_flashlight","on" to JsonPrimitive(q.startsWith("aprinde",true)||q.startsWith("porn",true)))
+  foldedMatch("(?:aprinde|porneste|activeaza|da drumul la|stinge|opreste|dezactiveaza|inchide) (?:lanterna|blitul|blit|lanterna telefonului)")?.let{
+   val verb=folded.substringBefore(' ')
+   return call("control_flashlight","on" to JsonPrimitive(verb in setOf("aprinde","porneste","activeaza","da")))
   }
-  match("(?:setează|seteaza|reglează|regleaza) volumul (?:la )?(\\d{1,3})%?")?.let{
+  foldedMatch("(?:seteaza|regleaza|pune|fixeaza) (?:volumul|sunetul) (?:la )?(\\d{1,3})%?")?.let{
    val v=it.groupValues[1].toInt();if(v in 0..100)return call("control_volume","value" to JsonPrimitive(v))
   }
   match("(?:deschide site-ul|deschide pagina) (.+)")?.let{return call("open_url","url" to JsonPrimitive(it.groupValues[1]))}
@@ -35,7 +41,7 @@ object NaturalToolCommands {
   }
   // The single-intent YouTube forms are handled once, above the lexicon.
   match("(?:caută|cauta) pe youtube (.+)")?.let{return call("youtube_search","query" to JsonPrimitive(it.groupValues[1]))}
-  match("(?:navighează|navigheaza) (?:la|către|catre) (.+)")?.let{return call("maps_navigate","destination" to JsonPrimitive(it.groupValues[1]))}
+  match("(?:navighează|navigheaza|du-mă|du-ma|condu-mă|condu-ma) (?:la|către|catre|spre) (.+)")?.let{return call("maps_navigate","destination" to JsonPrimitive(it.groupValues[1]))}
   match("(?:setează|seteaza) alarma (?:la )?(\\d{1,2}):(\\d{2})")?.let{
    val h=it.groupValues[1].toInt();val m=it.groupValues[2].toInt()
    if(h in 0..23 && m in 0..59)return call("set_alarm","hour" to JsonPrimitive(h),"minute" to JsonPrimitive(m))

@@ -35,6 +35,13 @@ class NaturalToolCommandsTest {
   assertEquals("control_flashlight",NaturalToolCommands.parse("Aprinde lanterna")?.tool)
   assertEquals("maps_navigate",NaturalToolCommands.parse("Navighează către București")?.tool)
  }
+ @Test fun normalizedRomanianSynonymsUseExistingAndroidCapabilities(){
+  assertEquals(JsonPrimitive(true),NaturalToolCommands.parse("Dă drumul la lanternă")?.args?.get("on"))
+  assertEquals(JsonPrimitive(false),NaturalToolCommands.parse("Închide lanterna")?.args?.get("on"))
+  assertEquals(JsonPrimitive(35),NaturalToolCommands.parse("Fixează sunetul la 35%")?.args?.get("value"))
+  assertEquals("maps_navigate",NaturalToolCommands.parse("Du-mă spre Brașov")?.tool)
+  assertNull(NaturalToolCommands.parse("Nu da drumul la lanternă"))
+ }
  @Test fun unknown(){assertNull(NaturalToolCommands.parse("Ce este inteligența artificială?"))}
  @Test fun upstreamNavigation(){
   assertEquals("press_back",NaturalToolCommands.parse("go back")!!.tool)
