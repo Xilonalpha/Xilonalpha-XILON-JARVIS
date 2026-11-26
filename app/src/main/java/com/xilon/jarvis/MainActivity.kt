@@ -61,7 +61,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      if(busy)nativeModel?.stop()
     }else if(busy){
      pendingVoiceInterruption=recognized
-     nativeModel?.stop()
+     if(allowVoiceInferenceInterrupt())nativeModel?.stop()
     }else acceptVoice(recognized)
    }
   }
@@ -151,6 +151,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }
  }
+ private fun allowVoiceInferenceInterrupt()=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("voice_interrupt_inference",false)
  private var wake:WakeController?=null
  private var wakeCommandPending=false
  private var wakeReplyPending=false
@@ -393,7 +394,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
            stopAllSpeech()
            if(busy){
             pendingVoiceInterruption=recognized
-            nativeModel?.stop()
+            if(allowVoiceInferenceInterrupt())nativeModel?.stop()
            }else acceptVoice(recognized)
           }
          }
@@ -1578,6 +1579,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     .setMessage("Pentru recunoaștere română folosește cele 3 fișiere Whisper Tiny multilingv din Catalog voce Sherpa. Motorul nativ Sherpa le încarcă cu language=ro și task=transcribe. Exportul Gntz Transformers.js nu este compatibil direct și nu este folosit. Dacă ai instalat și Zipformer EN, Whisper RO are prioritate.")
     .setPositiveButton("Înțeles",null).show()
   }})
+  settings.addView(Switch(this).apply{text="Permite întreruperea inferenței prin conversație";isChecked=allowVoiceInferenceInterrupt();setOnCheckedChangeListener{_,enabled->getSharedPreferences("conversation",MODE_PRIVATE).edit().putBoolean("voice_interrupt_inference",enabled).apply()}})
   settings.addView(Switch(this).apply{text="Permite oprirea AI prin gestul pumnului";isChecked=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getBoolean("fist_cancel_enabled",false);setOnCheckedChangeListener{_,enabled->getSharedPreferences("air_touch_profile",MODE_PRIVATE).edit().putBoolean("fist_cancel_enabled",enabled).apply()}})
   settings.addView(Button(this).apply{text="Instalează Whisper română offline";setOnClickListener{
    if(busy)return@setOnClickListener
