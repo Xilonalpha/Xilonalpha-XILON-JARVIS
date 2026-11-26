@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.io.File
 import java.util.ArrayDeque
-import com.jarvis.assistant.voice.MicGain
+import kotlin.math.sqrt
 
 /** Captures a short utterance and transcribes it offline with Sherpa-ONNX SenseVoice or Whisper. */
 class SpeechToTextEngine(context: Context) : Closeable {
@@ -135,7 +135,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         )
         check(minimumBufferBytes > 0) { "This device does not support 16 kHz microphone capture." }
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -150,7 +150,6 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val captured = ArrayList<Float>(SAMPLE_RATE * MAX_RECORDING_SECONDS)
         val preRoll = ArrayDeque<FloatArray>()
         val pcm = ShortArray(FRAME_SAMPLES)
-        val micGain = MicGain()
         var started = false
         var silentSamples = 0
         var totalSamples = 0
@@ -172,9 +171,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 if (isDigitalSilence(pcm, count)) { if (++zeroReads >= 30) error("Microfon blocat sau dezactivat de Android.") } else zeroReads = 0
                 totalSamples += count
                 val chunk = FloatArray(count) { index -> pcm[index] / 32768.0f }
-                micGain.process(chunk, learn = !started)
-                val rms = MicGain.rms(chunk)
-                val threshold = maxOf(SPEECH_RMS_THRESHOLD, micGain.noiseFloor * micGain.gain * 3f)
+                // Feed undistorted normalized PCM to Whisper.
+                var power = 0.0
+                for (sample in chunk) power += sample * sample
+                val rms = sqrt(power / count).toFloat()
+                val threshold = SPEECH_RMS_THRESHOLD
                 if (!started) {
                     preRoll.addLast(chunk)
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
@@ -214,6 +215,6 @@ class SpeechToTextEngine(context: Context) : Closeable {
         const val PRE_ROLL_FRAMES = 6
         const val SILENCE_SAMPLES = 19_200 // 1200 ms
         const val MAX_RECORDING_SECONDS = 20
-        const val SPEECH_RMS_THRESHOLD = 0.012f
+        const val SPEECH_RMS_THRESHOLD = 0.006f
     }
 }
