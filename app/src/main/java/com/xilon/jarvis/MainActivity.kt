@@ -689,7 +689,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      busy=true
      worker.execute{
       val result=try{LocalKnowledge(this@MainActivity).search(q.substringAfter(" "))}catch(e:Exception){"Eroare documente: "+e.message}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }
      return@setOnClickListener
     }
@@ -716,7 +716,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        else -> "Clipboard gol sau inaccesibil."
       }
      }.getOrElse{"Clipboard indisponibil."}
-     append(result)
+     this@MainActivity.append(result)
      return@setOnClickListener
     }
     val memoryCommand=com.jarvis.assistant.router.MemoryIntentParser.parse(q)
@@ -733,7 +733,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         else -> store.all().filter{it.kind==com.jarvis.assistant.memory.MemoryStore.Kind.FACT}.joinToString("\n"){it.title}.ifBlank{"Nu există note salvate."}
        }
       }.getOrElse{"Eroare memorie: "+it.javaClass.simpleName}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }
      return@setOnClickListener
     }
@@ -884,7 +884,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      busy=true
      worker.execute{
       val result=runCatching{relevantDialogue(term,5,true).joinToString("\n\n"){(u,a)->"Tu: "+u+"\nJARVIS: "+a}.ifBlank{"Nu există potriviri în conversațiile mai vechi."}}.getOrElse{"Căutarea locală a eșuat."}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }
      return@setOnClickListener
     }
@@ -924,7 +924,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         }
        }
       }.getOrElse{"Analiza lexicală nu este disponibilă: "+it.javaClass.simpleName}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }
      return@setOnClickListener
     }
@@ -957,7 +957,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        } else translation ?: (if(english)RomanianLexicon.englishDefinitions(term).takeIf{it.isNotEmpty()}?.joinToString(" / ")?.let{"Definiții EN (nu traducere contextuală): "+it} else null)
         ?: "Traducere indisponibilă în dicționarul local. Încarcă un model GGUF pentru propoziții de maximum 1200 caractere. Corpus: "+RomanianLexicon.definitionsStatus()
       }.getOrElse{"Căutarea lexicală nu este disponibilă: "+it.javaClass.simpleName}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }
      return@setOnClickListener
     }
@@ -1218,7 +1218,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       "Sherpa: model încărcat în motorul nativ. Transcrierea microfonului rămâne de testat."
      }finally{(engine as NeuralSpeech).close()}
     }.getOrElse{"Sherpa: încărcare eșuată: "+(it.cause?.message?:it.message)}
-    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
    }}
   }})
   settings.addView(Button(this).apply { text="Verifică încărcarea Kokoro";setOnClickListener{
@@ -1229,7 +1229,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      check(type.getMethod("validateModelLoad").invoke(engine)==true){"Motor TTS indisponibil"}
      "Kokoro: motorul nativ a încărcat modelul. Redarea audio rămâne de testat."
     }.getOrElse{"Kokoro: încărcare eșuată: "+(it.cause?.message?:it.message)}
-    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
    }}
   }})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
@@ -1281,7 +1281,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn 1s: oprire)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Diagnostic voce română offline","Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -1481,7 +1481,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy)importGguf(uri,false,entry)}
     else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{
      val result=runCatching{downloads.start(entry);"Transfer solicitat; revizie și SHA-256 salvate."}.getOrElse{"Descărcare eșuată: "+it.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Anulezi transferul și ștergi copia descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
     dialog.setNegativeButton("Închide",null).show()
@@ -1494,8 +1494,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hugging Face • OCR").setItems(entries.map{it.name+" • "+downloads.status(it)}.toTypedArray()){_,index->
     val entry=entries[index];val lang=entry.file.substringBefore(".");val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(downloads.status(entry)+"\n"+if(java.io.File(filesDir,"tesseract/tessdata/"+entry.file).isFile)"Fișier instalat" else "Fișier neinstalat")
-    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Fișier inaccesibil"),ref.sha256,ref.bytes,ref.algorithm);LocalOcr.install(this@MainActivity,uri,lang);"Date OCR instalate; validarea are loc la recunoaștere."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
-    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Fișier inaccesibil"),ref.sha256,ref.bytes,ref.algorithm);LocalOcr.install(this@MainActivity,uri,lang);"Date OCR instalate; validarea are loc la recunoaștere."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -1537,9 +1537,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
        }
       }finally{temp.delete()}
      }.getOrElse{"Import eșuat: "+it.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }}}
-    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -1555,13 +1555,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val transducer=listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all{java.io.File(streaming,it).isFile}
    val androidTtsStatus=if(voice.romanianVoiceAvailable())"Voce offline disponibilă și conectată" else "Nicio voce offline activă; instalează o voce română în Android"
    val lianaStatus=if(liana)"Fișiere instalate; compatibilitatea cu Piper nu este validată" else "Fișiere lipsă"
-   val message="TTS română Android: "+androidTtsStatus+"\\nLiana RO: "+lianaStatus
+   val message="TTS română Android: "+androidTtsStatus+"\nLiana RO: "+lianaStatus
    val piperRuntime=NeuralVoiceFactory.romanian(this@MainActivity)?.installed()==true
-   val status=message+"\\nPiper RO complet: "+(if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență")
-   val status2=status+"\\nWhisper RO: "+(if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă")
+   val status=message+"\nPiper RO complet: "+(if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență")
+   val status2=status+"\nWhisper RO: "+(if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă")
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Diagnostic vocal • offline")
-    .setMessage(status2+"\\nSherpa streaming: "+(if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă")+
-     "\\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
+    .setMessage(status2+"\nSherpa streaming: "+(if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă")+
+     "\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
     .setPositiveButton("Închide",null).show()
   }})
   settings.addView(Button(this).apply{text="Piper Mihai RO • descarcă și instalează";setOnClickListener{
@@ -1570,7 +1570,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val downloads=ModelDownloads(this@MainActivity)
    val uri=downloads.uri(entry)
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Mihai RO • Piper Sherpa")
-    .setMessage("Pachet complet Sherpa-ONNX: model, tokens și date eSpeak. "+downloads.status(entry)+"\\nFuncționează exclusiv offline după instalare.")
+    .setMessage("Pachet complet Sherpa-ONNX: model, tokens și date eSpeak. "+downloads.status(entry)+"\nFuncționează exclusiv offline după instalare.")
    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
     val result=runCatching{
      val ref=downloads.reference(entry)
@@ -1578,11 +1578,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
      RomanianPiperArchive.install(this@MainActivity,uri)
      "Mihai RO instalat. Activează Voce neuronală RO Piper."
     }.getOrElse{"Instalare Piper RO eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
    }}}
    else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
     val result=runCatching{downloads.start(entry);"Descărcare Mihai RO pornită."}.getOrElse{"Descărcare eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
    }}}
    dialog.setNegativeButton("Închide",null).show()
   }})
@@ -1592,12 +1592,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val downloads=ModelDownloads(this@MainActivity)
    android.app.AlertDialog.Builder(this@MainActivity)
     .setTitle("Modele vocale românești • offline")
-    .setMessage("Liana este TTS Piper (CC BY-NC 4.0); Whisper RO este ASR ONNX pentru Transformers.js și necesită adaptor Android. Descărcarea nu înseamnă activare automată.")
     .setItems(entries.map{it.name+" • "+downloads.status(it)}.toTypedArray()){_,index->
      val entry=entries[index]
      val uri=downloads.uri(entry)
      val dialog=android.app.AlertDialog.Builder(this@MainActivity)
-      .setTitle(entry.name).setMessage(entry.role+"\\n"+downloads.status(entry)+"\\nAproximativ "+entry.mb+" MB")
+      .setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
      if(uri!=null)dialog.setPositiveButton("Instalează fișierul"){_,_->if(!busy){busy=true;worker.execute{
       val result=runCatching{
        val ref=downloads.reference(entry)
@@ -1614,11 +1613,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
         }
        }finally{temp.delete()}
       }.getOrElse{"Instalare eșuată: "+it.message}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }}}
      else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
       val result=runCatching{downloads.start(entry);"Descărcarea modelului românesc a pornit."}.getOrElse{"Descărcare eșuată: "+it.message}
-      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+      runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
      }}}
      if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
      dialog.setNegativeButton("Închide",null).show()
@@ -1651,11 +1650,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
        }
       }finally{temp.delete()}
      }.getOrElse{"Instalare eșuată: "+it.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }}}
     else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
      val result=runCatching{downloads.start(entry);"Transfer streaming pornit."}.getOrElse{"Descărcare eșuată: "+it.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
@@ -1711,9 +1710,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
       check(temp.renameTo(target));"Model gesturi instalat, SHA-256 verificat. Testează Air Touch."
      }finally{temp.delete()}
     }.getOrElse{"Instalare eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
    }}}
-   else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+   else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}}}
    if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
    dialog.setNegativeButton("Închide",null).show()
   }})
@@ -1746,9 +1745,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
        }
       }finally{temp.delete()}
      }.getOrElse{"Import eșuat: "+it.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }}}
-    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+    else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}}}
     if(downloads.id(entry)>=0)dialog.setNeutralButton("Șterge transfer"){_,_->if(!busy)downloads.cancel(entry)}
     dialog.setNegativeButton("Închide",null).show()
    }.setNegativeButton("Închide",null).show()
@@ -1760,15 +1759,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Kokoro TTS • engleză").setMessage(downloads.status(entry)+"\n"+(if(enabled)"Motor inclus în APK." else "Necesită profilul enableSherpa=true.")+"\n"+(if(java.io.File(filesDir,"kokoro").isDirectory)"Director instalat." else "Neinstalat.")+"\nRezervă necesară: 1 GiB. Instalarea din catalog necesită SHA-256 publicat de GitHub.")
    if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
     val result=runCatching{val ref=downloads.reference(entry);ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm);KokoroArchive.install(this@MainActivity,uri);"Pachet extras și instalat; sinteza vocală rămâne de testat."}.getOrElse{"Instalare eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
    }}}
-   else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}}}
+   else if(downloads.canStart(entry))dialog.setPositiveButton(if(downloads.id(entry)<0)"Descarcă" else "Reîncearcă"){_,_->if(!busy){busy=true;worker.execute{val result=runCatching{downloads.start(entry);"Transfer solicitat."}.getOrElse{"Transfer eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}}}
    dialog.setNeutralButton("Importă ZIP"){_,_->if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)}
    if(downloads.id(entry)>=0)dialog.setNegativeButton("Șterge transfer"){_,_->if(!busy)android.app.AlertDialog.Builder(this@MainActivity).setMessage("Ștergi arhiva descărcată?").setPositiveButton("Da"){_,_->downloads.cancel(entry)}.setNegativeButton("Nu",null).show()}
    else dialog.setNegativeButton("Închide",null)
    dialog.show()
   }})
-  val catalogLabels=listOf("Catalog Hugging Face","Catalog voce Sherpa","Catalog Hey Jarvis","Catalog Kokoro","Catalog gesturi","Catalog OCR")
+  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Hey Jarvis","Catalog Kokoro","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
   settings.addView(Button(this).apply{text="OMEGA Model Center";setOnClickListener{
    if(busy)return@setOnClickListener
@@ -1782,7 +1781,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
    center.addView(resources)
    val manager=ModelDownloads(this@MainActivity)
-   val categories=mapOf("Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Vision" to ModelCatalog.visionModels,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Vision" to ModelCatalog.visionModels,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
    val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
@@ -2439,7 +2438,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   agentCancelled=false;busy=true;refreshOmegaStatus()
   worker.execute{
    val result=runCatching{runTracked(steps)}.getOrElse{"Execuție eșuată: "+it.message}
-   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();append(result)}}
+   runOnUiThread{if(!isDestroyed){busy=false;refreshOmegaStatus();this@MainActivity.append(result)}}
   }
  }
  private fun runTracked(steps:List<String>):String{
@@ -2546,7 +2545,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       old?.takeIf{it.startsWith("vision-projector-") && it!=temp.name}?.let{java.io.File(filesDir,it).delete()}
       "Proiector VLM validat pentru modelul curent."
      }.getOrElse{temp.delete();"Import VLM eșuat: "+it.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }
    }else{
     val projector=vlmProjector()
@@ -2589,18 +2588,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
    busy=true
    worker.execute{
     val result=runCatching{if(requestCode<=54){LocalVision.install(this,uri,requestCode==54);"Model vizual validat și instalat."}else LocalVision.detect(this,uri,requestCode==56)}.getOrElse{"Vision: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;if(requestCode>=55 && !result.startsWith("Vision:"))visualObservation.put(result,android.os.SystemClock.elapsedRealtime());append(result);android.app.AlertDialog.Builder(this).setTitle("Vision local").setMessage(result).setPositiveButton("Închide",null).show()}}
+    runOnUiThread{if(!isDestroyed){busy=false;if(requestCode>=55 && !result.startsWith("Vision:"))visualObservation.put(result,android.os.SystemClock.elapsedRealtime());this@MainActivity.append(result);android.app.AlertDialog.Builder(this).setTitle("Vision local").setMessage(result).setPositiveButton("Închide",null).show()}}
    };return
   }
   if(requestCode in 50..52){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;if(requestCode==52)ocrText=null;busy=true;worker.execute{val result=runCatching{if(requestCode==52)LocalOcr.read(this,uri).also{raw->if(raw.isNotBlank()){runOnUiThread{if(!isDestroyed){ocrText=raw;ocrAt=android.os.SystemClock.elapsedRealtime()}}}}.ifBlank{"Niciun text detectat."} else {LocalOcr.install(this,uri,if(requestCode==50)"ron" else "eng");"Date OCR importate; validarea are loc la recunoaștere."}}.getOrElse{"OCR eșuat: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;append("OCR: "+result);android.app.AlertDialog.Builder(this).setTitle("OCR local").setMessage(result).setPositiveButton("Închide",null).show()}}};return}
-  if(requestCode==49){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;busy=true;worker.execute{val result=runCatching{KokoroImport.install(this,uri)}.fold({"Fișiere Kokoro instalate; inferența trebuie testată."},{"Import Kokoro eșuat: "+it.message});runOnUiThread{if(!isDestroyed){busy=false;append(result)}}};return}
+  if(requestCode==49){if(resultCode!=RESULT_OK || busy)return;val uri=data?.data ?: return;busy=true;worker.execute{val result=runCatching{KokoroImport.install(this,uri)}.fold({"Fișiere Kokoro instalate; inferența trebuie testată."},{"Import Kokoro eșuat: "+it.message});runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}};return}
   if(requestCode==46){
    if(resultCode==RESULT_OK && !busy){
     val uri=data?.data ?: return
     busy=true
     worker.execute{
      val result=try{kotlinx.coroutines.runBlocking{com.jarvis.ai.memory.ModelStore.import(this@MainActivity,uri)}.let{"Model importat: "+it.name}}catch(e:Exception){"Import vocal eșuat: "+e.message}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }
    };return
   }
@@ -2619,13 +2618,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
       check(temp.renameTo(java.io.File(filesDir,"hand_landmarker.task"))){"Salvare eșuată"}
       "Model copiat; validarea are loc la pornirea Air Touch."
      }catch(e:Exception){"Import eșuat: "+e.message}finally{temp.delete()}
-     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
     }
    };return
   }
   if(requestCode==43){
    if(resultCode==RESULT_OK && !busy){val uri=data?.data ?: return;busy=true
-    worker.execute{val result=try{LocalKnowledge(this@MainActivity).add(uri)}catch(e:Exception){"Eroare import: "+e.message};runOnUiThread{if(!isDestroyed){busy=false;append(result)}}}
+    worker.execute{val result=try{LocalKnowledge(this@MainActivity).add(uri)}catch(e:Exception){"Eroare import: "+e.message};runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}}
    };return
   }
   if(requestCode!=41 || resultCode!=RESULT_OK || busy) return
