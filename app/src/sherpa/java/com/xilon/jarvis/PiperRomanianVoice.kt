@@ -20,10 +20,12 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private val config=File(root,"ro_RO-liana-medium.onnx.json")
  private val tokens=File(root,"tokens.txt")
  private val espeak=File(app.filesDir,"kokoro/espeak-ng-data")
+ private val alternateEspeak=File(root,"espeak-ng-data")
+ private fun phonemeData():File?=listOf(alternateEspeak,espeak).firstOrNull{it.isDirectory && it.list()?.isNotEmpty()==true}
  private val executor=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
  @Volatile private var track:AudioTrack?=null
- override fun installed()=model.isFile && model.length()>0 && config.isFile && tokens.isFile && espeak.isDirectory
+ override fun installed()=model.isFile && model.length()>0 && config.isFile && config.length()>0 && tokens.isFile && tokens.length()>0 && phonemeData()!=null
  override fun speak(text:String){speakTracked(text){}}
  override fun speakTracked(text:String,done:(String?)->Unit){
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}
@@ -34,7 +36,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
    try{
     if(id!=epoch.get())return@execute
     tts=OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(
-     vits=OfflineTtsVitsModelConfig(model=model.absolutePath,tokens=tokens.absolutePath,dataDir=espeak.absolutePath),
+     vits=OfflineTtsVitsModelConfig(model=model.absolutePath,tokens=tokens.absolutePath,dataDir=checkNotNull(phonemeData()){"Lipsesc datele eSpeak pentru limba română"}.absolutePath),
      numThreads=2)))
     val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback={if(id==epoch.get())1 else 0})
     if(id!=epoch.get())return@execute

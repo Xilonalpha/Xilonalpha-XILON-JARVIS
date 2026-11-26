@@ -228,7 +228,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
   omegaCore.speaking=true;refreshOmegaStatus()
-  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Kokoro: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){omegaCore.speaking=false;refreshOmegaStatus();append("Kokoro: "+e.message);voice.speak(text)?.let{append(it)}}
+  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);voice.speak(text)?.let{append(it)}}
  }
  private var englishNeuralVoice=false
  private var romanianNeuralVoice=false
