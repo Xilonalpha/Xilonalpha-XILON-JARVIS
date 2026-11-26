@@ -17,7 +17,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private val app=context.applicationContext
  private val root=File(app.filesDir,"models/romanian")
  private val mihai=File(root,"mihai")
- private fun useMihai()=File(mihai,"ro_RO-mihai-medium.onnx").isFile
+ private fun useMihai()=File(mihai,"ro_RO-mihai-medium.onnx").isFile && File(mihai,"tokens.txt").isFile && File(mihai,"espeak-ng-data").isDirectory
  private val model:File get()=if(useMihai())File(mihai,"ro_RO-mihai-medium.onnx") else File(root,"ro_RO-liana-medium.onnx")
  private val config=File(root,"ro_RO-liana-medium.onnx.json")
  private val tokens:File get()=if(useMihai())File(mihai,"tokens.txt") else File(root,"tokens.txt")
@@ -31,6 +31,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  override fun installed()=model.isFile && model.length()>0 && (useMihai() || (config.isFile && config.length()>0)) && tokens.isFile && tokens.length()>0 && phonemeData()!=null
  override fun speak(text:String){speakTracked(text){}}
  override fun speakTracked(text:String,done:(String?)->Unit){
+  if(text.isBlank()){done(null);return}
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}
   val id=epoch.incrementAndGet()
   executor.execute{

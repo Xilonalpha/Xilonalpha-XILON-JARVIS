@@ -390,6 +390,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
    else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
   }})
+  settings.addView(Button(this).apply { text="Testează vocea română Piper";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val v=NeuralVoiceFactory.romanian(this@MainActivity)
+   if(v==null || !v.installed())append("Piper RO: instalează pachetul complet Mihai RO înainte de test.")
+   else{piperVoice=v;playNeural("Bună! Sunt Jarvis și pot vorbi în limba română, fără conexiune la internet.",v)}
+  }})
   settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
   settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
@@ -1460,9 +1466,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val streaming=java.io.File(filesDir,"models/streaming-asr")
    val transducer=listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all{java.io.File(streaming,it).isFile}
    val message="TTS română Android: "+if(voice.romanianVoiceAvailable())"Voce offline disponibilă și conectată" else "Nicio voce offline activă; instalează o voce română în Android"+"\\nLiana RO: "+if(liana)"Fișiere instalate; motor Piper neconectat" else "Fișiere lipsă"
-   val status=message+"\\nWhisper RO: "+if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă"
+   val piperRuntime=NeuralVoiceFactory.romanian(this@MainActivity)?.installed()==true
+   val status=message+"\\nPiper RO complet: "+if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență"
+   val status2=status+"\\nWhisper RO: "+if(whisper)"Fișiere instalate; export Transformers.js incompatibil direct cu Sherpa" else "Fișiere lipsă"
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Diagnostic vocal • offline")
-    .setMessage(status+"\\nSherpa streaming: "+if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă"+
+    .setMessage(status2+"\\nSherpa streaming: "+if(transducer)"Fișiere prezente; verifică încărcarea nativă" else "Model lipsă"+
      "\\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
     .setPositiveButton("Închide",null).show()
   }})
