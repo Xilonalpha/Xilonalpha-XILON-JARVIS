@@ -42,7 +42,9 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(J
  params.load_mode=LLAMA_LOAD_MODE_AUTO;
  // A zero GPU layer count alone may still allow GPU host buffers or
  // auxiliary backend allocations. Explicitly pass an empty device list.
- ggml_backend_dev_t cpuOnlyDevices[]={nullptr};
+ // llama.cpp may retain this list in model parameters for later contexts.
+ // Do not pass a stack-local device array whose lifetime ends at model load.
+ static ggml_backend_dev_t cpuOnlyDevices[]={nullptr};
  if(params.n_gpu_layers==0)params.devices=cpuOnlyDevices;
  auto* m=llama_model_load_from_file(p,params);
  if(!m && params.n_gpu_layers>0){
