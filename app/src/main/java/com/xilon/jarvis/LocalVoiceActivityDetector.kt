@@ -25,7 +25,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
  @Volatile private var recorder:AudioRecord?=null
  @Volatile private var worker:Thread?=null
  private val lifecycleLock=Any()
- fun start(onVoice:()->Unit,onError:(String)->Unit={}):Boolean {
+ fun start(onVoice:()->Unit,onError:(String)->Unit={},onSilence:()->Unit={}):Boolean {
   if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
   val session=synchronized(lifecycleLock){
    // A previous recorder must finish releasing before the next capture starts.
@@ -81,8 +81,10 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
    var startedAt=0L
    var detected=false
+   var failed=false
    try {
     if(neuralFailure!=null){
+     failed=true
      main.post{if(generation.get()==session)onError("Silero VAD: "+neuralFailure)}
     }else if(running.get() && generation.get()==session){
      record.startRecording()
@@ -101,6 +103,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
       // A model failure ends this capture; the next session can use energy VAD.
       try { neural.accept(samples,count) }
       catch(e:Exception){
+       failed=true
        main.post{if(generation.get()==session)onError("Silero VAD: "+(e.message?:"inferență eșuată"))}
        break
       }
@@ -115,6 +118,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      }
     }
    }catch(e:Exception){
+    failed=true
     if(running.getAndSet(false))main.post{
      if(generation.get()==session)onError(e.message ?: "Eroare VAD local")
     }
@@ -131,6 +135,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      if(generation.get()==session)running.set(false)
     }
     if(detected)main.post{if(generation.get()==session && !running.get() && recorder==null)onVoice()}
+    else if(!failed)main.post{if(generation.get()==session && !running.get() && recorder==null)onSilence()}
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}
   return true

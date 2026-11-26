@@ -55,7 +55,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun startNeural(fallback:Boolean=false){
-  if(speechClosing || busy || speechCapture.active() || wake!=null || !conversationForeground)return
+  if(!VoiceCapturePolicy.mayStartNormalAsr(conversationForeground,speechClosing,busy,speechCapture.active(),voiceBargeIn.active(),wake!=null))return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
   val turn=speechSessions.begin()
   if(!speechCapture.begin(turn)){speechSessions.cancel();return}
@@ -211,7 +211,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!omegaCore.listening && wake==null && voiceRetry.ready(now)){
    if(!busy && !speechCapture.active() && !voiceBargeIn.active() && !omegaCore.speaking){
     if(now-voiceEndedAt>=400L)startMicrophone()
-   }else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && !voiceBargeIn.active() && voiceInterruptGate.ready(now)){
+   }else if(VoiceCapturePolicy.mayMonitorPlayback(conversationForeground,continuousVoice,voiceInterrupt,omegaCore.speaking,speechCapture.active(),voiceBargeIn.active()) && !omegaCore.listening && voiceInterruptGate.ready(now)){
     val ticket=beginBargeIn()
     if(ticket!=null){
      val started=localVad.start({
@@ -255,12 +255,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
        voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
        modelStatus.text=error
       }
+     },{
+      // Silence is normal: release the turn and allow another VAD window.
+      if(voiceBargeIn.isCurrent(ticket))endBargeIn(ticket)
      })
      if(!started)endBargeIn(ticket)
     }
    }
   }
-  if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
+  if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
  }}
  private fun stopVoiceLoop(){localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
