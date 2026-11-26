@@ -1578,6 +1578,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     .setMessage("Pentru recunoaștere română folosește cele 3 fișiere Whisper Tiny multilingv din Catalog voce Sherpa. Motorul nativ Sherpa le încarcă cu language=ro și task=transcribe. Exportul Gntz Transformers.js nu este compatibil direct și nu este folosit. Dacă ai instalat și Zipformer EN, Whisper RO are prioritate.")
     .setPositiveButton("Înțeles",null).show()
   }})
+  settings.addView(Switch(this).apply{text="Permite oprirea AI prin gestul pumnului";isChecked=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getBoolean("fist_cancel_enabled",false);setOnCheckedChangeListener{_,enabled->getSharedPreferences("air_touch_profile",MODE_PRIVATE).edit().putBoolean("fist_cancel_enabled",enabled).apply()}})
   settings.addView(Button(this).apply{text="Instalează Whisper română offline";setOnClickListener{
    if(busy)return@setOnClickListener
    val downloads=ModelDownloads(this@MainActivity)
@@ -1978,7 +1979,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }else if(gestureMedia)MediaActions(this).execute(if(direction>0)"următoarea melodie" else "melodia anterioară")?.let{modelStatus.text=it}
   }}
   cursor.onScroll={direction->if(conversationForeground && airTouch!=null && !busy){if(dispatchGestureBinding(if(direction>0) "up" else "down"))Unit else if(gestureMedia){MediaActions(this).execute(if(direction>0)"crește volumul" else "scade volumul")?.let{modelStatus.text=it}}else{val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}}
-  cursor.onFistHold={if(conversationForeground && airTouch!=null){voice.stop();kokoroVoice?.stop();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
+  cursor.onFistHold={if(conversationForeground && airTouch!=null && getSharedPreferences("air_touch_profile",MODE_PRIVATE).getBoolean("fist_cancel_enabled",false)){stopAllSpeech();listening.close();stopNeural();nativeModel?.stop();agentCancelled=true;stopVoiceLoop();append("Oprire prin gestul pumnului.")}}
   cursor.visibility=android.view.View.GONE
   setContentView(FrameLayout(this).apply{addView(root);addView(cursor,FrameLayout.LayoutParams(-1,-1))})
   val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
