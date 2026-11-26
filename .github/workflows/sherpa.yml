@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - 'app/src/sherpa/**'
+      - 'app/src/androidTest/**'
+      - 'app/src/main/java/com/xilon/jarvis/*Voice*.kt'
+      - 'app/src/main/java/com/xilon/jarvis/*Archive.kt'
+      - 'app/src/main/assets/liana-sherpa-metadata.pb'
       - 'app/build.gradle.kts'
       - 'settings.gradle.kts'
       - '.github/workflows/sherpa.yml'
@@ -29,3 +33,42 @@ jobs:
           name: xilon-jarvis-full-sherpa-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - name: Stage verified voice packages for instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/androidTest/assets/speech
+          cd app/src/androidTest/assets/speech
+          release=https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models
+          liana=https://huggingface.co/eduardem/piper-liana-romanian/resolve/acfc14ae87bb4c124947f0cb7ee0023ffceb0005/voices/liana-medium
+          for name in kokoro-int8-en-v0_19.tar.bz2 vits-piper-ro_RO-mihai-medium.tar.bz2; do
+            curl -fLsS --retry 3 "$release/$name" -o "$name"
+          done
+          for name in ro_RO-liana-medium.onnx ro_RO-liana-medium.onnx.json; do
+            curl -fLsS --retry 3 "$liana/$name" -o "$name"
+          done
+          sha256sum --check <<'HASHES'
+          c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd  kokoro-int8-en-v0_19.tar.bz2
+          cfbee3cdc25cf063339f69e189f4d93cc3be6610d267567537323ced3cf87f4d  vits-piper-ro_RO-mihai-medium.tar.bz2
+          40c6cbe08905ba702f4df5966a3a8de2bcc232db8ad3784db74bbd948d9953d3  ro_RO-liana-medium.onnx
+          bb70ba2e0181a3d98050020ea3531a279f96afd72cc86d571cf5de0920383f46  ro_RO-liana-medium.onnx.json
+          HASHES
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Play Mihai, Liana and Kokoro offline on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disk-size: 4096M
+          ram-size: 3072M
+          script: gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireVoiceFixtures=true -PenableSherpa=true --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xilon-android-speech-results
+          path: app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
