@@ -25,6 +25,14 @@ class NeuralSpeechGateTest {
   assertFalse(gate.accept(0.90f))
   assertTrue(gate.accept(0.90f))
  }
+ @Test fun sustainedSpeechDoesNotOverflowCounter(){
+  val gate=NeuralSpeechGate()
+  assertFalse(gate.accept(0.9f))
+  repeat(100000){assertTrue(gate.accept(0.9f))}
+  assertFalse(gate.accept(0.1f))
+  assertFalse(gate.accept(0.9f))
+  assertTrue(gate.accept(0.9f))
+ }
  @Test fun resetClearsHistory(){
   val gate=NeuralSpeechGate()
   assertFalse(gate.accept(0.90f))
