@@ -953,7 +953,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision(); busy=false;refreshOmegaStatus();append("JARVIS: Oprire solicitată. Poți naviga în meniu.") } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision();refreshOmegaStatus();append("JARVIS: Oprire solicitată. Aștept oprirea operației active înainte de o nouă comandă.") } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
