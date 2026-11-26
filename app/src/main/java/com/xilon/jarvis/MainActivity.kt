@@ -1205,7 +1205,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.entries
    val downloads=ModelDownloads(this@MainActivity)
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA • Hugging Face").setItems(entries.map{it.name+" • "+downloads.status(it)}.toTypedArray()){_,index->
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA • Hugging Face").setItems(entries.map{it.name+" • "+ModelInventory.display(ModelInventory.installed(this@MainActivity,it),downloads.transfer(it))}.toTypedArray()){_,index->
     val entry=entries[index]
     val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name).setMessage(entry.role+"\n"+downloads.status(entry)+"\nAproximativ "+entry.mb+" MB")
@@ -1318,7 +1318,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.wake
    val downloads=ModelDownloads(this@MainActivity)
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hey Jarvis • experimental").setItems(entries.map{it.file+" • "+downloads.status(it)}.toTypedArray()){_,index->
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Hey Jarvis • experimental").setItems(entries.map{it.file+" • "+ModelInventory.display(ModelInventory.installed(this@MainActivity,it),downloads.transfer(it))}.toTypedArray()){_,index->
     val entry=entries[index];val uri=downloads.uri(entry)
     val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.file).setMessage(downloads.status(entry)+"\nCompatibilitatea necesită test vocal.")
     if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){stopWake();busy=true;worker.execute{
