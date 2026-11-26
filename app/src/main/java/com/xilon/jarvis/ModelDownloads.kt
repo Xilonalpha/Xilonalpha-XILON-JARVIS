@@ -95,7 +95,7 @@ class ModelDownloads(context:Context){
   active[entry.file]?.let{return it}
   if(file(entry).isFile)return Transfer(DownloadManager.STATUS_SUCCESSFUL,file(entry).length(),file(entry).length(),0)
   if(id(entry)<0)return Transfer(-1,0,-1,0)
-  return Transfer(DownloadManager.STATUS_FAILED,0,-1,0,error=prefs.getString(entry.file+".error",null))
+  return Transfer(DownloadManager.STATUS_FAILED,0,-1,0,error=prefs.getString(entry.file+".error",null) ?: "Transfer întrerupt; reîncearcă")
  }
  fun status(entry:ModelCatalog.Entry)=transfer(entry).label
  fun canStart(entry:ModelCatalog.Entry)=transfer(entry).state in setOf(-1,DownloadManager.STATUS_FAILED)
