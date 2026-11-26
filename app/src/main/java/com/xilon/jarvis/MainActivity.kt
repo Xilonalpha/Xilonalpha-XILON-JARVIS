@@ -161,7 +161,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
   listening.close();voice.stop()
   lateinit var controller:WakeController
-  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone();wakeCommandPending=speechCapture.active()}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
+  controller=WakeController(this,{runOnUiThread{if(!isDestroyed && wake===controller){wake=null;startMicrophone(fromWake=true)}}},{message->runOnUiThread{if(!isDestroyed && wake===controller){modelStatus.text=message;if(message=="Ascultare oprită.")wake=null}}})
   wake=controller;controller.start()
  }
  private var airTouch:AirTouchController?=null
@@ -1357,7 +1357,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn: oprire opțională)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val aiControls=setOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Diagnostic voce română offline","Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
+  val aiControls=setOf("Instalează Whisper română offline","Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Diagnostic voce română offline","Vision: importă model obiecte","Vision: importă model fețe","Vision: detectează obiecte","Vision: detectează fețe","OMEGA Model Center","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog Hey Jarvis","Catalog voce Sherpa","Catalog OCR", "Catalog Hugging Face","OCR: importă limba română","OCR: importă limba engleză","OCR: citește imagine","Benchmark model","Administrează modele","Bibliotecă GGUF","Reîncarcă modelul local","Detalii model local","Descarcă modelul din memorie","Selectează GGUF","Importă document TXT","Importă Kokoro ZIP","Importă modele vocale ONNX","Stare modele vocale","Importă model gesturi")
   val agentControls=setOf("Observă aplicația peste 5 secunde","Air Touch ON/OFF","Hey Jarvis ON/OFF","Jurnal execuții","Abilități salvate","Graf local","Actualizează starea")
   val panelTitle=TextView(this).apply{textSize=22f;setTextColor(cyan);setPadding(dp(12),dp(16),dp(12),dp(8))}
   val panelInfo=TextView(this).apply{textSize=15f;setTextColor(0xffb7cadb.toInt());setPadding(dp(12),dp(12),dp(12),dp(12));background=rounded(0xff142437.toInt(),16)}
@@ -2004,9 +2004,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(restored!=null){for(i in maxOf(0,restored.length()-150) until restored.length()){val item=restored.optString(i);if(item.isNotBlank()){visibleHistory.add(item);messageBubble(item)}}}
   if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
- private fun startMicrophone(){
+ private fun startMicrophone(fromWake:Boolean=false){
   if(busy || speechCapture.active() || voiceBargeIn.active())return
   stopWake()
+  wakeCommandPending=fromWake
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
   startNeural(true)
  }
