@@ -2576,13 +2576,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun openVlmCamera(question:String="Descrie obiectele și scena vizibilă în limba română. Menționează incertitudinile."){
   if(busy)return
   if(nativeModel==null){append("Încarcă întâi modelul multimodal.");return}
-  if(vlmProjector()==null){append("Importă întâi proiectorul VLM.");return}
+  if(vlmProjector()==null){append("VLM: importă proiectorul GGUF compatibil cu modelul activ din setări. Modelele exclusiv text nu acceptă imagini.");return}
   stopAirTouch();stopLiveVision()
   pendingVlmQuestion=question
   runCatching{startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),193)}.onFailure{pendingVlmQuestion=null;append("Camera indisponibilă: "+it.message)}
  }
  private fun vlmProjector():java.io.File? {
-  val name=getSharedPreferences("jarvis_vlm",MODE_PRIVATE).getString("projector",null)?:return null
+  val prefs=getSharedPreferences("jarvis_vlm",MODE_PRIVATE)
+  val selected=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)?:return null
+  if(prefs.getString("projector_model",null)!=selected)return null
+  val name=prefs.getString("projector",null)?:return null
   if(!name.matches(Regex("vision-projector-[a-f0-9-]+\\.gguf")))return null
   return java.io.File(filesDir,name).takeIf{it.isFile}
  }
@@ -2623,7 +2626,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
       check(model.supportsVisionProjector(temp.absolutePath)){"Proiector incompatibil sau VLM dezactivat în APK"}
       val prefs=getSharedPreferences("jarvis_vlm",MODE_PRIVATE)
       val old=prefs.getString("projector",null)
-      check(prefs.edit().putString("projector",temp.name).commit()){"Salvare configurare eșuată"}
+      val selected=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)?:error("Modelul activ nu este salvat")
+      check(prefs.edit().putString("projector",temp.name).putString("projector_model",selected).commit()){"Salvare configurare eșuată"}
       old?.takeIf{it.startsWith("vision-projector-") && it!=temp.name}?.let{java.io.File(filesDir,it).delete()}
       "Proiector VLM validat pentru modelul curent."
      }.getOrElse{temp.delete();"Import VLM eșuat: "+it.message}
@@ -2631,7 +2635,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }else{
     val projector=vlmProjector()
-    if(projector==null){append("Importă întâi proiectorul VLM.");return}
+    if(projector==null){append("VLM: importă proiectorul GGUF compatibil cu modelul activ din setări. Modelele exclusiv text nu acceptă imagini.");return}
     val question=EditText(this).apply{setText("Descrie imaginea în limba română.")}
     android.app.AlertDialog.Builder(this).setTitle("Întrebare despre imagine").setView(question).setNegativeButton("Anulează",null).setPositiveButton("Analizează"){_,_->
      if(!busy && !isDestroyed){
