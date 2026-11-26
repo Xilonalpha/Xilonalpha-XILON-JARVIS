@@ -163,9 +163,17 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
         activeRecorder = recorder
 
-        // Allocate only for speech actually captured; 20 seconds of boxed Floats
-        // otherwise creates substantial GC pressure during voice turns.
-        val captured = ArrayList<Float>(SAMPLE_RATE * 3)
+        // Primitive PCM buffer avoids boxing every sample (up to 320,000 Floats).
+        // Allocate the bounded maximum once; no repeated GC during capture.
+        val captured = FloatArray(SAMPLE_RATE * MAX_RECORDING_SECONDS)
+        var capturedCount = 0
+        fun appendSamples(samples: FloatArray) {
+            val copyCount = minOf(samples.size, captured.size - capturedCount)
+            if (copyCount > 0) {
+                samples.copyInto(captured, capturedCount, 0, copyCount)
+                capturedCount += copyCount
+            }
+        }
         val preRoll = ArrayDeque<FloatArray>()
         val pcm = ShortArray(FRAME_SAMPLES)
         var started = false
@@ -212,12 +220,12 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     if (rms >= threshold) {
                         started = true
                         voicedSamples += count
-                        preRoll.forEach { captured.addAll(it.asIterable()) }
+                        preRoll.forEach { appendSamples(it) }
                         preRoll.clear()
                         silentSamples = 0
                     }
                 } else {
-                    captured.addAll(chunk.asIterable())
+                    appendSamples(chunk)
                     if (rms >= threshold) { silentSamples = 0; voicedSamples += count } else silentSamples += count
                     // A long utterance can contain brief natural pauses. Avoid
                     // ending on a weak trailing frame until speech has been heard.
@@ -233,8 +241,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
 
         // Reject transient clicks and playback leakage shorter than 180 ms.
-        if (closed || captureCancelled || !started || voicedSamples < MIN_VOICED_SAMPLES || peakSpeechRms < SPEECH_RMS_THRESHOLD || captured.isEmpty()) return FloatArray(0)
-        return captured.toFloatArray()
+        if (closed || captureCancelled || !started || voicedSamples < MIN_VOICED_SAMPLES || peakSpeechRms < SPEECH_RMS_THRESHOLD || capturedCount == 0) return FloatArray(0)
+        return captured.copyOf(capturedCount)
     }
 
     private fun isDigitalSilence(pcm: ShortArray, n: Int): Boolean {
