@@ -963,6 +963,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
   settings.addView(Button(this).apply { text="Stare modele vocale";setOnClickListener{val snap=com.jarvis.ai.memory.ModelStore.snapshot(this@MainActivity);append("Fișiere vocale: "+snap.installedFiles.joinToString(", ")+"; WakeWord: "+if(snap.wakeReady)"fișiere prezente, nevalidate" else "fișiere lipsă")}})
+  settings.addView(Button(this).apply { text="Verifică încărcarea Whisper / Sherpa";setOnClickListener{
+   if(!busy){busy=true;worker.execute{
+    val result=runCatching{
+     val type=Class.forName("com.xilon.jarvis.SherpaSpeech")
+     val engine=type.getConstructor(android.content.Context::class.java).newInstance(this@MainActivity)
+     try{
+      check(type.getMethod("validateModelLoad").invoke(engine)==true){"Recognizer indisponibil"}
+      "Sherpa: model încărcat în motorul nativ. Transcrierea microfonului rămâne de testat."
+     }finally{(engine as NeuralSpeech).close()}
+    }.getOrElse{"Sherpa: încărcare eșuată: "+(it.cause?.message?:it.message)}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+   }}
+  }})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
