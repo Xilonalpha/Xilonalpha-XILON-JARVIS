@@ -19,7 +19,7 @@ internal object AuxiliaryModelBootstrap {
  private const val TAG="JarvisAuxModels"
  val required:List<ModelCatalog.Entry> get()=
   ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+
-   ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro)
+   ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro,ModelCatalog.silero)
 
  fun launch(context:Context){
   val app=context.applicationContext
@@ -68,7 +68,7 @@ internal object AuxiliaryModelBootstrap {
    entry==ModelCatalog.kokoro -> KokoroArchive.install(context,uri)
    else -> {
     val target=when{
-     entry in ModelCatalog.whisper -> File(context.filesDir,"models/"+entry.file)
+     entry in ModelCatalog.whisper || entry==ModelCatalog.silero -> File(context.filesDir,"models/"+entry.file)
      entry in ModelCatalog.wake -> File(context.filesDir,"models/"+if(entry.file=="hey_jarvis.onnx")"jarvis_wake_word.onnx" else entry.file)
      entry==ModelCatalog.hand -> File(context.filesDir,entry.file)
      else -> error("Unsupported auxiliary model")
