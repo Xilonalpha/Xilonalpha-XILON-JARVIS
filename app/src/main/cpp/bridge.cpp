@@ -34,7 +34,7 @@ struct ModelState {
  ~ModelState(){if(context)llama_free(context);llama_model_free(model);}
 };
 static std::once_flag init;
-static void fail(JNIEnv* e,const char* msg){e->ThrowNew(e->FindClass("java/lang/IllegalStateException"),msg);}
+static void fail(JNIEnv* e,const char* msg){if(e->ExceptionCheck())return;auto cls=e->FindClass("java/lang/IllegalStateException");if(cls){e->ThrowNew(cls,msg);e->DeleteLocalRef(cls);}}
 extern "C" JNIEXPORT jlong JNICALL Java_com_xilon_jarvis_NativeModel_openModel(JNIEnv* e,jobject,jstring path,jint gpuLayers){
  std::call_once(init,[]{llama_backend_init();});
  const char* p=e->GetStringUTFChars(path,nullptr); if(!p)return 0;
@@ -65,7 +65,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_xilon_jarvis_NativeModel_trimContext(
  state->cachedTokens.clear();state->size=0;state->requestedSize=0;
 }
 extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNIEnv* e,jobject self,jlong h,jobjectArray roles,jobjectArray messages,jint threads,jint context,jint maxTokens,jstring grammar){
- auto* state=reinterpret_cast<ModelState*>(h); auto* m=state->model; auto* v=llama_model_get_vocab(m);
+ auto* state=reinterpret_cast<ModelState*>(h);
+ if(!state || !state->model || !roles || !messages || !grammar || threads<1 || maxTokens<1){fail(e,"Invalid inference arguments");return nullptr;}
+ auto* m=state->model; auto* v=llama_model_get_vocab(m);
+ if(!v){fail(e,"Missing model vocabulary");return nullptr;}
  // Report native phases before the first generated token. Otherwise Android
  // cannot distinguish long prompt evaluation from a deadlocked backend.
  auto* stageClass=e->GetObjectClass(self);
@@ -91,11 +94,14 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  for(int i=0;i<count;i++){
   auto r=static_cast<jstring>(e->GetObjectArrayElement(roles,i));
   auto a=static_cast<jbyteArray>(e->GetObjectArrayElement(messages,i));
+  if(e->ExceptionCheck())return nullptr;
+  if(!r || !a){fail(e,"Invalid conversation message");return nullptr;}
   const char* rp=e->GetStringUTFChars(r,nullptr); if(!rp)return nullptr;
   role[i]=rp;e->ReleaseStringUTFChars(r,rp);
   body[i].resize(e->GetArrayLength(a));
   e->GetByteArrayRegion(a,0,body[i].size(),reinterpret_cast<jbyte*>(body[i].data()));
   e->DeleteLocalRef(r);e->DeleteLocalRef(a);
+  if(e->ExceptionCheck())return nullptr;
   chat[i]={role[i].c_str(),body[i].c_str()};
  }
  const char* tmpl=llama_model_chat_template(m,nullptr);
@@ -154,6 +160,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  batchSize=std::min<int>(state->size,64);
  // Reuse only an exact token prefix. Always evaluate at least the final prompt token for fresh logits.
  auto* memory=llama_get_memory(ctx);
+ if(!memory){fail(e,"Model context has no reusable attention memory");return nullptr;}
  int reused=0;
  while(reused<n-1 && reused<(int)state->cachedTokens.size() && tokens[reused]==state->cachedTokens[reused])++reused;
  if(reused==0 || llama_memory_seq_pos_min(memory,0)!=0 ||
@@ -266,12 +273,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  }
  publishStage("Generez primul token...");
  bool generationCancelled=false;
+ std::vector<char> piece(128);
  for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck()){generationCancelled=true;break;}
   const auto t=llama_sampler_sample(sampler,ctx,-1);
   // llama_sampler_sample already accepts the token; do not advance grammar twice.
   if(llama_vocab_is_eog(v,t))break;
-  std::vector<char> piece(128);int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
+  int len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);
   if(len<0){piece.resize(-len);len=llama_token_to_piece(v,t,piece.data(),piece.size(),0,false);}
   if(len<0){ok=false;break;}out.append(piece.data(),len);
   e->CallVoidMethod(self,tokenEvent);if(e->ExceptionCheck()){ok=false;break;}
