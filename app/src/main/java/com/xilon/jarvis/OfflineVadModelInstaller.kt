@@ -10,6 +10,7 @@ import java.io.InputStream
  */
 internal object OfflineVadModelInstaller {
  const val MAX_BYTES=32L*1024*1024
+ private val publishLock=Any()
  fun install(source:InputStream,destination:File):Long {
   require(!destination.exists()){"Model already exists"}
   val parent=destination.parentFile ?: throw IOException("Missing model directory")
@@ -31,8 +32,10 @@ internal object OfflineVadModelInstaller {
     output.fd.sync()
    }
    if(copied==0L)throw IOException("Empty ONNX model")
-   if(destination.exists())throw IOException("Model installed concurrently")
-   if(!temporary.renameTo(destination))throw IOException("Cannot finalize ONNX model")
+   synchronized(publishLock){
+    if(destination.exists())throw IOException("Model installed concurrently")
+    if(!temporary.renameTo(destination))throw IOException("Cannot finalize ONNX model")
+   }
    return copied
   }finally{temporary.delete()}
  }
