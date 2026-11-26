@@ -43,6 +43,24 @@ class RealtimeVoiceTurnTest {
   assertTrue(turn.offer(id,"prietene."))
   assertEquals("Salut prietene.",turn.poll(id))
  }
+ @Test fun cumulativeSnapshotsDoNotRepeatSpokenWords(){
+  val turn=RealtimeVoiceTurn(minChunkChars=5)
+  val id=turn.start()
+  assertTrue(turn.offerSnapshot(id,"Buna ziua."))
+  assertEquals("Buna ziua.",turn.poll(id))
+  assertTrue(turn.offerSnapshot(id,"Buna ziua."))
+  assertNull(turn.poll(id))
+  assertTrue(turn.offerSnapshot(id,"Buna ziua. Cu ce te ajut?"))
+  assertEquals("Cu ce te ajut?",turn.poll(id))
+ }
+ @Test fun rewrittenSnapshotCancelsTurnRatherThanSpeakingContradictions(){
+  val turn=RealtimeVoiceTurn(minChunkChars=5)
+  val id=turn.start()
+  assertTrue(turn.offerSnapshot(id,"Salut prietene."))
+  assertFalse(turn.offerSnapshot(id,"Buna prietene."))
+  assertFalse(turn.isCurrent(id))
+  assertNull(turn.poll(id))
+ }
  @Test fun resetInvalidatesPreviousGeneration(){
   val turn=RealtimeVoiceTurn(minChunkChars=4)
   val first=turn.start()

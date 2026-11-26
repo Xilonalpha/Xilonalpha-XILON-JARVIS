@@ -15,10 +15,31 @@ internal class RealtimeVoiceTurn(
  private var active=false
  private val speech=RealtimeSpeechBuffer(minChunkChars,maxChunkChars)
  private val queue=ArrayDeque<String>()
+ private var previousSnapshot=""
+ /**
+  * Native onProgress currently emits cumulative text, not token deltas.
+  * Convert snapshots to deltas without replaying already spoken words.
+  * A rewritten/non-prefix snapshot invalidates the turn rather than
+  * speaking contradictory content.
+  */
+ @Synchronized fun offerSnapshot(id:Long,snapshot:String):Boolean {
+  if(!active || id!=generation)return false
+  if(snapshot==previousSnapshot)return true
+  if(!snapshot.startsWith(previousSnapshot)){
+   interrupt()
+   return false
+  }
+  val delta=snapshot.substring(previousSnapshot.length)
+  if(!offer(id,delta))return false
+  previousSnapshot=snapshot
+  return true
+ }
+
  @Synchronized fun start():Long {
   generation++
   active=true
   queue.clear()
+  previousSnapshot=""
   speech.reset()
   return generation
  }
@@ -53,6 +74,7 @@ internal class RealtimeVoiceTurn(
   generation++
   active=false
   queue.clear()
+  previousSnapshot=""
   speech.cancel()
   return generation
  }
