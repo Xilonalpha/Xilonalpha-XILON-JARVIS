@@ -16,16 +16,19 @@ import java.util.concurrent.atomic.AtomicLong
 class PiperRomanianVoice(context:Context):NeuralVoice {
  private val app=context.applicationContext
  private val root=File(app.filesDir,"models/romanian")
- private val model=File(root,"ro_RO-liana-medium.onnx")
+ private val mihai=File(root,"mihai")
+ private fun useMihai()=File(mihai,"ro_RO-mihai-medium.onnx").isFile
+ private val model:File get()=if(useMihai())File(mihai,"ro_RO-mihai-medium.onnx") else File(root,"ro_RO-liana-medium.onnx")
  private val config=File(root,"ro_RO-liana-medium.onnx.json")
- private val tokens=File(root,"tokens.txt")
+ private val tokens:File get()=if(useMihai())File(mihai,"tokens.txt") else File(root,"tokens.txt")
  private val espeak=File(app.filesDir,"kokoro/espeak-ng-data")
  private val alternateEspeak=File(root,"espeak-ng-data")
- private fun phonemeData():File?=listOf(alternateEspeak,espeak).firstOrNull{it.isDirectory && it.list()?.isNotEmpty()==true}
+ private val mihaiEspeak=File(mihai,"espeak-ng-data")
+ private fun phonemeData():File?=listOf(mihaiEspeak,alternateEspeak,espeak).firstOrNull{it.isDirectory && it.list()?.isNotEmpty()==true}
  private val executor=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
  @Volatile private var track:AudioTrack?=null
- override fun installed()=model.isFile && model.length()>0 && config.isFile && config.length()>0 && tokens.isFile && tokens.length()>0 && phonemeData()!=null
+ override fun installed()=model.isFile && model.length()>0 && (useMihai() || (config.isFile && config.length()>0)) && tokens.isFile && tokens.length()>0 && phonemeData()!=null
  override fun speak(text:String){speakTracked(text){}}
  override fun speakTracked(text:String,done:(String?)->Unit){
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}

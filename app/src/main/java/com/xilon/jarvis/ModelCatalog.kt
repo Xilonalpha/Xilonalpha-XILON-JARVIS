@@ -27,6 +27,7 @@ object ModelCatalog {
   else->error("Componentă streaming necunoscută")
  }
  /** Romanian Piper voice: weights and JSON must be installed together. */
+ val mihai=Entry("Mihai RO Medium • Piper complet","Sherpa-ONNX TTS română • model VITS + tokens + eSpeak","k2-fsa/sherpa-onnx","vits-piper-ro_RO-mihai-medium.tar.bz2",90,directUrl="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ro_RO-mihai-medium.tar.bz2")
  val romanianVoice=listOf(
   Entry("Liana RO Medium • ONNX","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx",64),
   Entry("Liana RO Medium • config","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx.json",1)

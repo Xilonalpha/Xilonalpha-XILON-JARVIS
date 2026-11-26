@@ -1466,6 +1466,28 @@ class MainActivity : androidx.activity.ComponentActivity() {
      "\\nVocea română Android offline rămâne disponibilă prin motorul TTS al sistemului, dacă este instalată.")
     .setPositiveButton("Închide",null).show()
   }})
+  settings.addView(Button(this).apply{text="Piper Mihai RO • descarcă și instalează";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val entry=ModelCatalog.mihai
+   val downloads=ModelDownloads(this@MainActivity)
+   val uri=downloads.uri(entry)
+   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Mihai RO • Piper Sherpa")
+    .setMessage("Pachet complet Sherpa-ONNX: model, tokens și date eSpeak. "+downloads.status(entry)+"\\nFuncționează exclusiv offline după instalare.")
+   if(uri!=null)dialog.setPositiveButton("Instalează"){_,_->if(!busy){busy=true;worker.execute{
+    val result=runCatching{
+     val ref=downloads.reference(entry)
+     ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm)
+     RomanianPiperArchive.install(this@MainActivity,uri)
+     "Mihai RO instalat. Activează Voce neuronală RO Piper."
+    }.getOrElse{"Instalare Piper RO eșuată: "+it.message}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+   }}}
+   else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
+    val result=runCatching{downloads.start(entry);"Descărcare Mihai RO pornită."}.getOrElse{"Descărcare eșuată: "+it.message}
+    runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+   }}}
+   dialog.setNegativeButton("Închide",null).show()
+  }})
   settings.addView(Button(this).apply{text="Catalog modele românești • STT și TTS";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.romanianModels
