@@ -31,9 +31,6 @@ if(XILON_VULKAN)
   message(FATAL_ERROR "SPIR-V headers missing: expected spirv/unified1/spirv.hpp under XILON_VULKAN_HEADERS_INCLUDE")
  endif()
  target_include_directories(ggml-vulkan BEFORE PRIVATE "${XILON_VULKAN_HEADERS_INCLUDE}")
- # Use Vulkan-Hpp dynamic dispatch instead of linking Vulkan 1.1 entry points
- # that Android API 26 libvulkan.so does not export (e.g. vkGetPhysicalDeviceFeatures2).
- target_compile_definitions(ggml-vulkan PRIVATE VK_NO_PROTOTYPES)
 endif()
 add_library(xilon_llama SHARED bridge.cpp)
 target_compile_features(xilon_llama PRIVATE cxx_std_17)
