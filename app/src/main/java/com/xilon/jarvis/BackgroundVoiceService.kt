@@ -46,7 +46,7 @@ class BackgroundVoiceService:Service(){
  private val initiativeDelay=600000L
  override fun onBind(intent:Intent?):IBinder?=null
  override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
-  if(intent?.action==ACTION_STOP){stopSelf();return START_NOT_STICKY}
+  if(intent?.action==ACTION_STOP){running.set(false);stopSelf();return START_NOT_STICKY}
   if(intent?.action==ACTION_INITIATIVE_ON){initiative=true;lastInteraction=SystemClock.elapsedRealtime();return START_NOT_STICKY}
   if(intent?.action==ACTION_INITIATIVE_OFF){initiative=false;return START_NOT_STICKY}
   if(intent?.action!=ACTION_START)return START_NOT_STICKY
@@ -98,10 +98,7 @@ class BackgroundVoiceService:Service(){
         manager.notify(NOTIFICATION_ID,notification("JARVIS răspunde local"))
         val voice=piper
         if(voice!=null){
-         val done=CountDownLatch(1)
-         voice.speakTracked(answer){done.countDown()}
-         done.await(40,TimeUnit.SECONDS)
-         voice.stop()
+         speakUntilStopped(voice,answer)
         }
        }
       }
@@ -118,10 +115,7 @@ class BackgroundVoiceService:Service(){
        if(running.get() && initiative && message.isNotBlank()){
         manager.notify(NOTIFICATION_ID,notification("JARVIS inițiază conversația"))
         piper?.let{voice->
-         val done=CountDownLatch(1)
-         voice.speakTracked(message){done.countDown()}
-         done.await(40,TimeUnit.SECONDS)
-         voice.stop()
+         speakUntilStopped(voice,message)
         }
        }
       }
@@ -131,6 +125,7 @@ class BackgroundVoiceService:Service(){
    }catch(e:Exception){
     if(running.get())manager.notify(NOTIFICATION_ID,notification("ASR indisponibil: "+(e.message?:"model lipsă").take(80)))
    }finally{
+    running.set(false)
     runCatching{engine?.close()};engine=null
     runCatching{model?.close()};model=null
     runCatching{piper?.stop()};piper=null
@@ -138,6 +133,17 @@ class BackgroundVoiceService:Service(){
    }
   }
   return START_NOT_STICKY
+ }
+ private fun speakUntilStopped(voice:NeuralVoice,text:String){
+  if(!running.get())return
+  val done=CountDownLatch(1)
+  val deadline=SystemClock.elapsedRealtime()+40000L
+  try{
+   voice.speakTracked(text){done.countDown()}
+   while(running.get() && SystemClock.elapsedRealtime()<deadline){
+    if(done.await(100,TimeUnit.MILLISECONDS))break
+   }
+  }finally{voice.stop()}
  }
  private fun inferenceThreads():Int{
   val info=android.app.ActivityManager.MemoryInfo()
