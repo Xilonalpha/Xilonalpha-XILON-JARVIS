@@ -17,7 +17,7 @@ internal class NeuralSpeechGate(
    consecutive=0
    return false
   }
-  consecutive=if(probability>=threshold)consecutive+1 else 0
+  consecutive=if(probability>=threshold) minOf(consecutiveFrames,consecutive+1) else 0
   return consecutive>=consecutiveFrames
  }
  fun reset(){consecutive=0}
