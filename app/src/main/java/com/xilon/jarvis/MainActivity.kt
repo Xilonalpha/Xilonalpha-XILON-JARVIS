@@ -536,6 +536,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
    else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
   }})
+  settings.addView(Button(this).apply { text="Alege vocea română Piper";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val prefs=getSharedPreferences("piper_voice",MODE_PRIVATE)
+   val speakers=listOf("auto","mihai","liana")
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Voce română Piper")
+    .setSingleChoiceItems(arrayOf("Automat","Mihai","Liana"),speakers.indexOf(prefs.getString("speaker","auto"))){dialog,index->
+     stopAllSpeech()
+     prefs.edit().putString("speaker",speakers[index]).apply()
+     dialog.dismiss()
+     if(!activateInstalledRomanianVoice()){
+      romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF"
+      append("Instalează pachetul Mihai. Pentru Liana instalează și cele două fișiere Liana din catalogul românesc.")
+     }
+    }.show()
+  }})
   settings.addView(Button(this).apply { text="Testează vocea română Piper";setOnClickListener{
    if(busy)return@setOnClickListener
    val v=NeuralVoiceFactory.romanian(this@MainActivity)
@@ -1698,7 +1713,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val streaming=java.io.File(filesDir,"models/streaming-asr")
    val transducer=listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all{java.io.File(streaming,it).isFile}
    val androidTtsStatus=if(voice.romanianVoiceAvailable())"Voce offline disponibilă și conectată" else "Nicio voce offline activă; instalează o voce română în Android"
-   val lianaStatus=if(liana)"Fișiere instalate; compatibilitatea cu Piper nu este validată" else "Fișiere lipsă"
+   val lianaStatus=if(liana)"Model și configurație prezente; vocea necesită și datele eSpeak" else "Fișiere lipsă"
    val message="TTS română Android: "+androidTtsStatus+"\nLiana RO: "+lianaStatus
    val piperRuntime=NeuralVoiceFactory.romanian(this@MainActivity)?.installed()==true
    val status=message+"\nPiper RO complet: "+(if(piperRuntime)"Fișiere necesare prezente; testează inferența" else "Nu este pregătit pentru inferență")
@@ -1746,7 +1761,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         if(target.isFile && runCatching{ModelIntegrity.verify(target.inputStream(),ref.sha256,ref.bytes,ref.algorithm)}.isSuccess)"Fișier deja instalat și verificat."
         else{
          check(temp.renameTo(target)||(target.delete()&&temp.renameTo(target))){"Nu pot finaliza instalarea"}
-         "Fișier instalat și verificat în models/romanian. Integrarea în motorul vocal necesită adaptor compatibil."
+         "Fișier instalat și verificat în models/romanian. Consultă diagnosticul vocal pentru disponibilitatea motorului."
         }
        }finally{temp.delete()}
       }.getOrElse{"Instalare eșuată: "+it.message}

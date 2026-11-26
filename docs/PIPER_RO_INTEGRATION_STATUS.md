@@ -1,23 +1,7 @@
-# Piper Romanian integration status
+# Romanian Piper voices
 
-PiperRomanianVoice is now wired into the existing NeuralVoice UI and playback path.
-Sherpa-ONNX VITS generation and Android AudioTrack output are implemented, but the
-Liana model must not be reported as ready unless its dependencies are installed.
+Install the Mihai package from OMEGA Model Center for Romanian VITS weights, tokens and eSpeak data. To use Liana, install its ONNX and JSON entries from the Romanian catalog and select Liana under “Alege vocea română Piper”. Choosing “Automat” prefers the complete Mihai package. Liana can also use Romanian eSpeak data from Kokoro or models/romanian/espeak-ng-data.
 
-Expected files:
-- files/models/romanian/ro_RO-liana-medium.onnx
-- files/models/romanian/ro_RO-liana-medium.onnx.json
-- files/models/romanian/tokens.txt
-- files/models/romanian/espeak-ng-data/ (or files/kokoro/espeak-ng-data/)
+On first synthesis the speech worker verifies the two pinned Liana sources and builds an app-private Sherpa-compatible copy and token table. Allow about 64 MB for that extra copy. Later utterances reuse it. The original download remains intact. The packaged 129-byte protobuf metadata resource adds the VITS model type, Piper comment, Romanian language, ro voice, eSpeak availability, one speaker and 22050 Hz sample rate to the ONNX graph. The phoneme IDs come from the downloaded voice configuration.
 
-The existing model catalog currently downloads only ONNX and JSON. The required
-Sherpa-compatible tokens.txt and eSpeak data are not yet offered as verified
-downloads. The model's compatibility with Sherpa's VITS phoneme IDs has not been
-verified on a physical Android device. Until that is addressed, the UI must refuse
-activation and the Android offline TTS engine remains the fallback.
-
-The Whisper RO Transformers.js ONNX export likewise still requires a compatible
-decoder/tokenizer and is not yet wired into the native Sherpa ASR inference path.
-
-Validation: run :app:testDebugUnitTest :app:assembleDebug and the Sherpa Android
-workflow, then perform on-device inference with Romanian sentences and cancellation.
+Sherpa-ONNX 1.12.38 produced audio on a Linux CPU from the official Mihai archive and the converted Liana model. Android playback, voice switching, interruptions and microphone echo still require device tests.

@@ -7,8 +7,8 @@ object ModelCatalog {
  Entry("SmolLM2 360M","Conversație ușoară","bartowski/SmolLM2-360M-Instruct-GGUF","SmolLM2-360M-Instruct-Q4_K_M.gguf",271),
  Entry("Qwen 2.5 1.5B","Asistent și agenți","bartowski/Qwen2.5-1.5B-Instruct-GGUF","Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",986),
  Entry("Qwen 2.5 Coder 1.5B","Programare","bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF","Qwen2.5-Coder-1.5B-Instruct-Q4_K_M.gguf",986),
- Entry("Qwen3 0.6B Q4","Conversație multilingvă și comenzi rapide; model compact","tensorblock/Qwen_Qwen3-0.6B-GGUF","Qwen3-0.6B-Q4_K_M.gguf",484),
- Entry("Qwen3 1.7B Q4","Raționament și planificare; necesită RAM disponibilă suplimentară","tensorblock/Qwen_Qwen3-1.7B-GGUF","Qwen3-1.7B-Q4_K_M.gguf",1282)
+ Entry("Qwen3 0.6B Q4","Conversație multilingvă și comenzi rapide; model compact","unsloth/Qwen3-0.6B-GGUF","Qwen3-0.6B-Q4_K_M.gguf",397,"50968a4468ef4233ed78cd7c3de230dd1d61a56b"),
+ Entry("Qwen3 1.7B Q4","Raționament și planificare; necesită RAM disponibilă suplimentară","unsloth/Qwen3-1.7B-GGUF","Qwen3-1.7B-Q4_K_M.gguf",1108,"d7f544eead698dbd1f15126ef60b45a1e1933222")
  )
  val ocr=listOf("ron","eng").map{lang->Entry("OCR "+lang,"Tesseract","lm-kit/tessdata-fast","$lang.traineddata",5,"83ff76b97461395f257255720bf7f3957606dbb5")}
  val whisper=listOf("tiny-encoder.int8.onnx" to 13L,"tiny-decoder.int8.onnx" to 90L,"tiny-tokens.txt" to 1L).map{(file,mb)->Entry(file,"Whisper Tiny multilingv • ASR română prin Sherpa","csukuangfj/sherpa-onnx-whisper-tiny",file,mb,"65176e2")}
@@ -31,8 +31,8 @@ object ModelCatalog {
  /** Romanian Piper voice: weights and JSON must be installed together. */
  val mihai=Entry("Mihai RO Medium • Piper complet","Sherpa-ONNX TTS română • model VITS + tokens + eSpeak","k2-fsa/sherpa-onnx","vits-piper-ro_RO-mihai-medium.tar.bz2",90,directUrl="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ro_RO-mihai-medium.tar.bz2")
  val romanianVoice=listOf(
-  Entry("Liana RO Medium • ONNX","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx",64),
-  Entry("Liana RO Medium • config","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx.json",1)
+  Entry("Liana RO Medium • ONNX","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx",64,"acfc14ae87bb4c124947f0cb7ee0023ffceb0005"),
+  Entry("Liana RO Medium • config","Piper TTS română • CC BY-NC 4.0","eduardem/piper-liana-romanian","voices/liana-medium/ro_RO-liana-medium.onnx.json",1,"acfc14ae87bb4c124947f0cb7ee0023ffceb0005")
  )
  /** Transformers.js Whisper export, not directly loadable by Sherpa-ONNX. */
  val romanianRecognition=listOf(

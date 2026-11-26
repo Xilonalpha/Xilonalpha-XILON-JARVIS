@@ -17,14 +17,17 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private val app=context.applicationContext
  private val root=File(app.filesDir,"models/romanian")
  private val mihai=File(root,"mihai")
- private fun useMihai()=File(mihai,"ro_RO-mihai-medium.onnx").isFile && File(mihai,"tokens.txt").isFile && File(mihai,"espeak-ng-data").isDirectory
- private val model:File get()=if(useMihai())File(mihai,"ro_RO-mihai-medium.onnx") else File(root,"ro_RO-liana-medium.onnx")
- private val config=File(root,"ro_RO-liana-medium.onnx.json")
- private val tokens:File get()=if(useMihai())File(mihai,"tokens.txt") else File(root,"tokens.txt")
- private val espeak=File(app.filesDir,"kokoro/espeak-ng-data")
- private val alternateEspeak=File(root,"espeak-ng-data")
- private val mihaiEspeak=File(mihai,"espeak-ng-data")
- private fun phonemeData():File?=listOf(mihaiEspeak,alternateEspeak,espeak).firstOrNull{it.isDirectory && it.list()?.isNotEmpty()==true}
+ private fun mihaiReady() = listOf("ro_RO-mihai-medium.onnx","tokens.txt","espeak-ng-data/phondata").all {
+  File(mihai,it).let { file -> file.isFile && file.length()>0 }
+ }
+ private fun lianaData() = listOf(File(root,"espeak-ng-data"),File(mihai,"espeak-ng-data"),File(app.filesDir,"kokoro/espeak-ng-data"))
+  .firstOrNull { File(it,"phondata").length()>0 && File(it,"ro_dict").length()>0 }
+ private fun lianaReady() = LianaVoicePackage.sourcesPresent(root) && lianaData()!=null
+ private fun useLiana() = when(app.getSharedPreferences("piper_voice",Context.MODE_PRIVATE).getString("speaker","auto")){
+  "liana" -> true
+  "mihai" -> false
+  else -> !mihaiReady()
+ }
  private val executor=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
  // Worker-owned cache: never release native inference while generation is active.
@@ -32,14 +35,18 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private var cachedKey:String?=null
  private fun releaseCached(){runCatching{cachedTts?.release()};cachedTts=null;cachedKey=null}
  private fun runtime():OfflineTts {
-  val m=model;val t=tokens;val d=checkNotNull(phonemeData()){"Lipsesc datele eSpeak"}
+  val liana=useLiana()
+  val dir=if(liana)LianaVoicePackage.prepare(root){app.assets.open("liana-sherpa-metadata.pb")} else mihai
+  val m=File(dir,if(liana)"model.onnx" else "ro_RO-mihai-medium.onnx")
+  val t=File(dir,"tokens.txt")
+  val d=if(liana)checkNotNull(lianaData()){"Lipsesc datele eSpeak"} else File(mihai,"espeak-ng-data")
   val key=listOf(m.absolutePath,m.lastModified().toString(),m.length().toString(),t.absolutePath,t.lastModified().toString(),d.absolutePath).joinToString("|")
   if(cachedKey==key)cachedTts?.let{return it}
   releaseCached()
   return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(vits=OfflineTtsVitsModelConfig(model=m.absolutePath,tokens=t.absolutePath,dataDir=d.absolutePath),numThreads=localTtsThreadBudget(app)))).also{cachedTts=it;cachedKey=key}
  }
  @Volatile private var track:AudioTrack?=null
- override fun installed()=model.isFile && model.length()>0 && (useMihai() || (config.isFile && config.length()>0)) && tokens.isFile && tokens.length()>0 && phonemeData()!=null
+ override fun installed()=if(useLiana())lianaReady() else mihaiReady()
  override fun speak(text:String){speakTracked(text){}}
  override fun speakTracked(text:String,done:(String?)->Unit){
   if(text.isBlank()){done(null);return}
