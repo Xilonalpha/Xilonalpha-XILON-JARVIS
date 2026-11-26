@@ -1328,7 +1328,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
       val ref=downloads.reference(entry)
       val temp=java.io.File.createTempFile("wake-", ".part",root)
       try{contentResolver.openInputStream(uri)?.use{src->temp.outputStream().use{dst->val buf=ByteArray(65536);var total=0L;while(true){val n=src.read(buf);if(n<0)break;total+=n;require(total<=ref.bytes);dst.write(buf,0,n)}}} ?: error("Fișier inaccesibil")
-       ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm);check(temp.renameTo(target));"Componentă instalată; inferență neverificată."
+       ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+       if(target.isFile){
+        if(runCatching{ModelIntegrity.verify(target.inputStream(),ref.sha256,ref.bytes,ref.algorithm)}.isSuccess){
+         "Componentă deja instalată și verificată."
+        }else{
+         check(target.delete()){"Nu pot înlocui modelul existent"}
+         check(temp.renameTo(target)){"Nu pot finaliza instalarea"}
+         "Componentă reinstalată și verificată; inferență neverificată."
+        }
+       }else{
+        check(temp.renameTo(target)){"Nu pot finaliza instalarea"}
+        "Componentă instalată și verificată; inferență neverificată."
+       }
       }finally{temp.delete()}
      }.getOrElse{"Import eșuat: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
