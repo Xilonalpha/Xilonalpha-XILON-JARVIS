@@ -344,6 +344,10 @@ class SpeechToTextEngine(context: Context) : Closeable {
         var totalSamples = 0
         var zeroReads = 0
         var emptyReads = 0
+        val vadFile = File(modelDirectory, "silero_vad.onnx")
+        var neuralVad = if (vadFile.isFile) runCatching {
+            com.xilon.jarvis.SileroVad16k(vadFile)
+        }.onFailure { android.util.Log.w("XilonASR", "Silero unavailable; using energy VAD", it) }.getOrNull() else null
         val aec=runCatching { if(android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId) else null }.getOrNull()
         val ns=runCatching { if(android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId) else null }.getOrNull()
         try {
@@ -374,11 +378,17 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 for (sample in chunk) power += sample * sample
                 val rms = sqrt(power / count).toFloat()
                 val threshold = SPEECH_RMS_THRESHOLD
+                val voiced = neuralVad?.let { vad ->
+                    try { vad.accept(pcm, count) } catch (e: Exception) {
+                        android.util.Log.w("XilonASR", "Silero inference failed; using energy VAD", e)
+                        runCatching { vad.close() }; neuralVad = null; rms >= threshold
+                    }
+                } ?: (rms >= threshold)
                 if (rms > peakSpeechRms) peakSpeechRms = rms
                 if (!started) {
                     preRoll.addLast(chunk)
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
-                    if (rms >= threshold) {
+                    if (voiced) {
                         started = true
                         voicedSamples += count
                         preRoll.forEach { appendSamples(it) }
@@ -387,13 +397,14 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     }
                 } else {
                     appendSamples(chunk)
-                    if (rms >= threshold) { silentSamples = 0; voicedSamples += count } else silentSamples += count
+                    if (voiced) { silentSamples = 0; voicedSamples += count } else silentSamples += count
                     // A long utterance can contain brief natural pauses. Avoid
                     // ending on a weak trailing frame until speech has been heard.
                     if (silentSamples >= SILENCE_SAMPLES && voicedSamples >= MIN_VOICED_SAMPLES) break
                 }
             }
         } finally {
+            runCatching { neuralVad?.close() }
             runCatching { recorder.stop() }
             runCatching { aec?.release() }
             runCatching { ns?.release() }
@@ -402,7 +413,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
 
         // Reject transient clicks and playback leakage shorter than 180 ms.
-        if (closed || captureCancelled || epoch != cancellationEpoch.get() || !started || voicedSamples < MIN_VOICED_SAMPLES || peakSpeechRms < SPEECH_RMS_THRESHOLD || capturedCount == 0) return FloatArray(0)
+        if (closed || captureCancelled || epoch != cancellationEpoch.get() || !started || voicedSamples < MIN_VOICED_SAMPLES || capturedCount == 0) return FloatArray(0)
         return captured.copyOf(capturedCount)
     }
 
