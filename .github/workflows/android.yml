@@ -81,8 +81,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Ubuntu runners may not expose universe packages by default.
+          # Install reproducible build tools from a supported Ubuntu repository.
+          sudo add-apt-repository -y universe
           sudo apt-get update
-          sudo apt-get install -y glslc libvulkan-dev spirv-headers
+          sudo apt-get install -y --no-install-recommends glslc libvulkan-dev spirv-headers
+          command -v glslc
+          dpkg-query -W glslc libvulkan-dev spirv-headers
           config="$(find /usr -type f \( -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv-headers-config.cmake' \) -print -quit 2>/dev/null || true)"
           if [[ -z "$config" ]]; then
             git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git "$RUNNER_TEMP/SPIRV-Headers"
@@ -119,6 +124,15 @@ jobs:
           test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/spirv/unified1/spirv.hpp"
           echo "XILON_VULKAN_HEADERS_INCLUDE=$RUNNER_TEMP/xilon-vulkan-sdk/include" >> "$GITHUB_ENV"
           glslc --version
+      - name: Verify native Vulkan toolchain before Gradle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$XILON_VULKAN_HEADERS_INCLUDE/vulkan/vulkan.hpp"
+          test -s "$XILON_VULKAN_HEADERS_INCLUDE/vk_video/vulkan_video_codec_av1std.h"
+          test -s "$XILON_VULKAN_HEADERS_INCLUDE/spirv/unified1/spirv.hpp"
+          test -f "$XILON_SPIRV_HEADERS_DIR/SPIRV-HeadersConfig.cmake" || test -f "$XILON_SPIRV_HEADERS_DIR/spirv-headers-config.cmake"
+          command -v glslc
       - name: Test and build unified JARVIS APK (VLM + Vulkan)
         shell: bash
         run: |

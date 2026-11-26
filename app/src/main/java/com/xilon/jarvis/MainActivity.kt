@@ -69,6 +69,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     },{error->
      cachedNeural=null
      val failedEngine=engine
+     // Queue disposal after the current capture has returned.
      speechWorker.execute{runCatching{failedEngine?.close()}}
      voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
      modelStatus.text="Eroare Sherpa: "+error.message

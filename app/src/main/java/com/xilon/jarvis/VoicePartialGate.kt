@@ -11,6 +11,7 @@ internal class VoicePartialGate(private val intervalMs:Long=180L) {
   val value=text.trim()
   if(value.isEmpty() || value==previous)return false
   if(lastAt!=Long.MIN_VALUE && nowMs>=lastAt && nowMs-lastAt<intervalMs)return false
+  // A clock reset must not permanently suppress all future partials.
   previous=value
   lastAt=nowMs
   return true

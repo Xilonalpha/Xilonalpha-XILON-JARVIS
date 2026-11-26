@@ -13,6 +13,11 @@ class VoicePartialGateTest {
   assertFalse(gate.shouldPublish("salut",1500))
   assertTrue(gate.shouldPublish("salut Jarvis",1510))
  }
+ @Test fun clockRollbackDoesNotBlockPartials(){
+  val gate=VoicePartialGate()
+  assertTrue(gate.shouldPublish("primul",5000))
+  assertTrue(gate.shouldPublish("al doilea",100))
+ }
  @Test fun resetAllowsNewSession(){
   val gate=VoicePartialGate()
   assertFalse(gate.shouldPublish(" ",0))

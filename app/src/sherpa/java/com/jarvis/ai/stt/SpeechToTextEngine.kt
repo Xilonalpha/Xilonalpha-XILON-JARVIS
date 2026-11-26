@@ -55,7 +55,12 @@ class SpeechToTextEngine(context: Context) : Closeable {
     /** Actually constructs the native recognizer; file presence alone is not readiness. */
     fun validateModelLoad(): Boolean {
         check(!closed) { "Speech engine closed" }
-        ensureRecognizer()
+        kotlinx.coroutines.runBlocking {
+            operationMutex.withLock {
+                check(!closed) { "Speech engine closed" }
+                if (ensureOnlineRecognizer() == null) ensureRecognizer()
+            }
+        }
         return true
     }
 
@@ -102,11 +107,17 @@ class SpeechToTextEngine(context: Context) : Closeable {
     override fun close() {
         closed = true
         stopCapture()
-        activeRecorder = null
-        runCatching { recognizer?.release() }
-        recognizer = null
-        runCatching { onlineRecognizer?.release() }
-        onlineRecognizer = null
+        // JNI recognizers must not be released while decode() is using them.
+        // The engine is closed by the dedicated speech worker after listen returns.
+        kotlinx.coroutines.runBlocking {
+            operationMutex.withLock {
+                activeRecorder = null
+                runCatching { recognizer?.release() }
+                recognizer = null
+                runCatching { onlineRecognizer?.release() }
+                onlineRecognizer = null
+            }
+        }
     }
 
     /**
@@ -202,7 +213,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 for (i in 0 until n) normalizedFrame[i] = pcm[i] / 32768.0f
                 // Normal 100-ms reads reuse the same array rather than allocating every frame.
                 stream.acceptWaveform(if (n == normalizedFrame.size) normalizedFrame else normalizedFrame.copyOf(n), SAMPLE_RATE)
-                while (!captureCancelled && !closed && online.isReady(stream)) {
+                while (!captureCancelled && !closed && epoch == cancellationEpoch.get() && online.isReady(stream)) {
                     online.decode(stream)
                 }
                 if (captureCancelled || closed || epoch != cancellationEpoch.get()) break
