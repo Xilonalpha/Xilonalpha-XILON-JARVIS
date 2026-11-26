@@ -858,16 +858,25 @@ class MainActivity : androidx.activity.ComponentActivity() {
        inferenceHandler.removeCallbacks(slowInferenceNotice)
        if(!isDestroyed) {
         busy=false
+        val lastStreamSnapshot=streamingBubble.text.toString().removePrefix("JARVIS: ")
         streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
         archiveMessage(streamingBubble.text.toString())
         if(nativeModel?.isCancelled()!=true){
          if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
           // Final output can differ from streaming snapshots (e.g. reflection).
           // Never voice an unverified revision after speaking an earlier draft.
-          if(!streamingSpeechStarted || answer.startsWith(streamingBubble.text.toString().removePrefix("JARVIS: "))){
+          if(!streamingSpeechStarted || answer.startsWith(lastStreamSnapshot)){
+           // Include final tokens not yet delivered through onProgress.
+           if(lastStreamSnapshot.isNotBlank() && answer.startsWith(lastStreamSnapshot))
+            voiceStream.offerSnapshot(voiceStreamId,answer)
            voiceStream.finish(voiceStreamId)
            drainSpeechChunks()
-          }else voiceStream.interrupt()
+           if(streamingSpeechStarted)voice.finishStream()?.let{append(it)}
+          }else {
+           voiceStream.interrupt()
+           // The final answer was revised: do not append conflicting audio.
+           if(streamingSpeechStarted)stopAllSpeech()
+          }
           if(!streamingSpeechStarted)speakReply(answer)
          }else if(!streamingSpeechStarted)speakReply(answer)
         }else voiceStream.interrupt()

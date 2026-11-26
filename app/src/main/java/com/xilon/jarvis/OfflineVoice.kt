@@ -60,6 +60,16 @@ class OfflineVoice(context: Context) : AutoCloseable {
   }
   return null
  }
+ /** Mark the end of a streaming turn after all queued audio has played. */
+ fun finishStream():String? {
+  if(!streaming || closed)return null
+  val id="xilon-stream-$generation-${streamSequence++}-end"
+  if(tts.playSilentUtterance(1L,TextToSpeech.QUEUE_ADD,id)!=TextToSpeech.SUCCESS){
+   stop()
+   return "Nu am putut finaliza redarea vocală."
+  }
+  return null
+ }
  fun stop(){ generation++;streaming=false;if(!closed)tts.stop();onSpeaking(false) }
  override fun close(){ if(!closed){ stop();closed=true; ready=false; tts.shutdown() } }
 }
