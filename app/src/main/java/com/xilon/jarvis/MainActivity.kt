@@ -235,6 +235,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var englishNeuralVoice=false
  private var romanianNeuralVoice=false
  private var piperVoice:NeuralVoice?=null
+ private var piperToggle:Button?=null
+ private var replyToggle:Switch?=null
+ private fun activateInstalledRomanianVoice():Boolean {
+  val v=piperVoice?.takeIf{it.installed()} ?: NeuralVoiceFactory.romanian(this)?.takeIf{it.installed()} ?: return false
+  stopAllSpeech();piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;speakReplies=true
+  piperToggle?.text="Voce neuronală RO Piper: ON";replyToggle?.isChecked=true
+  return true
+ }
  private lateinit var listening: OfflineListening
  private lateinit var voiceInput: EditText
  private lateinit var sendControl: android.view.View
@@ -427,9 +435,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(modelStatus)
   root.addView(chat,LinearLayout.LayoutParams(-1,0,1f))
   root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
-  settings.addView(Switch(this).apply { text="Răspuns vocal offline"; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
+  settings.addView(Switch(this).apply { text="Răspuns vocal offline"; replyToggle=this;isChecked=speakReplies; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
   settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
-  settings.addView(Button(this).apply { text="Voce neuronală RO Piper: OFF";setOnClickListener{
+  settings.addView(Button(this).apply { text="Voce neuronală RO Piper: OFF";piperToggle=this;setOnClickListener{
    if(romanianNeuralVoice){romanianNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: OFF"}
    else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
    else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
@@ -1580,9 +1588,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val ref=downloads.reference(entry)
      ModelIntegrity.verify(contentResolver.openInputStream(uri)?:error("Arhivă inaccesibilă"),ref.sha256,ref.bytes,ref.algorithm)
      RomanianPiperArchive.install(this@MainActivity,uri)
-     "Mihai RO instalat. Activează Voce neuronală RO Piper."
+     "Mihai RO instalat."
     }.getOrElse{"Instalare Piper RO eșuată: "+it.message}
-    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result)}}
+    runOnUiThread{if(!isDestroyed){busy=false;this@MainActivity.append(result);if(result=="Mihai RO instalat."){if(activateInstalledRomanianVoice())speakReply("Bună! Vocea românească este instalată.",true) else this@MainActivity.append("Piper RO: instalat, dar motorul nu este pregătit.")}}}
    }}}
    else if(downloads.canStart(entry))dialog.setPositiveButton("Descarcă"){_,_->if(!busy){busy=true;worker.execute{
     val result=runCatching{downloads.start(entry);"Descărcare Mihai RO pornită."}.getOrElse{"Descărcare eșuată: "+it.message}
