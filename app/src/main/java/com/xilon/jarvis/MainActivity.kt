@@ -128,7 +128,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!continuousVoice || !conversationForeground || isDestroyed)return
   if(!busy && !omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
    if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->if(conversationForeground && continuousVoice && echoGate.isStop(text)){stopAllSpeech();append("Răspuns vocal întrerupt.")}},{_->})
+   else if(voiceInterrupt && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->
+    if(conversationForeground && continuousVoice && text.isNotBlank()){
+     when {
+      echoGate.isStop(text)->{stopAllSpeech();append("Răspuns vocal întrerupt.")}
+      !echoGate.isEcho(text)->{
+       // User speech takes precedence over playback. Never dispatch
+       // a recognized echo or a second command while inference is busy.
+       stopAllSpeech()
+       acceptVoice(text)
+      }
+     }
+    }
+   },{_->})
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
@@ -766,7 +778,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
       while(true){
        val chunk=voiceStream.poll(voiceStreamId) ?: break
        if(chunk.isBlank())continue
-       if(firstSpeechChunk){listening.close();echoGate.remember(chunk)}
+       if(firstSpeechChunk)listening.close()
+       // Register each spoken chunk for the microphone echo filter.
+       echoGate.remember(chunk)
        val error=voice.speakStreamChunk(chunk,first=firstSpeechChunk)
        if(error!=null){
         append(error)
