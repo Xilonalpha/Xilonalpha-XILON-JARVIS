@@ -26,16 +26,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val speechCapture=VoiceCaptureGate()
  @Volatile private var duplexListening=false
  @Volatile private var duplexEngine:NeuralSpeech?=null
- private var duplexUnavailable=false
+ @Volatile private var duplexUnavailable=false
  private fun startConcurrentSpeechCapture(){
   if(duplexListening || duplexUnavailable || speechClosing || speechCapture.active() || voiceBargeIn.active() || wake!=null || !conversationForeground || !continuousVoice || !omegaCore.speaking)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return
   val ticket=speechSessions.begin()
-  if(!speechCapture.begin(ticket))return
+  if(!speechCapture.begin(ticket)){speechSessions.cancel();return}
   duplexListening=true
   speechWorker.execute {
    var engine:NeuralSpeech?=null
    val recognized=try {
+    if(speechClosing || !speechSessions.isCurrent(ticket))return@execute
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
     if(engine?.supportsConcurrentPlayback()!=true){duplexUnavailable=true;""}
     else {
@@ -45,6 +46,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }catch(e:Exception){
     duplexUnavailable=true
     runOnUiThread{if(!isDestroyed)modelStatus.text="Duplex ASR: "+e.message}
+    ""
+   }catch(e:LinkageError){
+    duplexUnavailable=true
+    runOnUiThread{if(!isDestroyed)modelStatus.text="Duplex ASR nativ indisponibil: "+e.message}
     ""
    }
    finally{
