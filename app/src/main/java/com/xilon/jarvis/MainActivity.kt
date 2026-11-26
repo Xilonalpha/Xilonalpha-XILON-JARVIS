@@ -126,8 +126,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
-  if(!busy && !omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
-   if(!omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
+  if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
+   if(!busy && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
    else if(voiceInterrupt && !omegaCore.listening && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()))listening.listen({text->
     if(conversationForeground && continuousVoice && text.isNotBlank()){
      when {
@@ -136,7 +136,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
        // User speech takes precedence over playback. Never dispatch
        // a recognized echo or a second command while inference is busy.
        stopAllSpeech()
-       acceptVoice(text)
+       if(busy){
+        // Interrupt inference, then dispatch only after its worker has exited.
+        pendingVoiceInterruption=text
+        nativeModel?.stop()
+       }else acceptVoice(text)
       }
      }
     }
@@ -144,7 +148,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset()}
+ private fun stopVoiceLoop(){pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset()}
+ private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || (omegaCore.speaking && echoGate.isEcho(text)) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
@@ -879,6 +884,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
        inferenceHandler.removeCallbacks(slowInferenceNotice)
        if(!isDestroyed) {
         busy=false
+        val interruptedByUser=pendingVoiceInterruption
+        pendingVoiceInterruption=null
         val lastStreamSnapshot=streamingBubble.text.toString().removePrefix("JARVIS: ")
         streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
         archiveMessage(streamingBubble.text.toString())
@@ -905,6 +912,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
           if(!streamingSpeechStarted)speakReply(answer)
          }else if(!streamingSpeechStarted)speakReply(answer)
         }else voiceStream.interrupt()
+        if(interruptedByUser!=null && continuousVoice && conversationForeground){
+         stopAllSpeech()
+         acceptVoice(interruptedByUser)
+        }
        }
       }
      }
