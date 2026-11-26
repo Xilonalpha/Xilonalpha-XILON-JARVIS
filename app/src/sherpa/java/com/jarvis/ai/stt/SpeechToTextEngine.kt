@@ -167,7 +167,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         )
         check(minimum > 0) { "Microfonul nu acceptă captură la 16 kHz." }
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minimum, FRAME_SAMPLES * 4),
         )

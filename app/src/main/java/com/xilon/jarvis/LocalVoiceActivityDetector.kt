@@ -37,7 +37,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   if(min<=0){synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false}
   val bufferSize=maxOf(min,3200)
   val record=try {
-   AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,sampleRate,
+   AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,sampleRate,
     AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,bufferSize)
   }catch(_:Exception){synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false}
   if(record.state!=AudioRecord.STATE_INITIALIZED){

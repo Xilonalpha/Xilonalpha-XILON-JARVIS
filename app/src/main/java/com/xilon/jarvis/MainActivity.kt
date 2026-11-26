@@ -36,7 +36,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun beginBargeIn():Long? {
   val ticket=voiceBargeIn.beginTicket() ?: return null
   val timeout=Runnable{if(voiceBargeIn.isCurrent(ticket)){
-   localVad.stop();endBargeIn(ticket)
+   localVad.stop();listening.close();endBargeIn(ticket)
    voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
   }}
   voiceBargeInTimeoutTask=timeout
@@ -1664,7 +1664,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   startNeural(true)
  }
  private fun startAndroidMicrophone(){
-  if(busy || wake!=null || speechCapture.active())return
+  if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
@@ -1692,7 +1692,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if((!manual && !speakReplies && !continuousVoice) || text.isBlank())return
   listening.close();echoGate.remember(text)
   val neural=kokoroVoice
-  if(!continuousVoice && englishNeuralVoice && neural!=null && neural.installed()){
+  if(englishNeuralVoice && neural!=null && neural.installed()){
    playNeural(text,neural);return
   }
   stopAllSpeech();voice.speak(text)?.let{append(it)}
