@@ -235,6 +235,39 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var englishNeuralVoice=false
  private var romanianNeuralVoice=false
  private var piperVoice:NeuralVoice?=null
+ private val whisperInstallHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ private val whisperInstallPoll=object:Runnable{override fun run(){
+  if(isDestroyed || !getPreferences(MODE_PRIVATE).getBoolean("whisper_auto_install",false))return
+  val downloads=ModelDownloads(this@MainActivity)
+  val entries=ModelCatalog.romanianWhisperNative
+  val failed=entries.firstOrNull{downloads.transfer(it).state==android.app.DownloadManager.STATUS_FAILED}
+  if(failed!=null){getPreferences(MODE_PRIVATE).edit().remove("whisper_auto_install").apply();append(failed.name+": "+downloads.status(failed));return}
+  if(!busy && conversationForeground && !speechCapture.active() && entries.all{downloads.uri(it)!=null}){
+   busy=true;stopWake();getPreferences(MODE_PRIVATE).edit().remove("whisper_auto_install").apply()
+   worker.execute{
+    val result=runCatching{
+     val root=java.io.File(filesDir,"models");check(root.isDirectory||root.mkdirs())
+     for(entry in entries){
+      val ref=downloads.reference(entry)
+      val temp=java.io.File.createTempFile("whisper-", ".part",root)
+      try{
+       contentResolver.openInputStream(checkNotNull(downloads.uri(entry)))!!.use{src->temp.outputStream().use{dst->src.copyTo(dst)}}
+       ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+       java.nio.file.Files.move(temp.toPath(),java.io.File(root,entry.file).toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+      }finally{temp.delete()}
+     }
+    }
+    runOnUiThread{if(!isDestroyed){
+     val old=cachedNeural;cachedNeural=null
+     speechWorker.execute{runCatching{old?.close()}}
+     busy=false
+     append(result.fold({"Whisper Tiny multilingv instalat și verificat. Apasă microfonul pentru test în română."},{"Instalare Whisper eșuată: "+it.message}))
+    }}
+   };return
+  }
+  whisperInstallHandler.postDelayed(this,1500)
+ }}
+ private fun scheduleWhisperInstall(){whisperInstallHandler.removeCallbacks(whisperInstallPoll);whisperInstallHandler.post(whisperInstallPoll)}
  private val mihaiHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val mihaiPoll=object:Runnable{override fun run(){
   if(isDestroyed || !getPreferences(MODE_PRIVATE).getBoolean("mihai_auto_install",false))return
@@ -1545,6 +1578,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
     .setMessage("Pentru recunoaștere română folosește cele 3 fișiere Whisper Tiny multilingv din Catalog voce Sherpa. Motorul nativ Sherpa le încarcă cu language=ro și task=transcribe. Exportul Gntz Transformers.js nu este compatibil direct și nu este folosit. Dacă ai instalat și Zipformer EN, Whisper RO are prioritate.")
     .setPositiveButton("Înțeles",null).show()
   }})
+  settings.addView(Button(this).apply{text="Instalează Whisper română offline";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val downloads=ModelDownloads(this@MainActivity)
+   val result=runCatching{
+    for(entry in ModelCatalog.romanianWhisperNative)if(downloads.canStart(entry))downloads.start(entry)
+    getPreferences(MODE_PRIVATE).edit().putBoolean("whisper_auto_install",true).apply()
+    scheduleWhisperInstall()
+    "Whisper română: descărcare și instalare automată solicitate."
+   }.getOrElse{"Whisper: "+it.message}
+   this@MainActivity.append(result)
+  }})
   settings.addView(Button(this).apply{text="Catalog voce Sherpa";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.romanianWhisperNative
@@ -2768,6 +2812,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  override fun onResume(){
   super.onResume()
   scheduleMihaiInstall()
+  scheduleWhisperInstall()
   conversationForeground=true
   lastConversationActivity=android.os.SystemClock.elapsedRealtime()
   conversationHandler.removeCallbacks(conversationTick)
@@ -2790,6 +2835,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onStop(){stopAllSpeech();stopNeural();stopWake();stopAirTouch();super.onStop()}
  override fun onDestroy() {
+  whisperInstallHandler.removeCallbacks(whisperInstallPoll)
   mihaiHandler.removeCallbacks(mihaiPoll)
   agentCancelled=true;invalidatePreview();ocrText=null;visualObservation.clear()
   conversationHandler.removeCallbacks(conversationTick);triggerHandler.removeCallbacks(triggerTick)
