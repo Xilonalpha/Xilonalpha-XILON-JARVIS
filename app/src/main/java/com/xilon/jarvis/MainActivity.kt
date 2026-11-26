@@ -25,6 +25,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val partialVoiceGate=VoicePartialGate()
  private val speechCapture=VoiceCaptureGate()
  @Volatile private var duplexListening=false
+ @Volatile private var duplexEngine:NeuralSpeech?=null
  private var duplexUnavailable=false
  private fun startConcurrentSpeechCapture(){
   if(duplexListening || duplexUnavailable || speechClosing || speechCapture.active() || voiceBargeIn.active() || wake!=null || !conversationForeground || !continuousVoice || !omegaCore.speaking)return
@@ -37,13 +38,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val recognized=try {
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
     if(engine?.supportsConcurrentPlayback()!=true){duplexUnavailable=true;""}
-    else kotlinx.coroutines.runBlocking{engine!!.listen()}
+    else {
+     duplexEngine=engine
+     kotlinx.coroutines.runBlocking{engine!!.listen()}
+    }
    }catch(e:Exception){
     duplexUnavailable=true
     runOnUiThread{if(!isDestroyed)modelStatus.text="Duplex ASR: "+e.message}
     ""
    }
-   finally{speechCapture.finish(ticket);duplexListening=false}
+   finally{
+    duplexEngine=null
+    speechCapture.finish(ticket)
+    duplexListening=false
+   }
    runOnUiThread {
     if(isDestroyed || speechClosing || !speechSessions.isCurrent(ticket) || !conversationForeground || !continuousVoice || recognized.isBlank())return@runOnUiThread
     if(echoGate.isEcho(recognized))return@runOnUiThread
@@ -84,6 +92,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   speechSessions.cancel()
   partialVoiceGate.reset()
   neural?.stop()
+  duplexEngine?.stop()
   if(::omegaCore.isInitialized && omegaCore.listening){
    omegaCore.listening=false
    refreshOmegaStatus()
