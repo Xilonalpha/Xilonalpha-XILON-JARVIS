@@ -746,7 +746,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     else {
      busy=true
      nativeModel?.resetCancellation()
-     val streamingBubble=messageBubble("JARVIS: …")
+     val streamingBubble=messageBubble("JARVIS: Aștept execuția motorului...")
      val inferenceHandler=android.os.Handler(android.os.Looper.getMainLooper())
      val inferenceStarted=android.os.SystemClock.elapsedRealtime()
      var lastInferenceProgress=inferenceStarted
@@ -776,6 +776,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
       scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
      } } }
      worker.execute {
+      runOnUiThread { if(!isDestroyed && !inferenceFinished) {
+       inferenceStage="Pregătesc cererea..."
+       streamingBubble.text="JARVIS: "+inferenceStage
+      } }
       val lexicalHint=runCatching {
        if(nativeModel!=null || q.length > 160 || q.contains('?') || RegistryIntent.compound(q) || RomanianLexicon.negated(q)) null
        else {
@@ -1065,6 +1069,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val selected=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
    busy=true;modelStatus.text="Benchmark în desfășurare..."
    model.resetCancellation()
+   model.onStage={phase->runOnUiThread{if(!isDestroyed && busy)modelStatus.text="Benchmark GGUF: "+phase}}
    worker.execute{
     val result=try{
      val start=android.os.SystemClock.elapsedRealtimeNanos()
@@ -1076,6 +1081,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      if(selected!=null)check(getSharedPreferences("model_benchmarks",MODE_PRIVATE).edit().putString(selected,record.toString()).commit()){"Rezultat nesalvat"}
      "Durată: "+elapsed+" ms\nTokeni generați: "+model.generatedTokens+"\nPrimul token: "+model.firstTokenNanos/1000000+" ms\nTokeni/secundă (total): "+String.format(java.util.Locale.ROOT,"%.2f",model.generatedTokens*1000.0/maxOf(1L,elapsed))+"\nCaractere generate: "+output.length+"\nFire CPU: 2\nContext: 512\nLimită tokeni: 64\n\nRăspuns:\n"+output
     }catch(e:Exception){"Benchmark nefinalizat: "+e.message}catch(e:LinkageError){"Motor nativ indisponibil: "+e.message}
+    model.onStage=null
     runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text="Benchmark încheiat.";report("Rezultat benchmark"){result}}}
    }
   }})
