@@ -97,9 +97,10 @@ class SpeechToTextEngine(context: Context) : Closeable {
             .getBoolean("prefer_whisper_small_ro", false))
 
     private fun releaseFineTuned() {
-        fineTuned?.close()
+        val previous = fineTuned
         fineTuned = null
         fineTunedRevision = null
+        runCatching { previous?.close() }
     }
 
     private fun fineTunedRecognizer(): RomanianWhisperOnnx {
@@ -154,10 +155,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
             captureCancelled = false
             if (useFineTuned()) {
-                val engine = fineTunedRecognizer()
                 val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
                 if (cancelled()) return@withContext ""
                 val recording = captureUtterance(requestEpoch)
+                if (cancelled() || recording.isEmpty()) return@withContext ""
+                val engine = fineTunedRecognizer()
                 return@withContext if (cancelled()) "" else engine.transcribe(recording, cancelled)
             }
             val online = if (hasRomanianWhisper()) null else ensureOnlineRecognizer()
