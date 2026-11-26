@@ -39,8 +39,8 @@ class ModelDownloads(context:Context){
     ModelCatalog.hand -> ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned-hand")
     else -> ModelMetadata.fetch(entry)
    }
-   val url=if(ref!=null&&entry.directUrl==null)entry.copy(revision=ref.revision).url else entry.url
-   if(ref!=null){
+   val url=if(entry==ModelCatalog.hand)entry.url else if(entry.directUrl==null)entry.copy(revision=ref.revision).url else entry.url
+   {
     require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
     check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
    }
@@ -61,7 +61,7 @@ class ModelDownloads(context:Context){
     }
    }}
    require(bytes>0&&(total<=0||bytes==total)){"Transfer incomplet"}
-   if(ref!=null)ModelIntegrity.verify(part(entry).inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+   ModelIntegrity.verify(part(entry).inputStream(),ref.sha256,ref.bytes,ref.algorithm)
    check(!cancelled.contains(entry.file)){"Anulat"}
    check(part(entry).renameTo(file(entry))){"Salvare eșuată"}
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).apply()
