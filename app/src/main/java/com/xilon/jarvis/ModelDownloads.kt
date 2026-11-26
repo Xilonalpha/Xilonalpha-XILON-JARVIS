@@ -24,7 +24,7 @@ class ModelDownloads(context:Context){
   val id=System.currentTimeMillis()
   try{
    check(!file(entry).exists()){"Fișier deja descărcat"}
-   check(root.usableSpace>=entry.mb*2000000L+200000000L){"Spațiu insuficient"}
+   check(root.usableSpace>=200000000L){"Spațiu insuficient"}
    cancelled.remove(entry.file)
    check(prefs.edit().putLong(entry.file,id).putInt(entry.file+".state",DownloadManager.STATUS_PENDING).commit())
    pool.execute{download(entry)}
@@ -42,7 +42,7 @@ class ModelDownloads(context:Context){
    }
    val url=if(entry==ModelCatalog.hand || entry==ModelCatalog.silero)entry.url else if(entry.directUrl==null)entry.copy(revision=ref.revision).url else entry.url
    run {
-    require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
+    require(ref.bytes>0L){"Dimensiune model invalidă"}
     check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
    }
    val partial=part(entry)
@@ -52,6 +52,7 @@ class ModelDownloads(context:Context){
    if(previousHash!=ref.sha256 || previousBytes!=ref.bytes)partial.delete()
    check(prefs.edit().putString(entry.file+".partial.sha",ref.sha256)
     .putLong(entry.file+".partial.bytes",ref.bytes).commit()){"Nu pot salva starea transferului"}
+   require(root.usableSpace>=maxOf(0L,ref.bytes-partial.length())+100000000L){"Spațiu insuficient pentru finalizarea modelului"}
    val offset=partial.length().takeIf{it in 1 until ref.bytes} ?: 0L
    if(partial.length()>0L && offset==0L)partial.delete()
    val http=(URL(url).openConnection() as HttpURLConnection).apply{
