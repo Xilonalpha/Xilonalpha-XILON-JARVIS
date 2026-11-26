@@ -222,7 +222,20 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
    publishStage("Evaluez promptul: "+std::to_string(offset+count)+"/"+std::to_string(n)+" tokenuri");
   }
  }
- if(ready)publishStage("Generez primul token...");
+ if(!ready){
+  // A cancelled or failed prefill must never be returned as a successful
+  // empty answer. Clean up the native resources before leaving JNI.
+  llama_synchronize(ctx);
+  if(batch)llama_batch_ext_free(batch);
+  llama_set_abort_callback(ctx,nullptr,nullptr);
+  llama_sampler_free(sampler);
+  e->DeleteGlobalRef(owner);
+  if(e->ExceptionCheck())return nullptr;
+  if(!ok)fail(e,"GGUF prompt evaluation failed");
+  else fail(e,"GGUF prompt evaluation cancelled");
+  return nullptr;
+ }
+ publishStage("Generez primul token...");
  for(int i=0;ready && i<maxTokens;i++){
   if(e->CallBooleanMethod(self,cancel) || e->ExceptionCheck())break;
   auto t=llama_sampler_sample(sampler,ctx,-1);if(llama_vocab_is_eog(v,t))break;
