@@ -40,27 +40,20 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   recorder=record
   worker=Thread({
    val samples=ShortArray(320)
-   var consecutive=0
+   val decision=VoiceActivityDecision()
    var detected=false
-   var noiseFloor=0.008
    try {
     record.startRecording()
     while(running.get()){
      val count=record.read(samples,0,samples.size)
      if(count<=0){
-      if(count<0)break
-      continue
+      // An interrupted or failed AudioRecord read must not spin indefinitely.
+      break
      }
      var energy=0.0
      for(i in 0 until count){val v=samples[i].toDouble()/32768.0;energy+=v*v}
      val rms=sqrt(energy/count)
-     // Track quiet background; speech must exceed both the absolute
-     // floor and the recent noise estimate. This is not echo cancellation.
-     if(rms<noiseFloor*2.0)noiseFloor=0.98*noiseFloor+0.02*rms
-     val threshold=maxOf(0.035,noiseFloor*3.5)
-     consecutive=if(rms>=threshold)consecutive+1 else 0
-     if(consecutive>=4){
-      running.set(false)
+     if(decision.accept(rms)){
       detected=true
       break
      }
