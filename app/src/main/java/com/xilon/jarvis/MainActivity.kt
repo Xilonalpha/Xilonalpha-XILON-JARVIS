@@ -1204,7 +1204,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        val quick=!grounded && ResourceBudget.quickConversation(question)
        val baseContext=ResourceBudget.conversationContext(mib,info.lowMemory,thermal)
        val context=if(quick) minOf(baseContext,1024) else baseContext
-       val threads=ResourceBudget.threads(Runtime.getRuntime().availableProcessors(),info.lowMemory,thermal)
+       val threads=ResourceBudget.threads(Runtime.getRuntime().availableProcessors(),info.lowMemory,thermal,mib)
        val passages=if(grounded)LocalKnowledge(this@MainActivity).passages(question,if(context==512)1 else 2) else emptyList()
        val recent=if(grounded || quick)emptyList() else history.takeLast(if(context==512) 2 else 6).filter{it.first=="user" || it.first=="assistant"}.dropWhile{it.first!="user"}.map{it.first to it.second.take(if(context==512) 180 else 400)}
        val budget=if(context==512)240 else 600

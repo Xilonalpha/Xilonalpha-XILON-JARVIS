@@ -48,8 +48,8 @@ internal object ResourceBudget {
   when { lowMemory || availableMiB<768 || thermal in setOf("severe","critical","emergency","shutdown") -> 512
    availableMiB<2048 || thermal=="moderate" -> 1024
    else -> 2048 }
- fun threads(cpus:Int,lowMemory:Boolean,thermal:String):Int =
-  when { lowMemory || thermal in setOf("severe","critical","emergency","shutdown") -> 1
-   thermal=="moderate" -> 2.coerceAtMost(cpus.coerceAtLeast(1))
+ fun threads(cpus:Int,lowMemory:Boolean,thermal:String,availableMiB:Long=Long.MAX_VALUE):Int =
+  when { lowMemory || availableMiB<768 || thermal in setOf("severe","critical","emergency","shutdown") -> 1
+   availableMiB<1536 || thermal=="moderate" -> 2.coerceAtMost(cpus.coerceAtLeast(1))
    else -> (cpus/2).coerceIn(1,4) }
 }

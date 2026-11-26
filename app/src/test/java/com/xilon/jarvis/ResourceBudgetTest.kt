@@ -45,6 +45,11 @@ class ResourceBudgetTest {
   assertEquals(2048,ResourceBudget.conversationContext(8192,false,"none"))
  }
  @Test fun threadLimits(){
+  assertEquals(1,ResourceBudget.threads(8,false,"none",767))
+  assertEquals(2,ResourceBudget.threads(8,false,"none",768))
+  assertEquals(2,ResourceBudget.threads(8,false,"none",1535))
+  assertEquals(4,ResourceBudget.threads(8,false,"none",1536))
+  assertEquals(1,ResourceBudget.threads(1,false,"none",1024))
   assertEquals(1,ResourceBudget.threads(1,false,"moderate"))
   assertEquals(1,ResourceBudget.threads(16,false,"emergency"))
   assertEquals(4,ResourceBudget.threads(16,false,"none"))
