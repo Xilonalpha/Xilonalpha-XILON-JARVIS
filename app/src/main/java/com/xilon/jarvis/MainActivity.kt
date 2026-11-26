@@ -11,7 +11,7 @@ import java.util.Date
 class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var neural:NeuralSpeech?=null
  @Volatile private var neuralCancelled=false
- private var cachedNeural:NeuralSpeech?=null
+ @Volatile private var cachedNeural:NeuralSpeech?=null
  private val voiceRetry=VoiceRetryPolicy()
  private val voiceTurnGuard=VoiceTurnGuard()
  private val voiceInterruptGate=VoiceInterruptGate()
@@ -20,33 +20,36 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val speechWorker=java.util.concurrent.Executors.newSingleThreadExecutor { task ->
   Thread(task,"xilon-speech-io").apply { isDaemon=true }
  }
- private val speechGeneration=java.util.concurrent.atomic.AtomicLong(0L)
+ private val speechSessions=VoiceSessionState()
+ @Volatile private var speechClosing=false
  private val partialVoiceGate=VoicePartialGate()
  private fun stopNeural(){
   neuralCancelled=true
-  speechGeneration.incrementAndGet()
+  speechSessions.cancel()
   partialVoiceGate.reset()
   neural?.stop()
   if(::omegaCore.isInitialized && omegaCore.listening){
    omegaCore.listening=false
-   busy=false
    refreshOmegaStatus()
   }
  }
  private fun startNeural(fallback:Boolean=false){
-  if(busy || wake!=null || !conversationForeground)return
+  if(speechClosing || busy || wake!=null || !conversationForeground)return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),48);return}
-  val turn=speechGeneration.incrementAndGet()
+  val turn=speechSessions.begin()
   partialVoiceGate.reset()
   listening.close();stopAllSpeech();busy=true;neuralCancelled=false
   omegaCore.listening=true;refreshOmegaStatus()
   speechWorker.execute {
-   if(turn!=speechGeneration.get() || neuralCancelled)return@execute
+   if(speechClosing || !speechSessions.isCurrent(turn) || neuralCancelled)return@execute
    var engine:NeuralSpeech?=null
    val result:Result<String> = try {
-    engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
+    engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{created ->
+     if(speechClosing || !speechSessions.isCurrent(turn))runCatching{created?.close()}
+     else cachedNeural=created
+    }
     if(engine==null) Result.failure(IllegalStateException("Motor Sherpa indisponibil."))
-    else if(turn!=speechGeneration.get() || neuralCancelled) Result.success("")
+    else if(speechClosing || !speechSessions.isCurrent(turn) || neuralCancelled) Result.success("")
     else {
      neural=engine
      Result.success(kotlinx.coroutines.runBlocking{engine!!.listen { partial ->
@@ -58,7 +61,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }catch(e:Exception){Result.failure(e)}catch(e:LinkageError){Result.failure(e)}
    finally{neural=null}
    runOnUiThread {
-    if(isDestroyed || turn!=speechGeneration.get())return@runOnUiThread
+    if(isDestroyed || speechClosing || !speechSessions.isCurrent(turn))return@runOnUiThread
     busy=false;omegaCore.listening=false;refreshOmegaStatus()
     if(neuralCancelled || !conversationForeground)return@runOnUiThread
     result.fold({recognized->
@@ -70,7 +73,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      cachedNeural=null
      val failedEngine=engine
      // Queue disposal after the current capture has returned.
-     speechWorker.execute{runCatching{failedEngine?.close()}}
+     if(!speechClosing)speechWorker.execute{runCatching{failedEngine?.close()}}
      voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
      modelStatus.text="Eroare Sherpa: "+error.message
      if(fallback)startAndroidMicrophone()
@@ -2446,8 +2449,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   listening.close()
   voice.close()
   nativeModel?.stop()
-  stopNeural();val speech=cachedNeural;cachedNeural=null
-  speechWorker.execute { runCatching{speech?.close()} }
+  speechClosing=true
+  stopNeural()
+  speechSessions.close()
+  speechWorker.execute {
+   val speech=cachedNeural
+   cachedNeural=null
+   runCatching{speech?.close()}
+  }
   speechWorker.shutdown()
   worker.execute { nativeModel?.close(); nativeModel=null }
   worker.shutdown()

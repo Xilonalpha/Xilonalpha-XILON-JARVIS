@@ -24,6 +24,12 @@ class VoicePartialGateTest {
   assertFalse(gate.shouldPublish("deschide",500))
   assertTrue(gate.shouldPublish("deschide camera",510))
  }
+ @Test fun changedTranscriptAfterThrottleIsPublished(){
+  val gate=VoicePartialGate(180)
+  assertTrue(gate.shouldPublish("bun",100))
+  assertFalse(gate.shouldPublish("buna",150))
+  assertTrue(gate.shouldPublish("buna ziua",300))
+ }
  @Test fun resetAllowsNewSession(){
   val gate=VoicePartialGate()
   assertFalse(gate.shouldPublish(" ",0))

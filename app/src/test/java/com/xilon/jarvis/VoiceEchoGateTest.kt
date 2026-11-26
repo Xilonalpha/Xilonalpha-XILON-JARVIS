@@ -41,5 +41,11 @@ class VoiceEchoGateTest {
   assertFalse(g.isEcho("Jarvis opreste"))
   assertTrue(g.isStop("Jarvis opreste"))
  }
+ @Test fun echoHistoryIsBounded(){
+  val g=VoiceEchoGate()
+  repeat(20){g.remember("Fraza de test foarte lunga numarul $it")}
+  assertFalse(g.isEcho("Fraza de test foarte lunga numarul 0"))
+  assertTrue(g.isEcho("Fraza de test foarte lunga numarul 19"))
+ }
  @Test fun expandedStopCommands(){val g=VoiceEchoGate();assertTrue(g.isStop("Jarvis, liniște!"));assertTrue(g.isStop("Jarvis, întrerupe"));assertFalse(g.isStop("Jarvis nu opri"));g.remember("Jarvis pauză");assertFalse(g.isStop("Jarvis pauză"))}
 }
