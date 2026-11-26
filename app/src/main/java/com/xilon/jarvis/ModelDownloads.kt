@@ -34,7 +34,11 @@ class ModelDownloads(context:Context){
  private fun download(entry:ModelCatalog.Entry){
   var connection:HttpURLConnection?=null
   try{
-   val ref=if(entry==ModelCatalog.kokoro)ModelMetadata.kokoro() else if(entry==ModelCatalog.hand)null else ModelMetadata.fetch(entry)
+   val ref=when(entry){
+    ModelCatalog.kokoro -> ModelMetadata.kokoro()
+    ModelCatalog.hand -> ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned-hand")
+    else -> ModelMetadata.fetch(entry)
+   }
    val url=if(ref!=null&&entry.directUrl==null)entry.copy(revision=ref.revision).url else entry.url
    if(ref!=null){
     require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
@@ -72,7 +76,7 @@ class ModelDownloads(context:Context){
   val bytes=prefs.getLong(entry.file+".bytes",-1)
   val algorithm=prefs.getString(entry.file+".algorithm","SHA-256")?:error("Algoritm absent")
   require(algorithm in setOf("SHA-256","git-blob-sha1"))
-  require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&(if(entry==ModelCatalog.kokoro)revision.matches(Regex("asset-[0-9]+")) else revision.matches(Regex("[0-9a-f]{40}")))&&bytes>0)
+  require(hash.matches(Regex(if(algorithm=="SHA-256")"[0-9a-fA-F]{64}" else "[0-9a-fA-F]{40}"))&&(when(entry){ModelCatalog.kokoro->revision.matches(Regex("asset-[0-9]+"));ModelCatalog.hand->revision=="pinned-hand";else->revision.matches(Regex("[0-9a-f]{40}"))})&&bytes>0)
   return ModelMetadata.Reference(hash,bytes,revision,algorithm)
  }
 
