@@ -50,8 +50,13 @@ class PressBackTool : Tool(
 ) {
     override suspend fun execute(args: kotlinx.serialization.json.JsonObject, ctx: ToolContext): ToolResult {
         val svc = com.xilon.jarvis.LocalScreen.service() ?: return ToolResult.unavailable("Accessibility service not connected.")
+        val before = T.freshObserve(0)
         val ok = svc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-        return if (ok) ToolResult.ok("Pressed Back.", Verification.UNVERIFIED) else ToolResult.fail("Back action rejected.")
+        if (!ok) return ToolResult.fail("Back action rejected.")
+        val after = T.freshObserve(450)
+        val changed = before != null && after != null &&
+            (before.packageName != after.packageName || before.fingerprint() != after.fingerprint())
+        return ToolResult.ok("Pressed Back.", if (changed) Verification.VERIFIED else Verification.UNVERIFIED)
     }
 }
 
