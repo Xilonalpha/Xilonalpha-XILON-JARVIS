@@ -154,6 +154,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val pcm = ShortArray(FRAME_SAMPLES)
         var started = false
         var silentSamples = 0
+        var voicedSamples = 0
         var totalSamples = 0
         var zeroReads = 0
         var emptyReads = 0
@@ -191,13 +192,14 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
                     if (rms >= threshold) {
                         started = true
+                        voicedSamples += count
                         preRoll.forEach { captured.addAll(it.asIterable()) }
                         preRoll.clear()
                         silentSamples = 0
                     }
                 } else {
                     captured.addAll(chunk.asIterable())
-                    if (rms >= threshold) silentSamples = 0 else silentSamples += count
+                    if (rms >= threshold) { silentSamples = 0; voicedSamples += count } else silentSamples += count
                     if (silentSamples >= SILENCE_SAMPLES) break
                 }
             }
@@ -209,7 +211,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
             activeRecorder = null
         }
 
-        if (!started || captured.isEmpty()) return FloatArray(0)
+        // Reject transient clicks and playback leakage shorter than 180 ms.
+        if (!started || voicedSamples < MIN_VOICED_SAMPLES || captured.isEmpty()) return FloatArray(0)
         return captured.toFloatArray()
     }
 
@@ -223,7 +226,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         const val FEATURE_DIM = 80
         const val FRAME_SAMPLES = 1_600 // 100 ms
         const val PRE_ROLL_FRAMES = 6
-        const val SILENCE_SAMPLES = 19_200 // 1200 ms
+        const val SILENCE_SAMPLES = 12_800 // 800 ms; shorter turn-taking latency
+        const val MIN_VOICED_SAMPLES = 2_880 // 180 ms
         const val MAX_RECORDING_SECONDS = 20
         const val SPEECH_RMS_THRESHOLD = 0.006f
     }
