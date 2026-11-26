@@ -1191,6 +1191,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
      .onFailure{append("Nu pot porni microfonul în fundal: "+it.message)}
    }
   }})
+  settings.addView(Switch(this).apply{
+   text="JARVIS inițiază conversații și în fundal (10 min)"
+   isChecked=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("background_initiative",false)
+   setOnCheckedChangeListener{_,enabled->
+    getSharedPreferences("conversation",MODE_PRIVATE).edit().putBoolean("background_initiative",enabled).apply()
+    // This setting never starts the microphone service implicitly.
+    if(enabled)append("Inițiativa în fundal este permisă numai când pornești explicit serviciul microfon.")
+    runCatching{startService(Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(if(enabled)BackgroundVoiceService.ACTION_INITIATIVE_ON else BackgroundVoiceService.ACTION_INITIATIVE_OFF))}
+   }
+  })
   settings.addView(Button(this).apply { text="Microfon în fundal • oprește";setOnClickListener{
    startService(Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_STOP))
   }})

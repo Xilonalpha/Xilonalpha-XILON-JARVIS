@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import android.os.SystemClock
 
 /**
  * Explicitly opted-in, user-visible microphone foreground service.
@@ -29,6 +30,8 @@ class BackgroundVoiceService:Service(){
  companion object{
   const val ACTION_START="com.xilon.jarvis.BACKGROUND_VOICE_START"
   const val ACTION_STOP="com.xilon.jarvis.BACKGROUND_VOICE_STOP"
+  const val ACTION_INITIATIVE_ON="com.xilon.jarvis.BACKGROUND_INITIATIVE_ON"
+  const val ACTION_INITIATIVE_OFF="com.xilon.jarvis.BACKGROUND_INITIATIVE_OFF"
   private const val CHANNEL="xilon_background_voice"
   private const val NOTIFICATION_ID=4206
  }
@@ -37,14 +40,22 @@ class BackgroundVoiceService:Service(){
  @Volatile private var engine:NeuralSpeech?=null
  @Volatile private var model:NativeModel?=null
  @Volatile private var piper:NeuralVoice?=null
+ @Volatile private var initiative=false
+ private var lastInteraction=0L
+ private var lastInitiative=0L
+ private val initiativeDelay=600000L
  override fun onBind(intent:Intent?):IBinder?=null
  override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
   if(intent?.action==ACTION_STOP){stopSelf();return START_NOT_STICKY}
+  if(intent?.action==ACTION_INITIATIVE_ON){initiative=true;lastInteraction=SystemClock.elapsedRealtime();return START_NOT_STICKY}
+  if(intent?.action==ACTION_INITIATIVE_OFF){initiative=false;return START_NOT_STICKY}
   if(intent?.action!=ACTION_START)return START_NOT_STICKY
   if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
    stopSelf();return START_NOT_STICKY
   }
   if(!running.compareAndSet(false,true))return START_NOT_STICKY
+  initiative=getSharedPreferences("conversation",MODE_PRIVATE).getBoolean("background_initiative",false)
+  lastInteraction=SystemClock.elapsedRealtime()
   val manager=getSystemService(NotificationManager::class.java)
   manager.createNotificationChannel(NotificationChannel(CHANNEL,"JARVIS • microfon în fundal",NotificationManager.IMPORTANCE_LOW))
   try{startForeground(NOTIFICATION_ID,notification("Ascultare locală activă"))}
@@ -64,6 +75,7 @@ class BackgroundVoiceService:Service(){
      val transcript=runBlocking{speech.listen()}.trim()
      if(!running.get())break
      if(transcript.isNotBlank()){
+      lastInteraction=SystemClock.elapsedRealtime()
       manager.notify(NOTIFICATION_ID,notification("Recunoscut: "+transcript.take(90)))
       val local=model
       if(local!=null){
@@ -82,11 +94,36 @@ class BackgroundVoiceService:Service(){
         }
        }
       }
-     }else Thread.sleep(250)
+     }else{
+      val now=SystemClock.elapsedRealtime()
+      if(initiative && model!=null && now-lastInteraction>=initiativeDelay && now-lastInitiative>=initiativeDelay){
+       lastInitiative=now
+       lastInteraction=now
+       val message=runCatching{model!!.resetCancellation();model!!.generate(
+        "Inițiază în română o conversație scurtă, cu o singură întrebare utilă. Nu pretinde că ai observat ceva despre utilizator.",
+        threads=2,context=1024,maxTokens=80
+       )}.getOrNull()?.trim().orEmpty()
+       if(running.get() && initiative && message.isNotBlank()){
+        manager.notify(NOTIFICATION_ID,notification("JARVIS: "+message.take(90)))
+        piper?.let{voice->
+         val done=CountDownLatch(1)
+         voice.speakTracked(message){done.countDown()}
+         done.await(40,TimeUnit.SECONDS)
+         voice.stop()
+        }
+       }
+      }
+      Thread.sleep(250)
+     }
     }
    }catch(e:Exception){
     if(running.get())manager.notify(NOTIFICATION_ID,notification("ASR indisponibil: "+(e.message?:"model lipsă").take(80)))
-   }finally{stopSelf()}
+   }finally{
+    runCatching{engine?.close()};engine=null
+    runCatching{model?.close()};model=null
+    runCatching{piper?.stop()};piper=null
+    stopSelf()
+   }
   }
   return START_NOT_STICKY
  }
@@ -102,8 +139,7 @@ class BackgroundVoiceService:Service(){
   runCatching{engine?.stop()}
   runCatching{model?.stop()}
   runCatching{piper?.stop()}
-  // Closing must follow any active decode, on the same executor.
-  runCatching{executor.execute{runCatching{engine?.close()};engine=null;runCatching{model?.close()};model=null;piper=null}}
+  // The worker releases native engines in its finally block, after decoding exits.
   executor.shutdown()
   super.onDestroy()
  }
