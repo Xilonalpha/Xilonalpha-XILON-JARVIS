@@ -59,6 +59,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
     @Volatile
     private var onlineRecognizer: OnlineRecognizer? = null
+    private var onlineRevision: List<Triple<String, Long, Long>>? = null
 
     @Volatile
     private var activeRecorder: AudioRecord? = null
@@ -77,12 +78,13 @@ class SpeechToTextEngine(context: Context) : Closeable {
     /** Streaming is selected only when the preferred Romanian Whisper model is absent. */
     fun supportsConcurrentPlayback():Boolean = !hasRomanianWhisper() && hasStreamingModelFiles()
 
-    fun hasStreamingModelFiles():Boolean {
-        val directory=File(modelDirectory,"streaming-asr")
-        return listOf("encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt").all { name ->
-            File(directory,name).let{it.isFile && it.length()>0L}
-        }
+    private fun streamingFiles(): List<File>? {
+        val directory = File(modelDirectory, "streaming-asr")
+        val names = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
+        return names.map { File(directory, it) }.takeIf { files -> files.all { it.isFile && it.length() > 0L } }
     }
+
+    fun hasStreamingModelFiles():Boolean = streamingFiles() != null
 
     /** Actually constructs the native recognizer; file presence alone is not readiness. */
     fun validateModelLoad(): Boolean {
@@ -160,17 +162,16 @@ class SpeechToTextEngine(context: Context) : Closeable {
      * The same Sherpa JNI processes 100 ms frames and produces partial hypotheses.
      */
     private fun ensureOnlineRecognizer(): OnlineRecognizer? {
-        onlineRecognizer?.let { return it }
-        val directory = File(modelDirectory, "streaming-asr")
-        if (!directory.isDirectory) return null
-        val files = directory.listFiles()?.filter { it.isFile && it.length() > 0L }.orEmpty()
-        fun find(prefix: String): File? = files.firstOrNull {
-            it.name.startsWith(prefix) && it.name.endsWith(".onnx", ignoreCase = true)
+        val files = streamingFiles()
+        val revision = files?.map { Triple(it.absolutePath, it.length(), it.lastModified()) }
+        if (revision != onlineRevision) {
+            runCatching { onlineRecognizer?.release() }
+            onlineRecognizer = null
+            onlineRevision = null
         }
-        val encoder = find("encoder") ?: return null
-        val decoder = find("decoder") ?: return null
-        val joiner = find("joiner") ?: return null
-        val tokens = files.firstOrNull { it.name == "tokens.txt" } ?: return null
+        if (files == null) return null
+        onlineRecognizer?.let { return it }
+        val (encoder, decoder, joiner, tokens) = files
         val config = OnlineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
             modelConfig = OnlineModelConfig(
@@ -191,6 +192,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         )
         return OnlineRecognizer(assetManager = null, config = config).also {
             onlineRecognizer = it
+            onlineRevision = revision
         }
     }
 
