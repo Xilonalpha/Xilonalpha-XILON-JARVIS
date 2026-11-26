@@ -80,12 +80,22 @@ data class ScreenObservation(
         return sb.toString()
     }
 
-    /** Cheap change-detector: package + activity + first labels. Used to prove actions changed something. */
+    /**
+     * Structural change detector for screen transitions. Include roles, bounds and
+     * selection state: text-only fingerprints miss icon-only dialogs and menus.
+     * Editable values are deliberately omitted even if a caller supplies them.
+     */
     fun fingerprint(): String = buildString {
         append(packageName ?: "?")
-        activityName?.let { append('|').append(it.substringAfterLast('.')) }
-        append('|')
-        elements.take(14).forEach { append((it.text ?: it.desc ?: "").take(18)); append(',') }
+        append('|').append(activityName ?: "?")
+        append('|').append(elements.size).append('|').append(truncated)
+        elements.take(30).forEach { e ->
+            append('|').append(e.role)
+            append(':').append(if (e.editable || e.isPassword) "" else (e.text ?: e.desc ?: "").take(24))
+            append('@').append(e.left).append(',').append(e.top)
+            append(',').append(e.right).append(',').append(e.bottom)
+            append(':').append(e.clickable).append(':').append(e.selected)
+        }
     }
 
     fun findText(simple: String): ScreenElement? =
