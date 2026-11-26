@@ -71,6 +71,14 @@ object Kokoro {
     @Volatile var failed = false
         private set
 
+    /** Diagnostic: waits for actual native TTS initialization, without playing audio. */
+    fun validateModelLoad(context: Context): Boolean {
+        check(isInstalled(context)) { "Fișiere Kokoro lipsă" }
+        val task = worker.submit<Boolean> { engine(context.applicationContext) != null }
+        check(task.get(90, TimeUnit.SECONDS)) { lastError ?: "Kokoro nu poate fi încărcat" }
+        return true
+    }
+
     /** Start loading in the background so the next reply has no delay. Safe to call often. */
     fun warmUp(context: Context) {
         val app = context.applicationContext
