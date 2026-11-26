@@ -365,35 +365,39 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_com_xilon_jarvis_NativeModel_inferI
  if(!ctx || mtmd_helper_get_n_tokens(chunks.get())+limit>llama_n_ctx(ctx.get())){fail(e,"Insufficient vision context");return nullptr;}
  auto cancel=e->GetMethodID(e->GetObjectClass(self),"isCancelled","()Z");if(!cancel)return nullptr;
  llama_pos pos=0;
- if(e->CallBooleanMethod(self,cancel)){return e->NewByteArray(0);}
+ if(e->CallBooleanMethod(self,cancel)){fail(e,"Vision inference cancelled");return nullptr;}
+ if(e->ExceptionCheck())return nullptr;
  JavaVM* vm=nullptr;
  if(e->GetJavaVM(&vm)!=JNI_OK){fail(e,"Java VM unavailable");return nullptr;}
  jobject owner=e->NewGlobalRef(self);if(!owner)return nullptr;
  AbortState abortState{vm,owner,cancel};
  llama_set_abort_callback(ctx.get(),abortDecode,&abortState);
  struct AbortCleanup { llama_context* ctx; JNIEnv* env; jobject owner; ~AbortCleanup(){llama_synchronize(ctx);llama_set_abort_callback(ctx,nullptr,nullptr);env->DeleteGlobalRef(owner);} } cleanup{ctx.get(),e,owner};
- if(mtmd_helper_eval_chunks(vision.get(),ctx.get(),chunks.get(),0,0,llama_n_batch(ctx.get()),true,&pos)!=0){if(e->CallBooleanMethod(self,cancel))return e->NewByteArray(0);fail(e,"Vision embedding evaluation failed");return nullptr;}
+ if(mtmd_helper_eval_chunks(vision.get(),ctx.get(),chunks.get(),0,0,llama_n_batch(ctx.get()),true,&pos)!=0){if(e->CallBooleanMethod(self,cancel)){if(!e->ExceptionCheck())fail(e,"Vision inference cancelled");return nullptr;}if(!e->ExceptionCheck())fail(e,"Vision embedding evaluation failed");return nullptr;}
  auto* vocab=llama_model_get_vocab(state->model);
  std::unique_ptr<llama_sampler,decltype(&llama_sampler_free)> sampler(llama_sampler_init_greedy(),llama_sampler_free);
  std::unique_ptr<llama_batch_ext,decltype(&llama_batch_ext_free)> batch(llama_batch_ext_init(ctx.get()),llama_batch_ext_free);
  if(!sampler || !batch){fail(e,"Vision generation allocation failed");return nullptr;}
  std::string output;
+ std::vector<char> piece(128);
  for(int i=0;i<limit;i++){
   if(e->CallBooleanMethod(self,cancel)||e->ExceptionCheck())break;
   auto token=llama_sampler_sample(sampler.get(),ctx.get(),-1);
   if(llama_vocab_is_eog(vocab,token))break;
-  std::vector<char> piece(128);int n=llama_token_to_piece(vocab,token,piece.data(),piece.size(),0,false);
+  int n=llama_token_to_piece(vocab,token,piece.data(),piece.size(),0,false);
   if(n<0){piece.resize(-n);n=llama_token_to_piece(vocab,token,piece.data(),piece.size(),0,false);}
   if(n<0){fail(e,"Vision token conversion failed");return nullptr;}
   output.append(piece.data(),n);
   if(i+1==limit)break;
   llama_batch_ext_clear(batch.get());
   int idx=llama_batch_ext_add_token(batch.get(),0,token);
-  if(idx<0 || !llama_batch_ext_set_pos(batch.get(),idx,&pos) || !llama_batch_ext_set_output_logits(batch.get(),idx,true) || llama_process(ctx.get(),LLAMA_PROCESS_TYPE_DECODE,batch.get())!=0){fail(e,"Vision generation failed");return nullptr;}
+  if(idx<0 || !llama_batch_ext_set_pos(batch.get(),idx,&pos) || !llama_batch_ext_set_output_logits(batch.get(),idx,true) || llama_process(ctx.get(),LLAMA_PROCESS_TYPE_DECODE,batch.get())!=0){if(e->CallBooleanMethod(self,cancel)){if(!e->ExceptionCheck())fail(e,"Vision inference cancelled");}else if(!e->ExceptionCheck())fail(e,"Vision generation failed");return nullptr;}
   ++pos;
  }
  if(e->ExceptionCheck())return nullptr;
- auto bytes=e->NewByteArray(output.size());if(bytes)e->SetByteArrayRegion(bytes,0,output.size(),reinterpret_cast<const jbyte*>(output.data()));return bytes;
+ if(e->CallBooleanMethod(self,cancel)){if(!e->ExceptionCheck())fail(e,"Vision inference cancelled");return nullptr;}
+ if(e->ExceptionCheck())return nullptr;
+ auto bytes=e->NewByteArray(output.size());if(bytes && !output.empty())e->SetByteArrayRegion(bytes,0,output.size(),reinterpret_cast<const jbyte*>(output.data()));return bytes;
 #else
  fail(e,"VLM backend not enabled in this APK");return nullptr;
 #endif
