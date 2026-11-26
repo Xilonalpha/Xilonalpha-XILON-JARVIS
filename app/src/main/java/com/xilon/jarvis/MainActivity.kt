@@ -198,6 +198,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   ToolEnvironment.initialize(this)
+  AuxiliaryModelBootstrap.launch(this)
   memory = LocalMemory(this)
   voice=OfflineVoice(this)
   listening=OfflineListening(this)
