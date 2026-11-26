@@ -1300,6 +1300,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
     append("Acordă microfonul și apasă din nou pentru ascultarea în fundal.")
    }else{
+    wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()
+    stopVoiceLoop();listening.close();stopNeural();stopAllSpeech()
     runCatching{androidx.core.content.ContextCompat.startForegroundService(this@MainActivity,Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_START))}
      .onSuccess{append("Ascultarea locală în fundal a fost solicitată. Oprește-o din notificare.")}
      .onFailure{append("Nu pot porni microfonul în fundal: "+it.message)}
@@ -1316,7 +1318,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   })
   settings.addView(Button(this).apply { text="Microfon în fundal • oprește";setOnClickListener{
-   startService(Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_STOP))
+   stopService(Intent(this@MainActivity,BackgroundVoiceService::class.java))
   }})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wakeEnabled){wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()} else {wakeEnabled=true;startWake();wakeHandler.removeCallbacks(wakeRearm);wakeHandler.postDelayed(wakeRearm,1500L)}}})
@@ -2860,6 +2862,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  override fun onResume(){
   super.onResume()
+  // Foreground interaction takes precedence over the explicitly started background session.
+  stopService(Intent(this,BackgroundVoiceService::class.java))
   scheduleMihaiInstall()
   scheduleWhisperInstall()
   conversationForeground=true

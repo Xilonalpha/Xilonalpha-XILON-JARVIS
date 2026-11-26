@@ -68,12 +68,18 @@ class BackgroundVoiceService:Service(){
      return@execute
     }
     engine=speech
+    if(!running.get())return@execute
     val saved=getSharedPreferences("jarvis_model",MODE_PRIVATE).getString("file",null)
     val file=saved?.takeIf{it.matches(Regex("model-[a-f0-9-]+\\.gguf"))}?.let{File(filesDir,it)}?.takeIf{it.isFile}
     if(file!=null){
-     runCatching{NativeModel(0).also{it.load(file.absolutePath);model=it}}
+     runCatching{
+      val candidate=NativeModel(0)
+      try { candidate.load(file.absolutePath); if(running.get())model=candidate else candidate.close() }
+      catch(e:Exception){candidate.close();throw e}
+     }
       .onFailure{manager.notify(NOTIFICATION_ID,notification("GGUF indisponibil: "+(it.message?:"eroare").take(70)))}
     }
+    if(!running.get())return@execute
     piper=NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}
     while(running.get()){
      // The service only processes local speech; no network recognition fallback.
