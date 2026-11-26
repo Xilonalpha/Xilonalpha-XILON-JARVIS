@@ -81,15 +81,15 @@ class BackgroundVoiceService:Service(){
      if(!running.get())break
      if(transcript.isNotBlank()){
       lastInteraction=SystemClock.elapsedRealtime()
-      manager.notify(NOTIFICATION_ID,notification("Recunoscut: "+transcript.take(90)))
+      manager.notify(NOTIFICATION_ID,notification("Comandă vocală recunoscută local"))
       val local=model
       if(local!=null){
        val answer=runCatching{local.resetCancellation();local.generate(
         "Răspunde în română, concis, fără să inventezi informații. Cerere: "+transcript.take(500),
-        threads=2,context=1024,maxTokens=100
+        threads=inferenceThreads(),context=1024,maxTokens=100
        )}.getOrNull()?.trim().orEmpty()
        if(running.get() && answer.isNotBlank()){
-        manager.notify(NOTIFICATION_ID,notification("JARVIS: "+answer.take(90)))
+        manager.notify(NOTIFICATION_ID,notification("JARVIS răspunde local"))
         val voice=piper
         if(voice!=null){
          val done=CountDownLatch(1)
@@ -107,10 +107,10 @@ class BackgroundVoiceService:Service(){
        lastInteraction=now
        val message=runCatching{model!!.resetCancellation();model!!.generate(
         "Inițiază în română o conversație scurtă, cu o singură întrebare utilă. Nu pretinde că ai observat ceva despre utilizator.",
-        threads=2,context=1024,maxTokens=80
+        threads=inferenceThreads(),context=1024,maxTokens=80
        )}.getOrNull()?.trim().orEmpty()
        if(running.get() && initiative && message.isNotBlank()){
-        manager.notify(NOTIFICATION_ID,notification("JARVIS: "+message.take(90)))
+        manager.notify(NOTIFICATION_ID,notification("JARVIS inițiază conversația"))
         piper?.let{voice->
          val done=CountDownLatch(1)
          voice.speakTracked(message){done.countDown()}
@@ -133,12 +133,18 @@ class BackgroundVoiceService:Service(){
   }
   return START_NOT_STICKY
  }
+ private fun inferenceThreads():Int{
+  val info=android.app.ActivityManager.MemoryInfo()
+  getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+  val thermal=if(Build.VERSION.SDK_INT>=29)getSystemService(android.os.PowerManager::class.java).currentThermalStatus else 0
+  return minOf(2,ResourceBudget.speechThreads(Runtime.getRuntime().availableProcessors(),info.availMem/1048576,info.lowMemory,thermal))
+ }
  private fun notification(message:String):Notification{
   val stop=PendingIntent.getService(this,1,Intent(this,BackgroundVoiceService::class.java).setAction(ACTION_STOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   val open=PendingIntent.getActivity(this,2,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   return NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now)
    .setContentTitle("XILON JARVIS • microfon activ").setContentText(message)
-   .setContentIntent(open).setOngoing(true).addAction(android.R.drawable.ic_media_pause,"Oprește",stop).build()
+   .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setContentIntent(open).setOngoing(true).addAction(android.R.drawable.ic_media_pause,"Oprește",stop).build()
  }
  override fun onDestroy(){
   running.set(false)
