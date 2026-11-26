@@ -1299,16 +1299,28 @@ class MainActivity : androidx.activity.ComponentActivity() {
   composerUpdate?.invoke()
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
   settings.addView(Button(this).apply { text="Microfon în fundal • pornește";setOnClickListener{
-   if(busy || nativeModel!=null){append("Eliberează modelul GGUF din memorie înainte de pornirea serviciului vocal în fundal.");return@setOnClickListener}
+   if(busy || BackgroundVoiceService.sessionActive){append("Așteaptă finalizarea operațiunii vocale curente.");return@setOnClickListener}
    if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
     requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
     append("Acordă microfonul și apasă din nou pentru ascultarea în fundal.")
    }else{
     wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()
     stopVoiceLoop();listening.close();stopNeural();stopAllSpeech()
-    runCatching{androidx.core.content.ContextCompat.startForegroundService(this@MainActivity,Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_START))}
-     .onSuccess{append("Ascultarea locală în fundal a fost solicitată. Oprește-o din notificare.")}
-     .onFailure{append("Nu pot porni microfonul în fundal: "+it.message)}
+    busy=true
+    worker.execute{
+     val released=runCatching{nativeModel?.close();nativeModel=null;releaseVisualCaches()}
+     runOnUiThread{
+      if(!isDestroyed){
+       busy=false
+       if(released.isFailure)append("Eliberarea modelului a eșuat: "+released.exceptionOrNull()?.message)
+       else if(conversationForeground){
+        runCatching{androidx.core.content.ContextCompat.startForegroundService(this@MainActivity,Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_START))}
+         .onSuccess{append("Ascultarea locală în fundal a fost solicitată. Modelul din prim-plan a fost eliberat.")}
+         .onFailure{append("Nu pot porni microfonul în fundal: "+it.message)}
+       }else append("Revino în aplicație pentru a porni serviciul vocal.")
+      }
+     }
+    }
    }
   }})
   settings.addView(Switch(this).apply{
