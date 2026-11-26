@@ -700,6 +700,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // Keep the original utterance for display and all unrelated conversation branches.
     val commandQ=CommandGreeting.stripBeforeCommand(q)
     val lexicalCompound=RomanianLexicon.split(commandQ).size>1
+    // A compound sentence may still express ONE known capability
+    // ("deschide YouTube și pune jazz"). Reuse the existing safe router
+    // before invoking a costly LLM planner.
+    val singleIntent=NaturalToolCommands.parse(commandQ)
+    if(singleIntent!=null && singleIntent.tool=="youtube_search"){
+     executeRequestedTool(singleIntent.tool,singleIntent.args)
+     return@setOnClickListener
+    }
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
     // Use one guarded deterministic capability router, not competing

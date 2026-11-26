@@ -23,6 +23,11 @@ class NaturalToolCommandsTest {
   assertNull(NaturalToolCommands.parse("Nu deschide YouTube și pune muzica jazz"))
   assertNull(NaturalToolCommands.parse("Deschide YouTube și trimite un mesaj"))
  }
+ @Test fun romanianLanguageSourcesHandlePoliteVariants(){
+  assertEquals("open_app",NaturalToolCommands.parse("Te rog, deschide WhatsApp")?.tool)
+  assertEquals("control_flashlight",NaturalToolCommands.parse("Poți să aprinzi lanterna")?.tool)
+  assertEquals("press_back",NaturalToolCommands.parse("Jarvis, înapoi")?.tool)
+ }
  @Test fun genericCapabilityRoutingRejectsMultiActionAsAppName(){
   assertEquals("open_app",NaturalToolCommands.parse("Deschide WhatsApp")?.tool)
   assertNull(NaturalToolCommands.parse("Deschide WhatsApp și trimite un mesaj"))

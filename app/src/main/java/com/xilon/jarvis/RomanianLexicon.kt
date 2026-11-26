@@ -58,7 +58,7 @@ object RomanianLexicon {
   warmUp()
   initializeDefinitions(context.applicationContext)
  }
- fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
+ fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să|ai putea sa|ai putea să|te-as ruga sa|te-aș ruga să|as vrea sa|aș vrea să|imi poti|îmi poți|imi poti sa|îmi poți să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean {
   val key = normalize(clean(text))
   if (Regex("\\b(?:dar|insa|totusi|ci)\\s+(?:nu|sa nu|niciodata|fara sa)\\b").containsMatchIn(key)) return true
@@ -366,7 +366,9 @@ object RomanianLexicon {
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {
-  if (negated(text) || split(text).any { negated(it) }) return null
+  // A dictionary phrase is one action. Never let an exact/fuzzy lookup
+  // swallow a request with multiple independent actions.
+  if (negated(text) || split(text).size > 1 || split(text).any { negated(it) }) return null
   return entries[normalize(clean(text))]?.action ?: entries[normalize(canonicalCommand(text))]?.action
  }
  // Return alternatives per word, never rewrite or execute the original sentence.

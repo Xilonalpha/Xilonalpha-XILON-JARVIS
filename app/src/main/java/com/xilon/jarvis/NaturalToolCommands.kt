@@ -33,16 +33,7 @@ object NaturalToolCommands {
    if(!Regex("\\b(?:și|si|apoi|iar|după aceea|dupa aceea)\\b",RegexOption.IGNORE_CASE).containsMatchIn(app))
     return call("open_app","app" to JsonPrimitive(app))
   }
-  // Recognize common Romanian YouTube requests before the generic open-app
-  // matcher. A search intent does not guarantee playback.
-  match("(?:deschide|pornește|porneste|lansează|lanseaza) (?:aplicația |aplicatia )?youtube (?:și|si|iar|apoi) (?:pune|redă|reda|pornește|porneste|caută|cauta) (?:muzică|muzica|melodia|piesa|un cântec|un cantec|niște muzică|niste muzica)?\\s*(.+)")?.let{
-   val query=it.groupValues[1].trim()
-   if(query.isNotBlank())return call("youtube_search","query" to JsonPrimitive(query))
-  }
-  match("(?:pune|redă|reda|pornește|porneste) (?:muzică|muzica|melodia|piesa|un cântec|un cantec|niște muzică|niste muzica)?\\s*(.+) (?:pe|în|in) youtube")?.let{
-   val query=it.groupValues[1].trim()
-   if(query.isNotBlank())return call("youtube_search","query" to JsonPrimitive(query))
-  }
+  // The single-intent YouTube forms are handled once, above the lexicon.
   match("(?:caută|cauta) pe youtube (.+)")?.let{return call("youtube_search","query" to JsonPrimitive(it.groupValues[1]))}
   match("(?:navighează|navigheaza) (?:la|către|catre) (.+)")?.let{return call("maps_navigate","destination" to JsonPrimitive(it.groupValues[1]))}
   match("(?:setează|seteaza) alarma (?:la )?(\\d{1,2}):(\\d{2})")?.let{
