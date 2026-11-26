@@ -13,6 +13,7 @@ internal class VoiceCaptureGate {
  }
  @Synchronized fun active():Boolean=ticket!=null
  @Synchronized fun currentTicket():Long?=ticket
+ @Synchronized fun available():Boolean=!closed && ticket==null
  @Synchronized fun finish(id:Long):Boolean {
   if(ticket!=id)return false
   ticket=null

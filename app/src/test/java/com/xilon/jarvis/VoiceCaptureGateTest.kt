@@ -18,6 +18,6 @@ class VoiceCaptureGateTest {
  @Test fun closePermanentlyDisablesCapture(){
   val g=VoiceCaptureGate();assertTrue(g.begin(1))
   g.close();assertTrue(g.active());assertFalse(g.begin(2))
-  assertTrue(g.finish(1));assertFalse(g.active())
+  assertTrue(g.finish(1));assertFalse(g.active());assertFalse(g.available())
  }
 }

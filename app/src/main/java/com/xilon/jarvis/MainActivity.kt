@@ -25,6 +25,24 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val partialVoiceGate=VoicePartialGate()
  private val speechCapture=VoiceCaptureGate()
  private val voiceBargeIn=VoiceBargeInState()
+ private val voiceBargeInTimeout=android.os.Handler(android.os.Looper.getMainLooper())
+ private var voiceBargeInTimeoutTask:Runnable?=null
+ private fun endBargeIn(ticket:Long){
+  if(voiceBargeIn.finish(ticket)){
+   voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)}
+   voiceBargeInTimeoutTask=null
+  }
+ }
+ private fun beginBargeIn():Long? {
+  val ticket=voiceBargeIn.beginTicket() ?: return null
+  val timeout=Runnable{if(voiceBargeIn.isCurrent(ticket)){
+   localVad.stop();endBargeIn(ticket)
+   voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
+  }}
+  voiceBargeInTimeoutTask=timeout
+  voiceBargeInTimeout.postDelayed(timeout,12000L)
+  return ticket
+ }
  private fun stopNeural(){
   neuralCancelled=true
   speechCapture.cancel()
@@ -189,44 +207,62 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
-  if(!omegaCore.listening && wake==null && voiceRetry.ready(android.os.SystemClock.elapsedRealtime())){
-   if(!busy && !speechCapture.active() && !omegaCore.speaking){if(android.os.SystemClock.elapsedRealtime()-voiceEndedAt>=400L)startMicrophone()}
-   else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && !voiceBargeIn.active() && voiceInterruptGate.ready(android.os.SystemClock.elapsedRealtime()) && voiceBargeIn.begin())localVad.start({
-    if(continuousVoice && conversationForeground && omegaCore.speaking && !isDestroyed){
-     // Stop playback as soon as VAD detects the user's speech, before ASR.
-     // This prevents the recognizer from hearing continued synthesized audio.
-     // Recognition still validates the transcript through the echo gate.
-     stopAllSpeech()
-     // VAD releases AudioRecord before the Android recognizer takes the mic.
-     listening.listen({text->
-    voiceBargeIn.finish()
-    if(conversationForeground && continuousVoice && text.isNotBlank()){
-     when {
-      echoGate.isStop(text)->{
-       pendingVoiceInterruption=null
+  val now=android.os.SystemClock.elapsedRealtime()
+  if(!omegaCore.listening && wake==null && voiceRetry.ready(now)){
+   if(!busy && !speechCapture.active() && !voiceBargeIn.active() && !omegaCore.speaking){
+    if(now-voiceEndedAt>=400L)startMicrophone()
+   }else if(voiceInterrupt && omegaCore.speaking && !omegaCore.listening && !speechCapture.active() && !voiceBargeIn.active() && voiceInterruptGate.ready(now)){
+    val ticket=beginBargeIn()
+    if(ticket!=null){
+     val started=localVad.start({
+      if(!voiceBargeIn.isCurrent(ticket))return@start
+      if(!continuousVoice || !conversationForeground || isDestroyed || !omegaCore.speaking){
+       endBargeIn(ticket)
+      }else{
        stopAllSpeech()
-       if(busy)nativeModel?.stop()
-       append("Răspuns vocal întrerupt.")
+       // VAD owns AudioRecord only until this callback. ASR starts after release.
+       listening.listen({recognized->
+        if(!voiceBargeIn.isCurrent(ticket))return@listen
+        endBargeIn(ticket)
+        if(conversationForeground && continuousVoice && recognized.isNotBlank()){
+         when {
+          echoGate.isStop(recognized)->{
+           pendingVoiceInterruption=null
+           stopAllSpeech()
+           if(busy)nativeModel?.stop()
+           append("Răspuns vocal întrerupt.")
+          }
+          !echoGate.isEcho(recognized)->{
+           stopAllSpeech()
+           if(busy){
+            pendingVoiceInterruption=recognized
+            nativeModel?.stop()
+           }else acceptVoice(recognized)
+          }
+         }
+        }
+       },{error->
+        if(voiceBargeIn.isCurrent(ticket)){
+         endBargeIn(ticket)
+         voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
+         modelStatus.text=error
+        }
+       })
       }
-      !echoGate.isEcho(text)->{
-       // User speech takes precedence over playback. Echoes are ignored,
-       // and the new command is deferred until the active worker exits.
-       stopAllSpeech()
-       if(busy){
-        // Interrupt inference, then dispatch only after its worker has exited.
-        pendingVoiceInterruption=text
-        nativeModel?.stop()
-       }else acceptVoice(text)
+     },{error->
+      if(voiceBargeIn.isCurrent(ticket)){
+       endBargeIn(ticket)
+       voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
+       modelStatus.text=error
       }
-     }
+     })
+     if(!started)endBargeIn(ticket)
     }
-     },{_->voiceBargeIn.finish()})
-    }
-   },{error->voiceBargeIn.finish();voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error})
+   }
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)900L else 350L)
  }}
- private fun stopVoiceLoop(){localVad.stop();voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
+ private fun stopVoiceLoop(){localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
@@ -1622,7 +1658,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
  private fun startMicrophone(){
-  if(busy)return
+  if(busy || speechCapture.active() || voiceBargeIn.active())return
   stopWake()
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
   startNeural(true)
@@ -2455,6 +2491,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   screenHandler.removeCallbacksAndMessages(null);observedScreen=null
   stopWake()
   stopAirTouch()
+  voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)}
+  voiceBargeInTimeoutTask=null
+  localVad.stop()
+  voiceBargeIn.finish()
   listening.close()
   voice.close()
   nativeModel?.stop()

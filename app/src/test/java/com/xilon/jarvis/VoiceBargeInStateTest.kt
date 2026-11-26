@@ -4,9 +4,20 @@ import org.junit.Test
 class VoiceBargeInStateTest {
  @Test fun onlyOneInterruptAtATime(){
   val s=VoiceBargeInState()
-  assertTrue(s.begin());assertTrue(s.active())
-  assertFalse(s.begin())
-  s.finish();assertFalse(s.active());assertTrue(s.begin())
+  val first=s.beginTicket()!!
+  assertTrue(s.active());assertNull(s.beginTicket())
+  assertTrue(s.finish(first));assertFalse(s.active())
+  val second=s.beginTicket()!!
+  assertTrue(second>first)
+ }
+ @Test fun staleCallbacksCannotFinishNewerInterrupt(){
+  val s=VoiceBargeInState()
+  val old=s.beginTicket()!!
+  assertTrue(s.finish(old))
+  val current=s.beginTicket()!!
+  assertFalse(s.finish(old))
+  assertTrue(s.isCurrent(current));assertTrue(s.active())
+  assertTrue(s.finish(current))
  }
  @Test fun repeatedFinishIsSafe(){
   val s=VoiceBargeInState()
