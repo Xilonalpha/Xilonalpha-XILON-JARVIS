@@ -82,7 +82,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val info=android.app.ActivityManager.MemoryInfo().also{getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it)}
   val power=getSystemService(android.os.PowerManager::class.java)
   val thermal=if(android.os.Build.VERSION.SDK_INT>=29)power.currentThermalStatus else 0
-  return NativeModel(ResourceBudget.gpuLayers(info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode))
+  // Device-lost in ggml-vulkan aborts the native process before Kotlin can recover.
+  // Keep Vulkan packaged, but use the reliable CPU backend by default.
+  // GPU is explicitly experimental until device-specific stability is verified.
+  val experimentalGpu=getSharedPreferences("jarvis_model",MODE_PRIVATE)
+   .getBoolean("enable_experimental_gpu",false)
+  val layers=if(experimentalGpu) ResourceBudget.gpuLayers(
+   info.availMem/1048576,info.lowMemory,thermal,power.isPowerSaveMode
+  ) else 0
+  return NativeModel(layers)
  }
  override fun onTrimMemory(level:Int){
   super.onTrimMemory(level)
