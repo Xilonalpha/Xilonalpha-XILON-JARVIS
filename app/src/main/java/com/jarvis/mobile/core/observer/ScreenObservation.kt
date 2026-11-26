@@ -62,8 +62,8 @@ data class ScreenObservation(
         for (e in shown) {
             val bits = mutableListOf<String>()
             bits.add("role=${e.role}")
-            e.text?.let { bits.add("text=\"${it.take(maxTextChars).replace("\n", " ")}\"") }
-            if (e.desc != null && e.text == null) bits.add("desc=\"${e.desc.take(if (compact) 20 else 40)}\"")
+            if (!e.editable && !e.isPassword) e.text?.let { bits.add("text=\"${it.take(maxTextChars).replace("\n", " ")}\"") }
+            if (!e.editable && !e.isPassword && e.desc != null && e.text == null) bits.add("desc=\"${e.desc.take(if (compact) 20 else 40)}\"")
             if (e.viewId != null && !compact) bits.add("id=${e.viewId.substringAfterLast('/').take(24)}")
             if (e.isPassword) bits.add("password=true")
             if (e.editable) bits.add("editable=true")
