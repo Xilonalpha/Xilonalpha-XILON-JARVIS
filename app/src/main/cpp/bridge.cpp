@@ -202,9 +202,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   const auto elapsedMs=std::chrono::duration_cast<std::chrono::milliseconds>(
    std::chrono::steady_clock::now()-batchStarted).count();
   if(status!=0){
-   ok=e->CallBooleanMethod(self,cancel);
-   if(!ok)publishStage("Eroare evaluare GGUF la tokenul "+std::to_string(offset)+
-    " (cod "+std::to_string(status)+")");
+   const bool cancelled=e->CallBooleanMethod(self,cancel);
+   if(!cancelled){
+    ok=false;
+    publishStage("Eroare evaluare GGUF la tokenul "+std::to_string(offset)+
+     " (cod "+std::to_string(status)+")");
+   }
    ready=false;break;
   }
   if(elapsedMs>2000){
@@ -233,7 +236,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   if(e->ExceptionCheck()){ok=false;break;}
   publishedBytes=out.size();
   }
-  if(i+1<maxTokens){if(decode(&t,1,n+i,true)!=0){ok=e->CallBooleanMethod(self,cancel);break;}}
+  if(i+1<maxTokens){if(decode(&t,1,n+i,true)!=0){
+    const bool cancelled=e->CallBooleanMethod(self,cancel);
+    if(!cancelled){ok=false;publishStage("Eroare GGUF la generarea tokenului "+std::to_string(i+1));}
+    break;
+   }}
  }
  if(ok && !e->ExceptionCheck() && publishedBytes!=out.size()){
   auto partial=e->NewByteArray(out.size());
