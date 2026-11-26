@@ -11,6 +11,12 @@ object NeuralSpeechFactory {
  fun create(context:Context):NeuralSpeech? {
   return try {
    Class.forName("com.xilon.jarvis.SherpaSpeech").getConstructor(Context::class.java).newInstance(context) as NeuralSpeech
-  } catch(e:ClassNotFoundException){null}
+  } catch(e:ReflectiveOperationException){
+   android.util.Log.w("NeuralSpeech", "Offline ASR adapter initialization failed", e)
+   null
+  } catch(e:LinkageError){
+   android.util.Log.w("NeuralSpeech", "Offline ASR native runtime unavailable", e)
+   null
+  }
  }
 }
