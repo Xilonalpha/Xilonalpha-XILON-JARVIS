@@ -1181,6 +1181,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
   composerUpdate?.invoke()
   settings.addView(Switch(this).apply{text="Trimitere vocală automată";isChecked=getPreferences(MODE_PRIVATE).getBoolean("autoVoiceSend",false);autoVoiceSend=isChecked;setOnCheckedChangeListener{_,checked->autoVoiceSend=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("autoVoiceSend",checked).apply()}})
+  settings.addView(Button(this).apply { text="Microfon în fundal • pornește";setOnClickListener{
+   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
+    append("Acordă microfonul și apasă din nou pentru ascultarea în fundal.")
+   }else{
+    runCatching{androidx.core.content.ContextCompat.startForegroundService(this@MainActivity,Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_START))}
+     .onSuccess{append("Ascultarea locală în fundal a fost solicitată. Oprește-o din notificare.")}
+     .onFailure{append("Nu pot porni microfonul în fundal: "+it.message)}
+   }
+  }})
+  settings.addView(Button(this).apply { text="Microfon în fundal • oprește";setOnClickListener{
+   startService(Intent(this@MainActivity,BackgroundVoiceService::class.java).setAction(BackgroundVoiceService.ACTION_STOP))
+  }})
   settings.addView(Button(this).apply { text="Microfon neuronal Sherpa";setOnClickListener{startNeural()}})
   settings.addView(Button(this).apply { text="Hey Jarvis ON/OFF";setOnClickListener{if(wake!=null)stopWake() else startWake()}})
   settings.addView(Button(this).apply { text="Importă modele vocale ONNX";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},46)}})
