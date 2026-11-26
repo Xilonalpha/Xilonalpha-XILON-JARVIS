@@ -31,6 +31,24 @@ if(XILON_VULKAN)
   message(FATAL_ERROR "SPIR-V headers missing: expected spirv/unified1/spirv.hpp under XILON_VULKAN_HEADERS_INCLUDE")
  endif()
  target_include_directories(ggml-vulkan BEFORE PRIVATE "${XILON_VULKAN_HEADERS_INCLUDE}")
+
+ # llama.cpp b12728 calls a Vulkan 1.1 entry point directly in three places.
+ # Android API 26 libvulkan does not export it; use the upstream dynamic
+ # dispatcher (initialized during ggml_vk_instance_init) instead.
+ set(_xilon_vk_source "${llama_SOURCE_DIR}/ggml/src/ggml-vulkan/ggml-vulkan.cpp")
+ if(NOT EXISTS "${_xilon_vk_source}")
+  message(FATAL_ERROR "Expected upstream ggml-vulkan source missing")
+ endif()
+ file(READ "${_xilon_vk_source}" _xilon_vk_content)
+ string(REGEX MATCHALL "vkGetPhysicalDeviceFeatures2\\(" _xilon_vk_calls "${_xilon_vk_content}")
+ list(LENGTH _xilon_vk_calls _xilon_vk_count)
+ if(_xilon_vk_count EQUAL 3)
+  string(REPLACE "vkGetPhysicalDeviceFeatures2(" "ggml_vk_default_dispatcher().vkGetPhysicalDeviceFeatures2(" _xilon_vk_content "${_xilon_vk_content}")
+  file(WRITE "${_xilon_vk_source}" "${_xilon_vk_content}")
+ elseif(NOT _xilon_vk_count EQUAL 0)
+  message(FATAL_ERROR "Unexpected ggml-vulkan source: found ${_xilon_vk_count} direct Vulkan 1.1 calls")
+ endif()
+
 endif()
 add_library(xilon_llama SHARED bridge.cpp)
 target_compile_features(xilon_llama PRIVATE cxx_std_17)
