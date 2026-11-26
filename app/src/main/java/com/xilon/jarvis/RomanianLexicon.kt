@@ -571,7 +571,7 @@ object RomanianLexicon {
  // arguments, not separate commands. Keep semicolons as explicit separators.
  private val separators get() = Regex(
   "(?:\\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\\s+|;\\s*)(?=(?:(?:te rog|jarvis)[,\\s]+)*(?:"
-   + (verbs + listOf("aprinde","stinge","sună","suna","pune","redă","reda","trimite","du-mă","du-ma","mergi","dă","da"))
+   + (verbs + listOf("deschide","lanseaza","seteaza","activeaza","dezactiveaza","cauta","porneste","arata","citeste","trimite","creeaza","apeleaza","navigheaza","opreste","inchide","pune","reda","asculta","aprinde","stinge","regleaza","deruleaza","afiseaza","listeaza","suna","du-ma","mergi","da"))
     .map { Regex.escape(normalize(it)) }.distinct().joinToString("|")
    + ")\\b)",
   RegexOption.IGNORE_CASE
