@@ -16,9 +16,8 @@ internal class RealtimeSpeechBuffer(
   if(cancelled || delta.isEmpty())return emptyList()
   val ready=ArrayList<String>()
   for(ch in delta){
-   if(pending.length>=maxChunkChars && (ch.isWhitespace() || ch in ".!?;,")){
-    emit(ready)
-   }
+   // Flush before the next word, never after swallowing its separator.
+   if(pending.length>=maxChunkChars && ch.isWhitespace())emit(ready)
    pending.append(ch)
    if(ch in ".!?" && pending.length>=minChunkChars)emit(ready)
    else if(pending.length>=maxChunkChars && ch.isWhitespace())emit(ready)

@@ -25,6 +25,22 @@ class RealtimeSpeechBufferTest {
   assertTrue(chunks.size>=2)
   assertEquals("Acesta este un raspuns destul de lung pentru sinteza vocala.",chunks.joinToString(" "))
  }
+ @Test fun streamedPunctuationDoesNotDropText(){
+  val b=RealtimeSpeechBuffer(minChunkChars=4,maxChunkChars=20)
+  val original="Salut! Aceasta este o propozitie. Si inca una?"
+  val chunks=ArrayList<String>()
+  for(c in original)chunks.addAll(b.append(c.toString()))
+  chunks.addAll(b.finish())
+  assertEquals(original,chunks.joinToString(" "))
+ }
+ @Test fun flushIsIdempotentAndResetStartsFreshTurn(){
+  val b=RealtimeSpeechBuffer(minChunkChars=4)
+  b.append("Primul raspuns")
+  assertEquals(listOf("Primul raspuns"),b.finish())
+  assertTrue(b.finish().isEmpty())
+  b.reset()
+  assertEquals(listOf("Al doilea"),b.append("Al doilea").let{it+b.finish()})
+ }
  @Test fun noBlankSpeechAndNoNetworkRequired(){
   val b=RealtimeSpeechBuffer(minChunkChars=2)
   assertTrue(b.append("").isEmpty())
