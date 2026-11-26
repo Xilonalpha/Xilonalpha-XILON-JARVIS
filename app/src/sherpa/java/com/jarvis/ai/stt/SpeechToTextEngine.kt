@@ -38,6 +38,13 @@ class SpeechToTextEngine(context: Context) : Closeable {
     @Volatile
     private var closed = false
 
+    /** Actually constructs the native recognizer; file presence alone is not readiness. */
+    fun validateModelLoad(): Boolean {
+        check(!closed) { "Speech engine closed" }
+        ensureRecognizer()
+        return true
+    }
+
     /** Records until silence is detected, then runs local Sherpa-ONNX decoding. */
     suspend fun listenForCommand(): String = operationMutex.withLock {
         withContext(Dispatchers.IO) {
