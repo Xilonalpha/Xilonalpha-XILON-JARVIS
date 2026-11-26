@@ -113,7 +113,11 @@ jobs:
           fi
           test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/vulkan/vulkan_core.h"
           test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/vk_video/vulkan_video_codec_av1std.h"
-          # Cross-compiling against the Android NDK requires explicit SPIR-V includes.\n          test -s /usr/include/spirv/unified1/spirv.hpp\n          cp -a /usr/include/spirv "$RUNNER_TEMP/xilon-vulkan-sdk/include/"\n          test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/spirv/unified1/spirv.hpp"\n          echo "XILON_VULKAN_HEADERS_INCLUDE=$RUNNER_TEMP/xilon-vulkan-sdk/include" >> "$GITHUB_ENV"
+          # Cross-compiling against the Android NDK requires explicit SPIR-V includes.
+          test -s /usr/include/spirv/unified1/spirv.hpp
+          cp -a /usr/include/spirv "$RUNNER_TEMP/xilon-vulkan-sdk/include/"
+          test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/spirv/unified1/spirv.hpp"
+          echo "XILON_VULKAN_HEADERS_INCLUDE=$RUNNER_TEMP/xilon-vulkan-sdk/include" >> "$GITHUB_ENV"
           glslc --version
       - name: Test and build unified JARVIS APK (VLM + Vulkan)
         shell: bash
