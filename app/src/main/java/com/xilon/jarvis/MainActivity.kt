@@ -1903,7 +1903,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   return outcome.text+"\nStare: "+outcome.status+(outcome.warning?.let{"\n"+it} ?: "")
  }
  private fun respond(q: String): String? = try {
-  if(nativeModel==null && q.trim().lowercase(java.util.Locale.ROOT).trimEnd('!','.','?') in setOf("salut","bună","buna","bună ziua","hello","hi")) "Salut! Sunt JARVIS, asistentul tău local. Cu ce te pot ajuta?"
+  // Safe, deterministic social replies must never enter a multi-billion parameter
+  // model merely because one is loaded: these complete on the UI thread.
+  val instant=InstantReplies.reply(q)
+  if(instant!=null) instant
   else if(q.equals("începe demonstrația",true)){recorder.start();"Înregistrare instrumente de citire pornită."}
   else if(q.equals("anulează demonstrația",true)){recorder.cancel();"Înregistrare anulată."}
   else if(q.startsWith("salvează demonstrația ",true)){val steps=recorder.snapshot();SkillStore(this).save(q.substring("salvează demonstrația ".length),steps);recorder.cancel();"Demonstrație salvată."}
