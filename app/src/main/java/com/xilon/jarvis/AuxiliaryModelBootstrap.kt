@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal object AuxiliaryModelBootstrap {
  private val running=AtomicBoolean(false)
  private val executor=Executors.newSingleThreadExecutor()
+ private const val TAG="JarvisAuxModels"
  val required:List<ModelCatalog.Entry> get()=
   ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+
    ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro)
@@ -48,7 +49,8 @@ internal object AuxiliaryModelBootstrap {
        ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)
       }?:continue
       install(app,entry,uri)
-     }catch(_:Exception){
+     }catch(e:Exception){
+      android.util.Log.w(TAG,"Auxiliary model unavailable: "+entry.file,e)
       // Preserve the failed item for manual inspection and a future launch.
      }
     }
