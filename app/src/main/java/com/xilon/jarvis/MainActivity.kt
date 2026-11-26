@@ -700,24 +700,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // Keep the original utterance for display and all unrelated conversation branches.
     val commandQ=CommandGreeting.stripBeforeCommand(q)
     val lexicalCompound=RomanianLexicon.split(commandQ).size>1
-    // A compound sentence may still express ONE known capability
-    // ("deschide YouTube și pune jazz"). Reuse the existing safe router
-    // before invoking a costly LLM planner.
-    val singleIntent=NaturalToolCommands.parse(commandQ)
-    if(singleIntent!=null && singleIntent.tool=="youtube_search"){
-     executeRequestedTool(singleIntent.tool,singleIntent.args)
+    // Route ALL known single Android capabilities without model inference.
+    // NaturalToolCommands enforces negation and multi-action guards. Its
+    // dedicated YouTube clause is one intent, despite containing "și".
+    val directTool=NaturalToolCommands.parse(commandQ)
+    if(directTool!=null && (!lexicalCompound || directTool.tool=="youtube_search")){
+     executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
     }
+    // Multi-action commands use the existing Romanian lexicon and verified
+    // tool runner. Never silently downgrade a compound to one action.
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
-    // Use one guarded deterministic capability router, not competing
-    // lexicon shortcuts that can swallow multi-action requests as open_app.
-    val naturalTool=if(!lexicalCompound && !RegistryIntent.compound(commandQ))
-     NaturalToolCommands.parse(commandQ) else null
-    if(naturalTool!=null){
-     executeRequestedTool(naturalTool.tool,naturalTool.args)
-     return@setOnClickListener
-    }
     if(RegistryIntent.matches(commandQ)){
      startRegistryPlan(commandQ)
      return@setOnClickListener
