@@ -38,7 +38,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
     if(engine?.supportsConcurrentPlayback()!=true){duplexUnavailable=true;""}
     else kotlinx.coroutines.runBlocking{engine!!.listen()}
-   }catch(e:Exception){runOnUiThread{if(!isDestroyed)modelStatus.text="Duplex ASR: "+e.message};""}
+   }catch(e:Exception){
+    duplexUnavailable=true
+    runOnUiThread{if(!isDestroyed)modelStatus.text="Duplex ASR: "+e.message}
+    ""
+   }
    finally{speechCapture.finish(ticket);duplexListening=false}
    runOnUiThread {
     if(isDestroyed || speechClosing || !speechSessions.isCurrent(ticket) || !conversationForeground || !continuousVoice || recognized.isBlank())return@runOnUiThread
@@ -223,7 +227,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private lateinit var sendControl: android.view.View
  private var autoVoiceSend=false
  private var continuousVoice=false
- private var voiceInterrupt=false
+ private var voiceInterrupt=true
  private val echoGate=VoiceEchoGate()
  private var voiceEndedAt=0L
  private var liveVision:LiveVisionController?=null
@@ -298,7 +302,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
  }}
- private fun stopVoiceLoop(){stopNeural();duplexListening=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
+ private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime()))return
@@ -1125,7 +1129,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   settings.addView(Button(this).apply { text="Importă model gesturi";setOnClickListener{if(!busy){stopAirTouch();startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="*/*";addCategory(Intent.CATEGORY_OPENABLE)},45)}}})
   settings.addView(Button(this).apply { text="Vedere live ON/OFF";setOnClickListener{if(liveVision!=null)stopLiveVision() else startLiveVision()}})
-  settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală: spune «Jarvis oprește»";setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
+  settings.addView(android.widget.CheckBox(this).apply{text="Întrerupere vocală în timpul răspunsului";isChecked=voiceInterrupt;setOnCheckedChangeListener{_,checked->voiceInterrupt=checked}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: selectare comenzi JARVIS prin cursor";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_select",false);gestureSelect=isChecked;setOnCheckedChangeListener{_,checked->gestureSelect=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_select",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch multimedia: palmă orizontal = melodie; vertical = volum";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_media",false);gestureMedia=isChecked;setOnCheckedChangeListener{_,checked->gestureMedia=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_media",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch navigare Android: palmă orizontală = Înapoi / Acasă";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_navigation",false);gestureNavigation=isChecked;setOnCheckedChangeListener{_,checked->gestureNavigation=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_navigation",checked).apply()}})
