@@ -10,6 +10,10 @@ class AuxiliaryModelBootstrapTest {
   assertTrue(required.none { it in ModelCatalog.entries })
   assertTrue(required.none { it.file.endsWith(".gguf",ignoreCase=true) })
  }
+ @Test fun handModelUsesRealCatalogRevisionNotIntegrityMarker(){
+  assertFalse(ModelCatalog.hand.url.contains("pinned-hand"))
+  assertTrue(ModelCatalog.hand.url.contains(ModelCatalog.hand.revision))
+ }
  @Test fun includesEveryAuxiliaryCatalogCategory(){
   val required=AuxiliaryModelBootstrap.required
   assertTrue(required.containsAll(ModelCatalog.ocr))
