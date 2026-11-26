@@ -45,14 +45,26 @@ class ModelDownloads(context:Context){
     require(ref.bytes<=(root.usableSpace-200000000L)/2){"Spațiu insuficient"}
     check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
    }
-   val http=(URL(url).openConnection() as HttpURLConnection).apply{connectTimeout=20000;readTimeout=30000;instanceFollowRedirects=true;setRequestProperty("Accept-Encoding","identity")}
+   val partial=part(entry)
+   val offset=partial.length().takeIf{it in 1 until ref.bytes} ?: 0L
+   if(partial.length()>0L && offset==0L)partial.delete()
+   val http=(URL(url).openConnection() as HttpURLConnection).apply{
+    connectTimeout=30000;readTimeout=120000;instanceFollowRedirects=true
+    setRequestProperty("Accept-Encoding","identity")
+    if(offset>0L)setRequestProperty("Range","bytes=$offset-")
+   }
    connection=http
-   check(http.responseCode==200){"HTTP "+http.responseCode}
+   val response=http.responseCode
+   check(response==200 || (offset>0L && response==206)){"HTTP $response"}
+   val resumed=offset>0L && response==206 &&
+    http.getHeaderField("Content-Range")?.startsWith("bytes $offset-")==true
+   if(response==206)check(resumed){"Răspuns Range invalid"}
+   val initial=if(resumed)offset else 0L
    val total=ref?.bytes?:http.contentLengthLong
    val limit=ref?.bytes?:if(entry==ModelCatalog.hand)64L*1024*1024 else 512L*1024*1024
-   var bytes=0L
+   var bytes=initial
    val started=android.os.SystemClock.elapsedRealtime()
-   http.inputStream.use{src->part(entry).outputStream().use{dst->
+   http.inputStream.use{src->java.io.FileOutputStream(partial,resumed).use{dst->
     val buffer=ByteArray(65536)
     while(true){
      check(!cancelled.contains(entry.file)){"Anulat"}
@@ -67,7 +79,7 @@ class ModelDownloads(context:Context){
    check(part(entry).renameTo(file(entry))){"Salvare eșuată"}
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).apply()
   }catch(e:Exception){
-   part(entry).delete()
+   // Preserve partial bytes for the next verified retry.
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_FAILED).putString(entry.file+".error",e.message?:"Eroare").apply()
   }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry)}
  }
@@ -107,7 +119,7 @@ class ModelDownloads(context:Context){
   active[entry.file]?.let{return it}
   if(file(entry).isFile)return Transfer(DownloadManager.STATUS_SUCCESSFUL,file(entry).length(),file(entry).length(),0)
   if(id(entry)<0)return Transfer(-1,0,-1,0)
-  return Transfer(DownloadManager.STATUS_FAILED,0,-1,0,error=prefs.getString(entry.file+".error",null) ?: "Transfer întrerupt; reîncearcă")
+  return Transfer(DownloadManager.STATUS_FAILED,part(entry).length(),-1,0,error=(prefs.getString(entry.file+".error",null) ?: "Transfer întrerupt")+"; reîncearcă")
  }
  fun status(entry:ModelCatalog.Entry)=transfer(entry).label
  fun canStart(entry:ModelCatalog.Entry)=transfer(entry).state in setOf(-1,DownloadManager.STATUS_FAILED)
