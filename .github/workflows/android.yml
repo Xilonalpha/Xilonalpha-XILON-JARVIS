@@ -117,7 +117,18 @@ jobs:
           test -s /usr/include/vulkan/vulkan.hpp
           mkdir -p "$RUNNER_TEMP/xilon-vulkan-sdk/include"
           cp -a /usr/include/vulkan "$RUNNER_TEMP/xilon-vulkan-sdk/include/"
+          # Vulkan video codec headers live beside vulkan/, not inside it.
+          # ggml-vulkan includes them transitively through vulkan_core.h.
+          if [ -d /usr/include/vk_video ]; then
+            cp -a /usr/include/vk_video "$RUNNER_TEMP/xilon-vulkan-sdk/include/"
+          fi
+          if [ ! -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/vk_video/vulkan_video_codec_av1std.h" ]; then
+            git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/Vulkan-Headers"
+            cp -a "$RUNNER_TEMP/Vulkan-Headers/include/vulkan/." "$RUNNER_TEMP/xilon-vulkan-sdk/include/vulkan/"
+            cp -a "$RUNNER_TEMP/Vulkan-Headers/include/vk_video" "$RUNNER_TEMP/xilon-vulkan-sdk/include/"
+          fi
           test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/vulkan/vulkan_core.h"
+          test -s "$RUNNER_TEMP/xilon-vulkan-sdk/include/vk_video/vulkan_video_codec_av1std.h"
           echo "XILON_VULKAN_HEADERS_INCLUDE=$RUNNER_TEMP/xilon-vulkan-sdk/include" >> "$GITHUB_ENV"
           glslc --version
       - name: Build Vulkan and VLM APK
