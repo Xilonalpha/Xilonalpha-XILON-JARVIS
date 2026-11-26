@@ -67,7 +67,21 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    // model is absent or incompatible; no network access is performed.
    val neural=runCatching{
     val model=java.io.File(context.filesDir,"models/silero_vad.onnx")
-    if(model.isFile)SileroVad16k(model) else null
+    // A real compatible model can be bundled at assets/models/silero_vad.onnx.
+    // Copy once to private storage because ONNX Runtime needs a filesystem path.
+    if(!model.isFile){
+     val stream=runCatching{context.assets.open("models/silero_vad.onnx")}.getOrNull()
+     stream?.use{source->
+      model.parentFile?.mkdirs()
+      val temporary=java.io.File(model.parentFile,"silero_vad.onnx.part")
+      try {
+       source.copyTo(temporary.outputStream())
+       if(temporary.length()>0 && !temporary.renameTo(model))
+        throw java.io.IOException("Cannot install Silero model")
+      }finally{temporary.delete()}
+     }
+    }
+    if(model.isFile && model.length()>0)SileroVad16k(model) else null
    }.getOrNull()
    val startedAt=android.os.SystemClock.elapsedRealtime()
    var detected=false
