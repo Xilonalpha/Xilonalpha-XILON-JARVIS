@@ -87,7 +87,13 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      for(i in 0 until count){val v=samples[i].toDouble()/32768.0;energy+=v*v}
      val rms=sqrt(energy/count)
      val activity=if(neural!=null){
-      runCatching{neural.accept(samples,count)}.getOrElse{decision.accept(rms)}
+      // Do not silently reinterpret a failed neural inference as speech.
+      // A model failure ends this capture; the next session can use energy VAD.
+      try { neural.accept(samples,count) }
+      catch(e:Exception){
+       main.post{if(generation.get()==session)onError("Silero VAD: "+(e.message?:"inferență eșuată"))}
+       break
+      }
      }else decision.accept(rms)
      if(activity){
       detected=true
