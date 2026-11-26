@@ -72,15 +72,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
     // Copy once to private storage because ONNX Runtime needs a filesystem path.
     if(!model.isFile){
      val stream=runCatching{context.assets.open("models/silero_vad.onnx")}.getOrNull()
-     stream?.use{source->
-      model.parentFile?.mkdirs()
-      val temporary=java.io.File(model.parentFile,"silero_vad.onnx.part")
-      try {
-       source.copyTo(temporary.outputStream())
-       if(temporary.length()>0 && !temporary.renameTo(model))
-        throw java.io.IOException("Cannot install Silero model")
-      }finally{temporary.delete()}
-     }
+     stream?.use{source->OfflineVadModelInstaller.install(source,model)}
     }
     if(model.isFile && model.length()>0)SileroVad16k(model) else null
    }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
