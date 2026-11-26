@@ -25,8 +25,8 @@ internal object AuxiliaryModelBootstrap {
   if(!running.compareAndSet(false,true))return
   executor.execute{
    try{
-    val network=app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-    if(network?.isActiveNetworkMetered!=false)return@execute
+    val network=(app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager) ?: return@execute
+    if(network.isActiveNetworkMetered)return@execute
     val downloads=ModelDownloads(app)
     for(entry in required.distinctBy{it.file}){
      if(Thread.currentThread().isInterrupted)break
@@ -43,7 +43,9 @@ internal object AuxiliaryModelBootstrap {
        }
       }
       val uri=downloads.uri(entry)?:continue
-      val ref=downloads.reference(entry)
+      val ref=if(entry==ModelCatalog.hand)
+       ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned")
+      else downloads.reference(entry)
       app.contentResolver.openInputStream(uri)?.use{
        ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)
       }?:continue
@@ -78,7 +80,9 @@ internal object AuxiliaryModelBootstrap {
      context.contentResolver.openInputStream(uri)?.use{src->
       temp.outputStream().use{dst->src.copyTo(dst,65536)}
      }?:error("Missing downloaded file")
-     val ref=ModelDownloads(context).reference(entry)
+     val ref=if(entry==ModelCatalog.hand)
+      ModelMetadata.Reference("fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",7819105L,"pinned")
+     else ModelDownloads(context).reference(entry)
      ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
      if(!target.isFile)check(temp.renameTo(target))
     }finally{temp.delete()}
