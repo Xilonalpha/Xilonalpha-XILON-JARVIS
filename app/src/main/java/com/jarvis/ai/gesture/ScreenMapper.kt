@@ -34,7 +34,7 @@ data class ScreenMapper(
 
         fun parse(text: String): ScreenMapper? {
             val v = text.split(',').mapNotNull { it.trim().toFloatOrNull() }
-            if (v.size != 6) return null
+            if (v.size != 6 || v.any { !it.isFinite() }) return null
             return ScreenMapper(v[0], v[1], v[2], v[3], v[4], v[5])
         }
     }
@@ -61,7 +61,7 @@ object Calibration {
         val (p0, p1, p2) = frame
         // det of [[u0 v0 1] [u1 v1 1] [u2 v2 1]] = twice the signed triangle area.
         val det = p0.x * (p1.y - p2.y) - p0.y * (p1.x - p2.x) + (p1.x * p2.y - p2.x * p1.y)
-        if (abs(det) / 2 < MIN_FRAME_AREA) return null
+        if (!det.isFinite() || abs(det) / 2 < MIN_FRAME_AREA) return null
 
         fun solveAxis(t0: Float, t1: Float, t2: Float): Triple<Float, Float, Float> {
             // Cramer's rule for [u v 1] * [k1 k2 k3]^T = t.

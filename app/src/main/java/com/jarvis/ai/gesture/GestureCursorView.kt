@@ -46,12 +46,69 @@ class GestureCursorView(
     private var fistSince=0L
     private var fistFired=false
     private var active=false
-    fun setTracking(enabled:Boolean){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    private val calibrationPoints=mutableListOf<NormPoint>()
+    private var calibrationActive=false
+    private var calibrationStart=0L
+    private var calibrationAnchor:NormPoint?=null
+    private val calibrationSamples=mutableListOf<NormPoint>()
+    private var mapper=ScreenMapper.fromRegion()
+    private var mapperLoaded=false
+    var onCalibrationProgress: (Int,Float)->Unit={_,_->}
+    var onCalibrationFinished: (Boolean)->Unit={}
+    fun startCalibration(){
+        calibrationPoints.clear()
+        calibrationSamples.clear()
+        calibrationAnchor=null
+        calibrationActive=true
+        onCalibrationProgress(0,0f)
+    }
+    fun cancelCalibration(){
+        calibrationActive=false
+        calibrationPoints.clear()
+        calibrationSamples.clear()
+        calibrationAnchor=null
+    }
+    private fun captureCalibration(frame:GestureFrame){
+        val p=frame.point
+        if(frame.gesture!=HandGesture.POINTING || p==null){
+            calibrationAnchor=null
+            calibrationSamples.clear()
+            return
+        }
+        val tip=NormPoint(1f-p.x,p.y)
+        val now=android.os.SystemClock.elapsedRealtime()
+        val anchor=calibrationAnchor
+        if(anchor==null || anchor.distanceTo(tip)>0.02f){
+            calibrationAnchor=tip
+            calibrationStart=now
+            calibrationSamples.clear()
+        }
+        calibrationSamples.add(tip)
+        val progress=((now-calibrationStart)/1000f).coerceIn(0f,1f)
+        onCalibrationProgress(calibrationPoints.size,progress)
+        if(progress<1f)return
+        calibrationPoints.add(NormPoint(calibrationSamples.map{it.x}.average().toFloat(),calibrationSamples.map{it.y}.average().toFloat()))
+        calibrationAnchor=null
+        calibrationSamples.clear()
+        if(calibrationPoints.size==3){
+            val solved=Calibration.solve(calibrationPoints)
+            if(solved!=null){
+                mapper=solved
+                mapperLoaded=true
+                profile.edit().putString("screen_mapper",solved.serialize()).apply()
+                cursorSmoother.reset()
+            }
+            cancelCalibration()
+            onCalibrationFinished(solved!=null)
+        }else onCalibrationProgress(calibrationPoints.size,0f)
+    }
+    fun setTracking(enabled:Boolean){if(!enabled)cancelCalibration();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
+            if(calibrationActive){captureCalibration(frame);return@post}
             if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
@@ -61,7 +118,7 @@ class GestureCursorView(
                     cursorAspect=aspect
                     cursorSmoother=CursorSmoother(FilterConfig(minCutoff=1f,beta=8f),0.006f,aspect)
                 }
-                val mapper=ScreenMapper.fromRegion()
+                if(!mapperLoaded){mapper=profile.getString("screen_mapper",null)?.let{ScreenMapper.parse(it)}?:ScreenMapper.fromRegion();mapperLoaded=true}
                 val mapped=mapper.map(NormPoint(1f-normalized.x,normalized.y))
                 val filtered=cursorSmoother.update(mapped,now)
                 val targetX=filtered.x*(width-1).coerceAtLeast(0)
