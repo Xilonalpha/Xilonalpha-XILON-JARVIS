@@ -593,7 +593,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(modelStatus)
   root.addView(chat,LinearLayout.LayoutParams(-1,0,1f))
   root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
-  settings.addView(Switch(this).apply { text="Răspuns vocal offline"; replyToggle=this;isChecked=speakReplies; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) voice.stop() } })
+  settings.addView(Switch(this).apply { text="Răspuns vocal offline"; replyToggle=this;isChecked=speakReplies; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) stopAllSpeech() } })
   settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
   settings.addView(Button(this).apply { text="Voce neuronală RO Piper: OFF";piperToggle=this;setOnClickListener{
    if(romanianNeuralVoice){romanianNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: OFF"}
@@ -621,7 +621,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(v==null || !v.installed())append("Piper RO: instalează pachetul complet Mihai RO înainte de test.")
    else{piperVoice=v;playNeural("Bună! Sunt Jarvis și pot vorbi în limba română, fără conexiune la internet.",v)}
   }})
-  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {voice.stop();kokoroVoice=v;englishNeuralVoice=true;text="Voce neuronală EN: ON"}}} })
+  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
   settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
@@ -980,7 +980,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      continuousVoice=true;voiceLoopHandler.removeCallbacks(voiceLoop);voiceLoopHandler.postDelayed(voiceLoop,500L);updateContinuousVoiceButton();append("Conversație continuă activată în prim-plan.");return@setOnClickListener
     }
     if(normalizedRomanian=="opreste conversatia continua"){
-     stopVoiceLoop();stopNeural();listening.close();voice.stop();kokoroVoice?.stop();append("Conversație continuă oprită.");return@setOnClickListener
+     stopVoiceLoop();stopNeural();listening.close();stopAllSpeech();append("Conversație continuă oprită.");return@setOnClickListener
     }
     runCatching{DeviceReports.execute(this@MainActivity,normalizedRomanian)}.getOrElse{"Diagnostic indisponibil: "+it.javaClass.simpleName}?.let{append(it);return@setOnClickListener}
     if(normalizedRomanian=="raport performanta"){
