@@ -2087,6 +2087,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else dialog.setNegativeButton("Închide",null)
    dialog.show()
   }})
+  val manualModelLabels=setOf("Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
+  val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
   val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Sherpa Streaming • Full Duplex","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
   settings.addView(Button(this).apply{text="OMEGA Model Center";setOnClickListener{
@@ -2115,6 +2117,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
     card.setOnClickListener{dialog.dismiss();catalogButtons[label]?.performClick()}
     center.addView(card,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})
+   }
+   center.addView(TextView(this@MainActivity).apply{text="Import și instalare manuală";textSize=17f;setTextColor(cyan);setPadding(0,dp(16),0,dp(8))})
+   for(source in manualModelButtons){
+    center.addView(Button(this@MainActivity).apply{text=source.text;isAllCaps=false;setOnClickListener{dialog.dismiss();source.performClick()}})
    }
    val handler=android.os.Handler(android.os.Looper.getMainLooper())
    val refresh=object:Runnable{override fun run(){if(!dialog.isShowing||isDestroyed)return;for((view,bar,entry) in states){val transfer=runCatching{manager.transfer(entry)}.getOrNull();view.text=entry.name+" · "+ModelInventory.display(ModelInventory.installed(this@MainActivity,entry),transfer);val percent=transfer?.percent;bar.visibility=if(percent!=null&&transfer?.state==android.app.DownloadManager.STATUS_RUNNING)android.view.View.VISIBLE else android.view.View.GONE;bar.progress=percent?:0};handler.postDelayed(this,1500)}}
@@ -2146,7 +2152,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    for(v in controls){
     if(v===panelTitle||v===panelInfo||v.tag=="omega_category")continue
     val label=(v as? TextView)?.text?.toString()?:continue
-    if(label in catalogLabels)continue
+    if(label in catalogLabels || label in manualModelLabels)continue
     val category=when{
      label.contains("demonstra",true)||label.contains("abilități",true)->"Învățare și demonstrații"
      label=="Accesibilitate și agenți"||label.contains("jurnal",true)||label.contains("graf local",true)||label.contains("observă",true)->"Agenți și memorie"
