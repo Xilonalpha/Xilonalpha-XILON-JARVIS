@@ -229,6 +229,28 @@ class MainActivity : androidx.activity.ComponentActivity() {
    dialog.dismiss()
   }
  }
+ private var airDragStart:Pair<Int,Int>?=null
+ private var airDragFingerprint:String?=null
+ private var airDragPackage:String?=null
+ private fun airTouchAdvanced(x:Float,y:Float):Boolean{
+  val mode=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString("advanced_touch","off") ?: "off"
+  if(mode=="off")return false
+  val svc=LocalScreen.service() ?: run{modelStatus.text="Activează accesibilitatea JARVIS.";return true}
+  val obs=LocalScreen.observe() ?: return true
+  if(obs.packageName!=packageName){airDragStart=null;return true}
+  val loc=IntArray(2);cursor.getLocationOnScreen(loc)
+  val sx=(x+loc[0]).toInt();val sy=(y+loc[1]).toInt()
+  if(mode=="drag" && airDragStart==null){
+   airDragStart=sx to sy;airDragFingerprint=obs.fingerprint();airDragPackage=obs.packageName
+   modelStatus.text="Indică destinația și repetă gestul.";return true
+  }
+  val start=airDragStart
+  airDragStart=null
+  if(mode=="drag" && (start==null || airDragPackage!=obs.packageName || airDragFingerprint!=obs.fingerprint())){modelStatus.text="Glisare anulată: ecranul s-a schimbat.";return true}
+  val accepted=svc.airTouchMotion(if(mode=="drag")start!!.first else sx,if(mode=="drag")start!!.second else sy,sx,sy,mode,obs.packageName,obs.fingerprint())
+  modelStatus.text=if(accepted)"Gest transmis către Android." else "Gest refuzat."
+  return true
+ }
  private fun dispatchGestureBinding(key:String):Boolean{
   val action=GestureBindings.resolve(getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString(key,null))
   if(action=="Implicit")return false
@@ -1469,6 +1491,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val slider=SeekBar(this@MainActivity).apply{max=40;progress=((prefs.getFloat("pinch_ratio",0.32f).coerceIn(0.15f,0.55f)-0.15f)*100).toInt()}
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Calibrare ciupire").setMessage("Spre dreapta: detectare mai sensibilă. Testează cu mâna după salvare.").setView(slider).setNegativeButton("Anulează",null).setNeutralButton("Implicit"){_,_->prefs.edit().putFloat("pinch_ratio",0.32f).apply()}.setPositiveButton("Salvează"){_,_->prefs.edit().putFloat("pinch_ratio",(15+slider.progress)/100f).apply()}.show()
   }})
+  settings.addView(Button(this).apply{text="Air Touch: mod tactil avansat";setOnClickListener{
+   val modes=arrayOf("off","tap","double","long","drag","zoom_in","zoom_out")
+   val labels=arrayOf("Dezactivat","Click","Click dublu","Apăsare lungă","Glisare în două etape","Zoom înainte","Zoom înapoi")
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Acțiune la apropierea degetelor").setItems(labels){_,index->
+    airDragStart=null
+    getSharedPreferences("air_touch_profile",MODE_PRIVATE).edit().putString("advanced_touch",modes[index]).apply()
+   }.show()
+  }})
   settings.addView(Button(this).apply{text="Air Touch: învață un gest nou";setOnClickListener{showCustomGestureRecorder()}})
   settings.addView(Button(this).apply{text="Air Touch: șterge gesturi învățate";setOnClickListener{
    val controller=airTouch
@@ -2123,7 +2153,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   cursor.smoothing=(10+getPreferences(MODE_PRIVATE).getInt("air_smoothing",12).coerceIn(0,55))/100f
   cursor.onPointTap={x,y->
    if(conversationForeground && airTouch!=null && !busy){
-    if(dispatchGestureBinding("pinch"))Unit else if(!gestureSelect)startMicrophone()
+    if(airTouchAdvanced(x,y))Unit else if(dispatchGestureBinding("pinch"))Unit else if(!gestureSelect)startMicrophone()
     else {
      val location=IntArray(2);cursor.getLocationOnScreen(location)
      val sx=x+location[0];val sy=y+location[1]

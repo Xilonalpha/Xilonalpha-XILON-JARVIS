@@ -56,6 +56,31 @@ class LocalScreen:AccessibilityService(){
    }finally{n.recycle()}
   }finally{root.recycle()}
  }
+ internal fun airTouchMotion(x:Int,y:Int,endX:Int,endY:Int,mode:String,pkg:String,fingerprint:String):Boolean {
+  val obs=structuredScreen()?:return false
+  if(obs.packageName!=pkg || obs.fingerprint()!=fingerprint)return false
+  val m=resources.displayMetrics
+  fun valid(a:Int,b:Int)=a in 0 until m.widthPixels && b in 0 until m.heightPixels
+  if(!valid(x,y)||!valid(endX,endY))return false
+  if(mode in setOf("tap","double","long"))return elementGesture(x,y,mode,pkg,fingerprint)
+  val builder=android.accessibilityservice.GestureDescription.Builder()
+  if(mode=="drag"){
+   val path=android.graphics.Path().apply{moveTo(x.toFloat(),y.toFloat());lineTo(endX.toFloat(),endY.toFloat())}
+   builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,900))
+  }else if(mode=="zoom_in" || mode=="zoom_out"){
+   val radius=minOf(x,m.widthPixels-1-x,y,m.heightPixels-1-y,160)
+   if(radius<40)return false
+   val near=radius/4f
+   val far=radius.toFloat()
+   val start=if(mode=="zoom_in")near else far
+   val end=if(mode=="zoom_in")far else near
+   for(sign in listOf(-1,1)){
+    val path=android.graphics.Path().apply{moveTo(x+sign*start,y.toFloat());lineTo(x+sign*end,y.toFloat())}
+    builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,450))
+   }
+  }else return false
+  return dispatchGesture(builder.build(),null,null)
+ }
  internal fun elementGesture(x:Int,y:Int,mode:String,pkg:String?,fingerprint:String):Boolean {
   val obs=structuredScreen()?:return false
   if(pkg==null||obs.packageName!=pkg||obs.fingerprint()!=fingerprint)return false
