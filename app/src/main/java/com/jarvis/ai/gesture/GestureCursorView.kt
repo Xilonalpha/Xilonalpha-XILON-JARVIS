@@ -34,6 +34,7 @@ class GestureCursorView(
     var onHorizontal: (Int)->Unit={}
     private var palmX:Float?=null
     private var scrollPose:HandGesture?=null
+    private val scrollDetector=ScrollDetector(ScrollConfig())
     var onPointTap: ((Float,Float)->Unit)?=null
     private val profile = context.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     var smoothing=profile.getFloat("smoothing", 0.22f).coerceIn(0.1f,0.65f)
@@ -43,13 +44,13 @@ class GestureCursorView(
     private var fistSince=0L
     private var fistFired=false
     private var active=false
-    fun setTracking(enabled:Boolean){filterX.reset();filterY.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    fun setTracking(enabled:Boolean){scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
-            if(frame.point==null){filterX.reset();filterY.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val now=android.os.SystemClock.elapsedRealtime()
@@ -64,7 +65,7 @@ class GestureCursorView(
                     cursor.y += smoothing.coerceIn(0.1f,0.65f) * (targetY - cursor.y)
                 }
             }
-            if(frame.gesture!=scrollPose){palmAnchor=null;palmX=null;scrollPose=frame.gesture}
+            if(frame.gesture!=scrollPose){scrollDetector.resetStroke();palmAnchor=null;palmX=null;scrollPose=frame.gesture}
             when (frame.gesture) {
                 HandGesture.FIST -> {
                     cursorVisible=false
@@ -72,7 +73,18 @@ class GestureCursorView(
                     if(fistSince==0L)fistSince=now
                     if(!fistFired && now-fistSince>=900L){fistFired=true;onFistHold()}
                 }
-                HandGesture.OPEN_PALM, HandGesture.TWO_FINGERS -> {
+                HandGesture.TWO_FINGERS -> {
+                    cursorVisible=true
+                    val point=frame.point
+                    if(point!=null) {
+                        when(scrollDetector.update(android.os.SystemClock.elapsedRealtime(),point.x,point.y)){
+                            VerticalDirection.UP -> onScroll(1)
+                            VerticalDirection.DOWN -> onScroll(-1)
+                            null -> Unit
+                        }
+                    }
+                }
+                HandGesture.OPEN_PALM -> {
                     cursorVisible=true
                     val y=frame.point?.y
                     if(y!=null){
