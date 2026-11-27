@@ -182,7 +182,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
     }
 
-    /** Stops any active microphone read and releases Sherpa's native recognizer. */
+    /** Stops active microphone reads; native recognizers remain cached until close. */
     fun stopCapture() {
         cancellationEpoch.incrementAndGet()
         captureCancelled = true
@@ -478,6 +478,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 if (!started) {
                     preRoll.addLast(normalized.copyOf(count))
                     while (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
+                    if (!voiced && totalSamples >= INITIAL_SILENCE_SAMPLES) break
                     if (voiced) {
                         started = true
                         voicedSamples += count
@@ -518,6 +519,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         const val PRE_ROLL_FRAMES = 6
         const val SILENCE_SAMPLES = 12_800 // 800 ms; shorter turn-taking latency
         const val MIN_VOICED_SAMPLES = 2_880 // 180 ms
+        const val INITIAL_SILENCE_SAMPLES = SAMPLE_RATE * 5
         const val MAX_RECORDING_SECONDS = 20
         const val SPEECH_RMS_THRESHOLD = 0.006f
     }
