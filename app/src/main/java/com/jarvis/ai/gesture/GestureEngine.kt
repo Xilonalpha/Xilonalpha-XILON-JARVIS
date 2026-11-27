@@ -14,7 +14,6 @@ import java.io.Closeable
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.hypot
 
 /** Runs MediaPipe Hand Landmarker and emits an index-tip position plus simple hand shortcuts. */
 class GestureEngine(
@@ -101,7 +100,7 @@ class GestureEngine(
                 emit(
                     GestureFrame(
                         point = PointF(indexTip.x.coerceIn(0f, 1f), indexTip.y.coerceIn(0f, 1f)),
-                        gesture = if (trackingGuard.settled(timestamp)) classify(positions) else HandGesture.NONE,
+                        gesture = if (trackingGuard.settled(timestamp)) classify(raw) else HandGesture.NONE,
                     ),
                 )
             }
@@ -120,19 +119,15 @@ class GestureEngine(
         landmarker = null
     }
 
-    private fun classify(points: List<PointF>): HandGesture {
-        val wrist = points[WRIST]
-        val palmScale = distance(wrist, points[MIDDLE_MCP]).coerceAtLeast(0.001f)
-        val pinch = distance(points[THUMB_TIP], points[INDEX_TIP]) / palmScale < settings.getFloat("pinch_ratio", PINCH_RATIO).coerceIn(0.15f, 0.55f)
-        if (pinch) return HandGesture.PINCH_TAP
-
-        val extendedFingers = FINGER_TIPS.indices.count { index ->
-            distance(wrist, points[FINGER_TIPS[index]]) >
-                distance(wrist, points[FINGER_MCPS[index]]) * FINGER_EXTENSION_RATIO
-        }
-        return when {
-            extendedFingers == 0 -> HandGesture.FIST
-            extendedFingers >= 4 -> HandGesture.OPEN_PALM
+    private val poseClassifier = StaticGestureClassifier(PalmConfig())
+    private fun classify(points: List<Landmark>): HandGesture {
+        val pose = poseClassifier.classify(points)
+        val threshold = settings.getFloat("pinch_ratio", PINCH_RATIO).coerceIn(0.15f, 0.55f)
+        if (pose != HandPose.FIST && PinchGeometry.isPinchHand(points, 1.15f) &&
+            PinchGeometry.ratio(points) < threshold) return HandGesture.PINCH_TAP
+        return when (pose) {
+            HandPose.FIST -> HandGesture.FIST
+            HandPose.OPEN_PALM -> HandGesture.OPEN_PALM
             else -> HandGesture.NONE
         }
     }
@@ -147,9 +142,6 @@ class GestureEngine(
         }else frame.gesture
         onFrame(frame.copy(gesture = gesture))
     }
-
-    private fun distance(first: PointF, second: PointF): Float =
-        hypot(first.x - second.x, first.y - second.y)
 
     private companion object {
         const val MIN_TASK_FILE_BYTES = 1_024L
