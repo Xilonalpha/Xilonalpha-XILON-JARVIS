@@ -18,6 +18,23 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
  private var controller:AirTouchController?=null
  private var cursor:GestureCursorView?=null
  private var lastTap=0L
+ private data class DragAnchor(val x:Int,val y:Int,val pkg:String,val fingerprint:String,val time:Long)
+ private var anchor:DragAnchor?=null
+ private fun available():Boolean{
+  val power=getSystemService(android.os.PowerManager::class.java)
+  val lock=getSystemService(KeyguardManager::class.java)
+  return power.isInteractive && !lock.isKeyguardLocked && LocalScreen.connected()
+ }
+ private fun scroll(direction:Int){
+  anchor=null
+  if(!available())return
+  val now=android.os.SystemClock.elapsedRealtime()
+  if(now-lastTap<700L)return
+  val obs=LocalScreen.observe()?:return
+  if(obs.packageName==packageName)return
+  lastTap=now
+  LocalScreen.service()?.scrollConfirmed(direction>0)
+ }
  override fun onCreate(){super.onCreate();registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)}
  override fun onBind(intent:Intent?):IBinder?=null
  override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
@@ -33,19 +50,31 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
    val wm=getSystemService(WINDOW_SERVICE) as WindowManager
    val params=WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT).apply{gravity=Gravity.TOP or Gravity.START;alpha=0.75f}
    wm.addView(view,params);cursor=view
-   view.onPointTap={x,y->
+   view.onPointTap=tap@{x,y->
     val now=android.os.SystemClock.elapsedRealtime()
+    if(!available()){anchor=null;return@tap}
     if(now-lastTap>=700L){
      val svc=LocalScreen.service()
      val obs=LocalScreen.observe()
      val loc=IntArray(2);view.getLocationOnScreen(loc)
      if(svc!=null && obs!=null && obs.packageName!=packageName){
       lastTap=now
-      svc.airTouchMotion((x+loc[0]).toInt(),(y+loc[1]).toInt(),(x+loc[0]).toInt(),(y+loc[1]).toInt(),"tap",obs.packageName,obs.fingerprint())
+      val sx=(x+loc[0]).toInt();val sy=(y+loc[1]).toInt()
+      val selected=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString("advanced_touch","off")
+      val mode=if(selected in setOf("double","long","drag","zoom_in","zoom_out"))selected!! else "tap"
+      val previous=anchor
+      anchor=null
+      if(mode=="drag"){
+       if(previous==null || now-previous.time>10000L || previous.pkg!=obs.packageName || previous.fingerprint!=obs.fingerprint()){
+        anchor=DragAnchor(sx,sy,obs.packageName,obs.fingerprint(),now)
+       }else svc.airTouchMotion(previous.x,previous.y,sx,sy,mode,obs.packageName,obs.fingerprint())
+      }else svc.airTouchMotion(sx,sy,sx,sy,mode,obs.packageName,obs.fingerprint())
      }
     }
    }
-   view.onFistHold={stopSelf()}
+   view.onScroll={scroll(it)}
+   view.onTwoFingerScroll={scroll(it)}
+   view.onFistHold={anchor=null;stopSelf()}
    registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
    controller=AirTouchController(this,this,view,{android.util.Log.d("GlobalAirTouch",it)},{stopSelf()}).also{it.start()}
   }catch(e:Exception){android.util.Log.e("GlobalAirTouch","Start failed",e);stopSelf()}
