@@ -232,7 +232,15 @@ class WhatsAppMessageTool(private val send: Boolean = false) : Tool(
                 val ok = listOf("com.whatsapp", "com.whatsapp.w4b").any { pkg ->
                     runCatching { context.startActivity(i.setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
                 }
-                if (ok) return ToolResult.ok("Conversația este deschisă cu mesajul pregătit. Apasă Trimite în WhatsApp.", Verification.UNVERIFIED, detail = "phone=$phone")
+                if (ok) {
+                    if (send) return ToolResult(
+                        com.jarvis.mobile.core.tools.ToolStatus.REQUIRES_CONFIRMATION,
+                        "Mesajul este pregătit, dar NU a fost trimis. Apasă Trimite în WhatsApp.",
+                        Verification.COULD_NOT_VERIFY,
+                        recoveryHint = "whatsapp-manual-send",
+                    )
+                    return ToolResult.ok("Conversația este deschisă cu mesajul pregătit. Apasă Trimite în WhatsApp.", Verification.UNVERIFIED, detail = "phone=$phone")
+                }
             }
             return ToolResult.fail("Could not open the requested WhatsApp recipient.")
         }
