@@ -146,7 +146,23 @@ class MediaPlayPauseTool : Tool(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             return try {
-                ToolEnvironment.context.startActivity(Intent.createChooser(intent, "Alege playerul muzical local").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                val context = ToolEnvironment.context
+                val candidates = context.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                    .filter { it.activityInfo.packageName !in setOf("com.google.android.youtube", "com.google.android.apps.youtube.music", context.packageName) }
+                val preferred = context.packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                val chosen = candidates.firstOrNull { it.activityInfo.packageName == preferred?.activityInfo?.packageName }
+                    ?: candidates.singleOrNull()
+                if (chosen != null) {
+                    intent.setClassName(chosen.activityInfo.packageName, chosen.activityInfo.name)
+                    context.startActivity(intent)
+                } else {
+                    if (candidates.isEmpty()) return ToolResult.fail("Nu există un player local compatibil cu redarea prin comandă Android.")
+                    val options = candidates.map { Intent(intent).setClassName(it.activityInfo.packageName, it.activityInfo.name) }
+                    val chooser = Intent.createChooser(options.first(), "Alege playerul muzical local")
+                        .putExtra(Intent.EXTRA_INITIAL_INTENTS, options.drop(1).toTypedArray())
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(chooser)
+                }
                 ToolResult.ok("Am solicitat redarea în playerul muzical ales. Redarea efectivă nu este verificată.", Verification.UNVERIFIED)
             } catch (e: Exception) {
                 ToolResult.fail("Nu am putut deschide un player compatibil: "+e.message?.take(80))
