@@ -402,11 +402,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private var piperToggle:Button?=null
+ private var kokoroToggle:Button?=null
  private var replyToggle:Switch?=null
  private fun activateInstalledRomanianVoice():Boolean {
-  val v=piperVoice?.takeIf{it.installed()} ?: NeuralVoiceFactory.romanian(this)?.takeIf{it.installed()} ?: return false
+  val v=NeuralVoiceFactory.romanian(this)?.takeIf{it.installed()} ?: return false
   stopAllSpeech();piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;speakReplies=true
-  piperToggle?.text="Voce neuronală RO Piper: ON";replyToggle?.isChecked=true
+  piperToggle?.text="Voce neuronală RO Piper: ON";kokoroToggle?.text="Voce neuronală EN: OFF";replyToggle?.isChecked=true
   return true
  }
  private lateinit var listening: OfflineListening
@@ -607,7 +608,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text=if(romanianNeuralVoice) "Voce neuronală RO Piper: ON" else "Voce neuronală RO Piper: OFF";piperToggle=this;setOnClickListener{
    if(romanianNeuralVoice){romanianNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: OFF"}
    else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
-   else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
+   else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;kokoroToggle?.text="Voce neuronală EN: OFF";stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
   }})
   settings.addView(Button(this).apply { text="Alege vocea română Piper";setOnClickListener{
    if(busy)return@setOnClickListener
@@ -616,6 +617,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Voce română Piper")
     .setSingleChoiceItems(arrayOf("Automat","Mihai","Liana"),speakers.indexOf(prefs.getString("speaker","auto"))){dialog,index->
      stopAllSpeech()
+     piperVoice=null
      prefs.edit().putString("speaker",speakers[index]).apply()
      dialog.dismiss()
      if(!activateInstalledRomanianVoice()){
@@ -630,7 +632,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(v==null || !v.installed())append("Piper RO: instalează pachetul complet Mihai RO înainte de test.")
    else{piperVoice=v;playNeural("Bună! Sunt Jarvis și pot vorbi în limba română, fără conexiune la internet.",v)}
   }})
-  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
+  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";kokoroToggle=this;setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
   settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
