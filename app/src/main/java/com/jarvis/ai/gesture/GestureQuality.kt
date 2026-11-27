@@ -1,8 +1,6 @@
 /* MIT upstream Serg1o2/GestureControl 7db01a590d2eedd225b9305b7eadf536bca1b054; vendor/gesturecontrol/LICENSE */
 package com.jarvis.ai.gesture
 
-import com.jarvis.ai.gesture.Gesture
-import com.jarvis.ai.gesture.GestureEngine
 import com.jarvis.ai.gesture.HandFrame
 
 /** Result of checking a freshly recorded custom gesture. */
@@ -15,7 +13,7 @@ data class QualityReport(
     val nearestOther: String?,
     val separation: Float?,
     /** Built-in gestures that fire while performing this gesture. */
-    val builtInConflicts: Set<Gesture>,
+    val builtInConflicts: Set<HandGesture>,
 ) {
     val consistent: Boolean get() = outlierIndex == null
     val distinct: Boolean get() = separation == null || separation >= MIN_SEPARATION
@@ -43,7 +41,7 @@ object GestureQuality {
         samples: List<GestureSample>,
         recordings: List<List<HandFrame>>,
         others: List<CustomTemplate>,
-        builtInEngine: () -> GestureEngine,
+        builtInEngine: () -> (HandFrame) -> HandGesture?,
     ): QualityReport {
         val radius = radius(samples)
         val means = samples.indices.map { meanDistanceToOthers(samples, it) }
@@ -63,7 +61,7 @@ object GestureQuality {
 
         val conflicts = recordings.flatMap { frames ->
             val engine = builtInEngine()
-            frames.mapNotNull { engine.process(it)?.gesture }
+            frames.mapNotNull { engine(it)?.takeUnless { gesture -> gesture == HandGesture.NONE } }
         }.toSet()
         return QualityReport(radius, outlier, nearest, separation, conflicts)
     }
