@@ -339,7 +339,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){neuralSpeaking=false;omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);voice.speak(text)?.let{append(it)}}
  }
  private var englishNeuralVoice=false
- private var romanianNeuralVoice=false
+ private var romanianNeuralVoice=true
  private var piperVoice:NeuralVoice?=null
  private val whisperInstallHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val whisperInstallPoll=object:Runnable{override fun run(){
@@ -604,7 +604,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   root.addView(settingsScroll,LinearLayout.LayoutParams(-1,0,1f))
   settings.addView(Switch(this).apply { text="Răspuns vocal offline"; replyToggle=this;isChecked=speakReplies; setOnCheckedChangeListener { _, enabled -> speakReplies=enabled; if(!enabled) stopAllSpeech() } })
   settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
-  settings.addView(Button(this).apply { text="Voce neuronală RO Piper: OFF";piperToggle=this;setOnClickListener{
+  settings.addView(Button(this).apply { text=if(romanianNeuralVoice) "Voce neuronală RO Piper: ON" else "Voce neuronală RO Piper: OFF";piperToggle=this;setOnClickListener{
    if(romanianNeuralVoice){romanianNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: OFF"}
    else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
    else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
@@ -2346,7 +2346,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if((!manual && !speakReplies && !continuousVoice && !wakeReplyPending) || text.isBlank())return
   wakeReplyPending=false
   listening.close();echoGate.remember(text)
-  val piper=piperVoice ?: if(!voice.romanianVoiceAvailable() && !englishNeuralVoice) NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}?.also{piperVoice=it} else null
+  val piper=piperVoice ?: if(!englishNeuralVoice && (romanianNeuralVoice || !voice.romanianVoiceAvailable())) NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}?.also{piperVoice=it} else null
   if((romanianNeuralVoice || (!englishNeuralVoice && !voice.romanianVoiceAvailable())) && piper!=null && piper.installed()){
    playNeural(text,piper);return
   }
