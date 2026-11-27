@@ -26,8 +26,8 @@ class GestureCursorView(
     }
     private var cursor = PointF(-1f, -1f)
     private var hasPosition = false
-    private val filterX=OneEuroFilter(1f,8f,1f)
-    private val filterY=OneEuroFilter(1f,8f,1f)
+    private var cursorAspect=1f
+    private var cursorSmoother=CursorSmoother(FilterConfig(minCutoff=1f,beta=8f),0.006f,cursorAspect)
     private var cursorVisible = true
     var onFistHold:()->Unit={}
     var onScroll: (Int)->Unit={}
@@ -46,19 +46,26 @@ class GestureCursorView(
     private var fistSince=0L
     private var fistFired=false
     private var active=false
-    fun setTracking(enabled:Boolean){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    fun setTracking(enabled:Boolean){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
-            if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val now=android.os.SystemClock.elapsedRealtime()
-                val mirrorX = filterX.filter(1f - normalized.x,now)
-                val targetX = mirrorX.coerceIn(0f, 1f) * (width-1).coerceAtLeast(0)
-                val targetY = filterY.filter(normalized.y,now).coerceIn(0f, 1f) * (height-1).coerceAtLeast(0)
+                val aspect=height.toFloat()/width.coerceAtLeast(1)
+                if(aspect>0f && aspect!=cursorAspect){
+                    cursorAspect=aspect
+                    cursorSmoother=CursorSmoother(FilterConfig(minCutoff=1f,beta=8f),0.006f,aspect)
+                }
+                val mapper=ScreenMapper.fromRegion()
+                val mapped=mapper.map(NormPoint(1f-normalized.x,normalized.y))
+                val filtered=cursorSmoother.update(mapped,now)
+                val targetX=filtered.x*(width-1).coerceAtLeast(0)
+                val targetY=filtered.y*(height-1).coerceAtLeast(0)
                 if (!hasPosition) {
                     cursor.set(targetX, targetY)
                     hasPosition = true
