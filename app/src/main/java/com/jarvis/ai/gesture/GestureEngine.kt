@@ -25,6 +25,7 @@ class GestureEngine(
     private val appContext = context.applicationContext
     private var landmarker: HandLandmarker? = null
     private var lastTimestampMs = 0L
+    private val throttle = PowerSaveThrottler()
     private val settings = appContext.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     private var lastPinchAtMs = 0L
     private var pinchFrames=0
@@ -66,6 +67,8 @@ class GestureEngine(
             imageProxy.close()
             return
         }
+        val frameTime = SystemClock.elapsedRealtime()
+        if (!throttle.shouldProcess(frameTime)) { imageProxy.close(); return }
         var mpImage: com.google.mediapipe.framework.image.MPImage? = null
         var bitmap: android.graphics.Bitmap? = null
         try {
@@ -83,6 +86,7 @@ class GestureEngine(
                 .build()
             val result = activeLandmarker.detectForVideo(mpImage, imageOptions, timestamp)
             val landmarks = result.landmarks().firstOrNull()
+            throttle.onProcessed(frameTime, landmarks != null && landmarks.size >= REQUIRED_LANDMARKS)
             if (landmarks == null || landmarks.size < REQUIRED_LANDMARKS) {
                 emit( GestureFrame(point = null, gesture = HandGesture.NONE) )
             } else {
