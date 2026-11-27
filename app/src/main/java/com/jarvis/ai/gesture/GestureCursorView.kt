@@ -29,6 +29,8 @@ class GestureCursorView(
     private var cursorAspect=1f
     private var cursorSmoother=CursorSmoother(FilterConfig(minCutoff=1f,beta=8f),0.006f,cursorAspect)
     private var cursorVisible = true
+    var onCustomGesture:(Long)->Unit={}
+    var onTwoFingerScroll:(Int)->Unit={onScroll(it)}
     var onFistHold:()->Unit={}
     var onScroll: (Int)->Unit={}
     var onHorizontal: (Int)->Unit={}
@@ -114,6 +116,7 @@ class GestureCursorView(
         post {
             if(!active || epoch!=trackingEpoch)return@post
             if(calibrationActive){captureCalibration(frame);invalidate();return@post}
+            if(frame.customGestureId!=null){onCustomGesture(frame.customGestureId);return@post}
             if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
@@ -149,8 +152,8 @@ class GestureCursorView(
                     val point=frame.point
                     if(point!=null) {
                         when(scrollDetector.update(android.os.SystemClock.elapsedRealtime(),point.x,point.y)){
-                            VerticalDirection.UP -> onScroll(1)
-                            VerticalDirection.DOWN -> onScroll(-1)
+                            VerticalDirection.UP -> onTwoFingerScroll(1)
+                            VerticalDirection.DOWN -> onTwoFingerScroll(-1)
                             null -> Unit
                         }
                     }
@@ -196,7 +199,7 @@ class GestureCursorView(
                     if(action!=null && hasPosition)action(at?.x?.times((width-1).coerceAtLeast(0))?:cursor.x,at?.y?.times((height-1).coerceAtLeast(0))?:cursor.y) else onPinchTap()
                 }
                 HandGesture.POINTING -> { cursorVisible=true }
-                HandGesture.NONE -> Unit
+                HandGesture.NONE -> {cursorVisible=true}
             }
             invalidate()
         }

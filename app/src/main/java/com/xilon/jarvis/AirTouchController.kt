@@ -18,8 +18,18 @@ class AirTouchController(private val context:Context,private val owner:Lifecycle
  @Volatile private var closed=false
  private val failed=java.util.concurrent.atomic.AtomicBoolean(false)
  private val engine=GestureEngine(context,{if(!closed && !failed.get())cursor.update(it)},{message->if(!closed && failed.compareAndSet(false,true))ContextCompat.getMainExecutor(context).execute{if(!closed){status("Air Touch oprit: "+message);close();onFailure()}}})
+ private val customStore=com.jarvis.ai.gesture.CustomGestureStore(context)
+ fun savedGestures()=customStore.load()
+ fun beginGestureSample(){engine.customGestures.begin()}
+ fun finishGestureSample()=engine.customGestures.finish()
+ fun cancelGestureSample(){engine.customGestures.cancel()}
+ fun saveGestures(items:List<com.jarvis.ai.gesture.SavedGesture>){
+  customStore.save(items)
+  engine.customGestures.setTemplates(items.map{it.template})
+ }
  fun start(){
   if(closed || !started.compareAndSet(false,true))return
+  engine.customGestures.setTemplates(customStore.load().map{it.template})
   cursor.setTracking(true)
   worker.execute{
    val result=runCatching{engine.initialize()}

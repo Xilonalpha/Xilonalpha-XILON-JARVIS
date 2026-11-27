@@ -190,6 +190,45 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var gestureReverse=false
  private var gestureRecent=false
  private var gestureDialog:android.app.AlertDialog?=null
+ private fun showCustomGestureRecorder(){
+  val controller=airTouch ?: run{modelStatus.text="Activează Air Touch.";return}
+  val existing=controller.savedGestures()
+  if(existing.size>=16){modelStatus.text="Limita de 16 gesturi.";return}
+  val panel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+  val name=android.widget.EditText(this).apply{hint="Numele gestului"}
+  val actions=listOf("Microfon","Înapoi","Acasă","Recente","următoarea melodie","melodia anterioară","crește volumul","scade volumul")
+  val selector=Spinner(this).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,actions)}
+  val samples=mutableListOf<com.jarvis.ai.gesture.GestureSample>()
+  val status=TextView(this).apply{text="Înregistrează 3 exemple de 1–3 secunde."}
+  val record=Button(this).apply{text="Înregistrează 3 secunde"}
+  panel.addView(name);panel.addView(selector);panel.addView(status);panel.addView(record)
+  val dialog=android.app.AlertDialog.Builder(this).setTitle("Gest personalizat").setView(panel).setNegativeButton("Anulează",null).setPositiveButton("Salvează",null).create()
+  record.setOnClickListener{
+   if(samples.size>=3 || airTouch!==controller)return@setOnClickListener
+   record.isEnabled=false
+   controller.beginGestureSample()
+   status.text="Execută gestul acum."
+   record.postDelayed({
+    if(dialog.isShowing && airTouch===controller){
+     val sample=controller.finishGestureSample()
+     if(sample!=null)samples.add(sample)
+     status.text="Exemple valide: ${samples.size}/3"
+     record.isEnabled=samples.size<3
+    }else controller.cancelGestureSample()
+   },3000)
+  }
+  dialog.setOnDismissListener{controller.cancelGestureSample()}
+  dialog.show()
+  dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
+   val label=name.text.toString().trim().take(60)
+   if(samples.size!=3 || label.isBlank()){status.text="Completează numele și cele trei exemple.";return@setOnClickListener}
+   val radius=com.jarvis.ai.gesture.GestureQuality.radius(samples)
+   if(radius>2f){status.text="Exemple prea diferite. Repetă înregistrarea.";samples.clear();record.isEnabled=true;return@setOnClickListener}
+   val template=com.jarvis.ai.gesture.CustomTemplate(System.currentTimeMillis(),label,samples.toList(),radius)
+   controller.saveGestures(existing+com.jarvis.ai.gesture.SavedGesture(template,actions[selector.selectedItemPosition]))
+   dialog.dismiss()
+  }
+ }
  private fun dispatchGestureBinding(key:String):Boolean{
   val action=GestureBindings.resolve(getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString(key,null))
   if(action=="Implicit")return false
@@ -1430,6 +1469,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val slider=SeekBar(this@MainActivity).apply{max=40;progress=((prefs.getFloat("pinch_ratio",0.32f).coerceIn(0.15f,0.55f)-0.15f)*100).toInt()}
    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Calibrare ciupire").setMessage("Spre dreapta: detectare mai sensibilă. Testează cu mâna după salvare.").setView(slider).setNegativeButton("Anulează",null).setNeutralButton("Implicit"){_,_->prefs.edit().putFloat("pinch_ratio",0.32f).apply()}.setPositiveButton("Salvează"){_,_->prefs.edit().putFloat("pinch_ratio",(15+slider.progress)/100f).apply()}.show()
   }})
+  settings.addView(Button(this).apply{text="Air Touch: învață un gest nou";setOnClickListener{showCustomGestureRecorder()}})
+  settings.addView(Button(this).apply{text="Air Touch: șterge gesturi învățate";setOnClickListener{
+   val controller=airTouch
+   if(controller!=null){
+    val items=controller.savedGestures()
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Șterge gest").setItems(items.map{it.template.name}.toTypedArray()){_,index->controller.saveGestures(items.filterIndexed{i,_->i!=index})}.show()
+   }
+  }})
   settings.addView(Button(this).apply{text="Air Touch: acțiuni personalizate";setOnClickListener{
    val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
    val panel=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL}
@@ -2088,6 +2135,20 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
+  cursor.onCustomGesture={id->
+   if(conversationForeground && !busy && gestureDialog?.isShowing!=true){
+    val action=airTouch?.savedGestures()?.firstOrNull{it.template.id==id}?.action
+    when(action){
+     "Microfon"->startMicrophone()
+     "Înapoi","Acasă","Recente"->{
+      val global=when(action){"Înapoi"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK;"Acasă"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME;else->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS}
+      modelStatus.text=if(LocalScreen.service()?.performGlobalAction(global)==true)"Navigare solicitată." else "Navigare indisponibilă."
+     }
+     "următoarea melodie","melodia anterioară","crește volumul","scade volumul"->MediaActions(this).execute(action)?.let{modelStatus.text=it}
+    }
+   }
+  }
+  cursor.onTwoFingerScroll={direction->if(conversationForeground && airTouch!=null && !busy){val target=if(settingsScroll.visibility==android.view.View.VISIBLE)settingsScroll else scroll;target.smoothScrollBy(0,direction*240)}}
   cursor.onHorizontal={raw->if(conversationForeground && airTouch!=null && !busy){
    val direction=if(gestureReverse)-raw else raw
    if(dispatchGestureBinding(if(direction>0) "right" else "left"))Unit else if(gestureNavigation){
