@@ -28,6 +28,7 @@ class GestureEngine(
     private val throttle = PowerSaveThrottler()
     private val settings = appContext.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     private var lastPinchAtMs = 0L
+    private val trackingGuard = TrackingGuard(StabilityConfig(settleMs = 250), 150)
     private var pinchFrames=0
     private var pinchLatched=false
 
@@ -88,14 +89,19 @@ class GestureEngine(
             val landmarks = result.landmarks().firstOrNull()
             throttle.onProcessed(frameTime, landmarks != null && landmarks.size >= REQUIRED_LANDMARKS)
             if (landmarks == null || landmarks.size < REQUIRED_LANDMARKS) {
+                trackingGuard.onNoHand(timestamp)
                 emit( GestureFrame(point = null, gesture = HandGesture.NONE) )
             } else {
+                val aspect = if (imageProxy.imageInfo.rotationDegrees % 180 == 0) imageProxy.width.toFloat() / imageProxy.height else imageProxy.height.toFloat() / imageProxy.width
+                val raw = landmarks.map { Landmark(it.x(), it.y(), it.z()) }
+                val restart = trackingGuard.onHand(timestamp, raw, aspect)
+                if (restart) emit(GestureFrame(null, HandGesture.NONE))
                 val positions = landmarks.map { PointF(it.x(), it.y()) }
                 val indexTip = positions[INDEX_TIP]
                 emit(
                     GestureFrame(
                         point = PointF(indexTip.x.coerceIn(0f, 1f), indexTip.y.coerceIn(0f, 1f)),
-                        gesture = classify(positions),
+                        gesture = if (trackingGuard.settled(timestamp)) classify(positions) else HandGesture.NONE,
                     ),
                 )
             }
