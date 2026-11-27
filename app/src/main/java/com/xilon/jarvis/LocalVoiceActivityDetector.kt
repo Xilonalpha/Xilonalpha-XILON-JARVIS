@@ -84,13 +84,13 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
    var failed=false
    try {
     if(neuralFailure!=null){
-     failed=true
-     main.post{if(generation.get()==session)onError("Silero VAD: "+neuralFailure)}
-    }else if(running.get() && generation.get()==session){
+     android.util.Log.w("XilonVAD","Silero initialization failed; using energy detector: "+neuralFailure)
+    }
+    if(running.get() && generation.get()==session){
      record.startRecording()
      startedAt=android.os.SystemClock.elapsedRealtime()
     }
-    while(neuralFailure==null && running.get() && generation.get()==session){
+    while(running.get() && generation.get()==session){
      // Bound microphone ownership even when the environment remains silent.
      if(android.os.SystemClock.elapsedRealtime()-startedAt>=6000L)break
      val count=record.read(samples,0,samples.size)
@@ -100,7 +100,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      }
      val activity=if(neural!=null){
       // Do not silently reinterpret a failed neural inference as speech.
-      // A model failure ends this capture; the next session can use energy VAD.
+      // An inference failure ends this capture rather than triggering on unverified audio.
       try { neural.accept(samples,count) }
       catch(e:Exception){
        failed=true
