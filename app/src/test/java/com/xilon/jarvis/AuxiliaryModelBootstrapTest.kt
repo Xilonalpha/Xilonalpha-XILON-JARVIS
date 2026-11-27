@@ -14,15 +14,16 @@ class AuxiliaryModelBootstrapTest {
   assertFalse(ModelCatalog.hand.url.contains("pinned-hand"))
   assertTrue(ModelCatalog.hand.url.contains(ModelCatalog.hand.revision))
  }
- @Test fun includesEveryAuxiliaryCatalogCategory(){
+ @Test fun onlyCoreSpeechAssetsAreAutomatic(){
   val required=AuxiliaryModelBootstrap.required
-  assertTrue(required.containsAll(ModelCatalog.ocr))
+  assertTrue(required.none { it in ModelCatalog.ocr })
   assertTrue(required.containsAll(ModelCatalog.whisper))
-  assertTrue(required.containsAll(ModelCatalog.wake))
-  assertTrue(required.containsAll(ModelCatalog.vision))
-  assertTrue(required.contains(ModelCatalog.hand))
-  assertTrue(required.contains(ModelCatalog.kokoro))
+  assertTrue(required.none { it in ModelCatalog.wake })
+  assertTrue(required.none { it in ModelCatalog.vision })
+  assertFalse(required.contains(ModelCatalog.hand))
+  assertFalse(required.contains(ModelCatalog.kokoro))
   assertTrue(required.contains(ModelCatalog.silero))
+  assertEquals((ModelCatalog.whisper+ModelCatalog.silero).toSet(),required.toSet())
   assertTrue(ModelCatalog.silero.url.contains("/v6.2/"))
   assertEquals(required.size,required.map { it.file }.distinct().size)
  }
