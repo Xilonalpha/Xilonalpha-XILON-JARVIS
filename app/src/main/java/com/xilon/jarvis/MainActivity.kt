@@ -181,7 +181,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun stopWake(){wake?.stop();wake=null;wakeCommandPending=false;wakeReplyPending=false}
  private fun startWake(){
   if(BackgroundVoiceService.sessionActive)return
-  if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
+  if(!conversationForeground || speechClosing || omegaCore.listening || busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47);return}
   listening.close();voice.stop()
   lateinit var controller:WakeController
@@ -2302,7 +2302,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private var useLocalSpeechModel=false
  private fun startMicrophone(fromWake:Boolean=false){
   if(BackgroundVoiceService.sessionActive){append("Serviciul vocal în fundal este activ sau se oprește.");return}
-  if(busy || speechCapture.active() || voiceBargeIn.active())return
+  if(!conversationForeground || speechClosing || omegaCore.listening || busy || speechCapture.active() || voiceBargeIn.active())return
   stopWake()
   wakeCommandPending=fromWake
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
