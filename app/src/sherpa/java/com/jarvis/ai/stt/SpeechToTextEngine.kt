@@ -116,8 +116,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
     }
 
-    /** Streaming is selected only when the preferred Romanian Whisper model is absent. */
-    fun supportsConcurrentPlayback():Boolean = !hasRomanianWhisper() && !useFineTuned() && hasStreamingModelFiles()
+    private fun englishStreamingEnabled() = appContext.getSharedPreferences("speech_models", Context.MODE_PRIVATE)
+        .getBoolean("allow_english_streaming", false)
+
+    /** English streaming requires explicit opt-in and absence of Romanian Whisper. */
+    fun supportsConcurrentPlayback():Boolean = englishStreamingEnabled() && !hasRomanianWhisper() && !useFineTuned() && hasStreamingModelFiles()
 
     private fun streamingFiles(): List<File>? {
         val directory = File(modelDirectory, "streaming-asr")
@@ -135,7 +138,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 check(!closed) { "Speech engine closed" }
                 if (useFineTuned()) fineTunedRecognizer()
                 else if (hasRomanianWhisper()) ensureRecognizer()
-                else if (ensureOnlineRecognizer() == null) ensureRecognizer()
+                else if (englishStreamingEnabled() && ensureOnlineRecognizer() != null) Unit
+                else error("Instalează Whisper multilingv sau Whisper Small RO din OMEGA.")
             }
         }
         return true
@@ -162,7 +166,10 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 val engine = fineTunedRecognizer()
                 return@withContext if (cancelled()) "" else engine.transcribe(recording, cancelled)
             }
-            val online = if (hasRomanianWhisper()) null else ensureOnlineRecognizer()
+            val online = if (hasRomanianWhisper() || !englishStreamingEnabled()) null else ensureOnlineRecognizer()
+            check(hasRomanianWhisper() || online != null) {
+                "Instalează Whisper multilingv sau Whisper Small RO din OMEGA pentru recunoaștere în română."
+            }
             if (online != null) return@withContext captureStreaming(online, requestEpoch, onPartial)
             val activeRecognizer = ensureRecognizer()
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
