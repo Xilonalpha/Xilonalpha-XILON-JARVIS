@@ -26,6 +26,8 @@ class GestureCursorView(
     }
     private var cursor = PointF(-1f, -1f)
     private var hasPosition = false
+    private val filterX=OneEuroFilter(1f,8f,1f)
+    private val filterY=OneEuroFilter(1f,8f,1f)
     private var cursorVisible = true
     var onFistHold:()->Unit={}
     var onScroll: (Int)->Unit={}
@@ -40,18 +42,19 @@ class GestureCursorView(
     private var fistSince=0L
     private var fistFired=false
     private var active=false
-    fun setTracking(enabled:Boolean){palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    fun setTracking(enabled:Boolean){filterX.reset();filterY.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
-            if(frame.point==null){palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){filterX.reset();filterY.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
-                val mirrorX = 1f - normalized.x
+                val now=android.os.SystemClock.elapsedRealtime()
+                val mirrorX = filterX.filter(1f - normalized.x,now)
                 val targetX = mirrorX.coerceIn(0f, 1f) * (width-1).coerceAtLeast(0)
-                val targetY = normalized.y.coerceIn(0f, 1f) * (height-1).coerceAtLeast(0)
+                val targetY = filterY.filter(normalized.y,now).coerceIn(0f, 1f) * (height-1).coerceAtLeast(0)
                 if (!hasPosition) {
                     cursor.set(targetX, targetY)
                     hasPosition = true
