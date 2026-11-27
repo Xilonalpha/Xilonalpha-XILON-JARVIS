@@ -49,6 +49,19 @@ class YoutubeSearchTool : Tool(
         val q = T.str(args, "query") ?: return ToolResult.fail("Missing required arg: query.")
         val enc = URLEncoder.encode(q, "UTF-8")
         val context = ToolEnvironment.context
+        val videoId = Regex("^[A-Za-z0-9_-]{11}$")
+        val uri = runCatching { Uri.parse(q.trim()) }.getOrNull()
+        val id = when {
+            uri?.scheme in listOf("https", "http") && uri?.host == "youtu.be" -> uri?.pathSegments?.singleOrNull()
+            uri?.scheme in listOf("https", "http") && uri?.host in listOf("www.youtube.com", "youtube.com", "m.youtube.com") && uri?.path == "/watch" -> uri?.getQueryParameter("v")
+            else -> null
+        }
+        if (id != null && videoId.matches(id)) {
+            val watch = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$id")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { context.startActivity(Intent(watch).setPackage("com.google.android.youtube")) }.isSuccess)
+                return ToolResult.ok("Am deschis videoclipul cerut; redarea nu este confirmată.", Verification.UNVERIFIED)
+            return CommStart.start(watch)
+        }
         if (T.bool(args, "play") == true) {
             val play = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
                 setPackage("com.google.android.youtube")
