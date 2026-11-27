@@ -51,25 +51,18 @@ class YoutubeSearchTool : Tool(
         val context = ToolEnvironment.context
         val videoId = Regex("^[A-Za-z0-9_-]{11}$")
         val uri = runCatching { Uri.parse(q.trim()) }.getOrNull()
-        val id = when {
+        val suppliedId = when {
             uri?.scheme in listOf("https", "http") && uri?.host == "youtu.be" -> uri?.pathSegments?.singleOrNull()
             uri?.scheme in listOf("https", "http") && uri?.host in listOf("www.youtube.com", "youtube.com", "m.youtube.com") && uri?.path == "/watch" -> uri?.getQueryParameter("v")
             else -> null
         }
-        if (id != null && videoId.matches(id)) {
+        val id = suppliedId?.takeIf(videoId::matches)
+            ?: if (T.bool(args, "play") == true) YoutubeVideoLookup.first(enc) else null
+        if (id != null) {
             val watch = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$id")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (runCatching { context.startActivity(Intent(watch).setPackage("com.google.android.youtube")) }.isSuccess)
                 return ToolResult.ok("Am deschis videoclipul cerut; redarea nu este confirmată.", Verification.UNVERIFIED)
             return CommStart.start(watch)
-        }
-        if (T.bool(args, "play") == true) {
-            val play = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
-                setPackage("com.google.android.youtube")
-                putExtra(android.app.SearchManager.QUERY, q)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            if (runCatching { context.startActivity(play) }.isSuccess)
-                return ToolResult.ok("Am solicitat redarea pe YouTube; aplicația decide dacă pornește automat.", Verification.UNVERIFIED)
         }
         val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$enc")).apply {
             setPackage("com.google.android.youtube")
@@ -152,33 +145,41 @@ class MediaPlayPauseTool : Tool(
         val action = T.str(args, "action") ?: "toggle"
         if (action == "local") {
             val query = T.str(args, "query")?.trim().orEmpty()
-            val intent = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
-                putExtra(android.app.SearchManager.QUERY, query)
-                putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, if (query.isEmpty()) "vnd.android.cursor.item/*" else "vnd.android.cursor.item/audio")
-                if (query.isNotEmpty()) putExtra(android.provider.MediaStore.EXTRA_MEDIA_TITLE, query)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            val context = ToolEnvironment.context
+            val media = android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            val columns = arrayOf("_id", "title", "artist", "mime_type")
             return try {
-                val context = ToolEnvironment.context
-                val candidates = context.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-                    .filter { it.activityInfo.packageName !in setOf("com.google.android.youtube", "com.google.android.apps.youtube.music", context.packageName) }
-                val preferred = context.packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-                val chosen = candidates.firstOrNull { it.activityInfo.packageName == preferred?.activityInfo?.packageName }
-                    ?: candidates.singleOrNull()
-                if (chosen != null) {
-                    intent.setClassName(chosen.activityInfo.packageName, chosen.activityInfo.name)
-                    context.startActivity(intent)
-                } else {
-                    if (candidates.isEmpty()) return ToolResult.fail("Nu există un player local compatibil cu redarea prin comandă Android.")
-                    val options = candidates.map { Intent(intent).setClassName(it.activityInfo.packageName, it.activityInfo.name) }
-                    val chooser = Intent.createChooser(options.first(), "Alege playerul muzical local")
-                        .putExtra(Intent.EXTRA_INITIAL_INTENTS, options.drop(1).toTypedArray())
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(chooser)
+                val target = com.xilon.jarvis.RomanianLexicon.normalize(query)
+                var best = 0
+                var selected: android.net.Uri? = null
+                var mime = "audio/*"
+                context.contentResolver.query(media, columns, "is_music != 0", null, "title COLLATE NOCASE ASC")?.use { songs ->
+                    while (songs.moveToNext()) {
+                        val title = com.xilon.jarvis.RomanianLexicon.normalize(songs.getString(1).orEmpty())
+                        val artist = com.xilon.jarvis.RomanianLexicon.normalize(songs.getString(2).orEmpty())
+                        val score = when {
+                            target.isEmpty() || title == target -> 3
+                            title.contains(target) -> 2
+                            (title + " " + artist).contains(target) -> 1
+                            else -> 0
+                        }
+                        if (score > best) {
+                            best = score
+                            selected = android.content.ContentUris.withAppendedId(media, songs.getLong(0))
+                            mime = songs.getString(3) ?: "audio/*"
+                        }
+                        if (best == 3) break
+                    }
                 }
-                ToolResult.ok("Am solicitat redarea în playerul muzical ales. Redarea efectivă nu este verificată.", Verification.UNVERIFIED)
-            } catch (e: Exception) {
-                ToolResult.fail("Nu am putut deschide un player compatibil: "+e.message?.take(80))
+                val track = selected ?: return ToolResult.fail("Nu am găsit o piesă potrivită în muzica salvată pe telefon.")
+                val play = Intent(Intent.ACTION_VIEW).setDataAndType(track, mime)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(play)
+                ToolResult.ok("Am deschis piesa salvată în playerul audio.", Verification.UNVERIFIED)
+            } catch (e: SecurityException) {
+                ToolResult.fail("Permite accesul JARVIS la muzica de pe telefon.")
+            } catch (e: android.content.ActivityNotFoundException) {
+                ToolResult.fail("Nu am găsit un player pentru acest fișier audio.")
             }
         }
         val key = when(action) {

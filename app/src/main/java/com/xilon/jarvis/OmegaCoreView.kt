@@ -1,45 +1,71 @@
 package com.xilon.jarvis
+
 import android.content.Context
-import android.graphics.*
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.view.View
-import kotlin.math.*
-class OmegaCoreView(context:Context):View(context){
- var active=false
-  set(value){field=value;invalidate()}
- var speaking=false
-  set(value){field=value;invalidate()}
- var listening=false
-  set(value){field=value;invalidate()}
- var level=0f
-  set(value){field=value.coerceIn(0f,1f);invalidate()}
- private var phase=0f
- private var lastFrame=0L
- private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
- override fun onDraw(canvas:Canvas){
-  super.onDraw(canvas)
-  val radius=min(width,height)*0.44f*(if(listening)0.94f+level*0.06f else 1f)
-  if(radius<=0)return
-  canvas.save();canvas.translate(width/2f,height/2f);canvas.scale(radius/100,radius/100)
-  val now=android.os.SystemClock.uptimeMillis()
-  val delta=if(lastFrame==0L)0L else (now-lastFrame).coerceIn(0L,100L)
-  lastFrame=now
-  phase=(phase+delta*(if(listening)0.025f+level*0.09f else if(speaking)0.06f else if(active)0.085f else 0.015f))%360f
-  paint.style=Paint.Style.FILL
-  paint.shader=RadialGradient(0f,0f,100f,intArrayOf(if(active || speaking)0xdd30cfff.toInt() else 0x9930CFFF.toInt(),0x0030CFFF),null,Shader.TileMode.CLAMP)
-  canvas.drawCircle(0f,0f,100f,paint);paint.shader=null
-  paint.style=Paint.Style.STROKE;paint.color=0xff65dcff.toInt()
-  for(i in 0..4){
-   val r=45f+i*13f
-   paint.strokeWidth=if(i==3)3f else 0.9f
-   paint.alpha=130+i*25
-   val segments=if(i==3)6 else 12
-   for(j in 0 until segments)canvas.drawArc(-r,-r,r,r,j*360f/segments+phase*(if(i%2==0)1 else -1),360f/segments-9f,false,paint)
-  }
-  paint.alpha=220;paint.strokeWidth=1f
-  for(i in 0 until 60){val a=i*PI/30;canvas.drawLine((91*cos(a)).toFloat(),(91*sin(a)).toFloat(),(95*cos(a)).toFloat(),(95*sin(a)).toFloat(),paint)}
-  paint.alpha=255;paint.strokeWidth=2.5f;paint.color=0xffa6f4ff.toInt()
-  val path=Path().apply{moveTo(-32f,0f);lineTo(-18f,0f);lineTo(-9f,-23f);lineTo(0f,25f);lineTo(11f,-15f);lineTo(19f,0f);lineTo(32f,0f)}
-  canvas.drawPath(path,paint);canvas.restore()
-  if(isShown && windowVisibility==VISIBLE)postInvalidateDelayed(if(active || listening || speaking)32 else 80)
- }
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.AbstractComposeView
+import com.xilon.jarvis.ui.*
+
+class OmegaCoreView(context: Context) : AbstractComposeView(context), SensorEventListener {
+    var active by mutableStateOf(false)
+    var speaking by mutableStateOf(false)
+    var listening by mutableStateOf(false)
+    var level by mutableFloatStateOf(0f)
+    var mode by mutableStateOf(VoiceVisualMode.VOID_HOLOGRAM)
+    var onTap: () -> Unit = {}
+    private var visible by mutableStateOf(false)
+    private var tiltX by mutableFloatStateOf(0f)
+    private var tiltY by mutableFloatStateOf(0f)
+    private val sensors = context.getSystemService(SensorManager::class.java)
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        visible = isVisible
+        sensors.unregisterListener(this)
+        if (isVisible) sensors.getDefaultSensor(Sensor.TYPE_GRAVITY)?.let {
+            sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        sensors.unregisterListener(this)
+        super.onDetachedFromWindow()
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        tiltX = (-event.values[0] * 2f).coerceIn(-20f,20f)
+        tiltY = (event.values[1] * 2f).coerceIn(-20f,20f)
+    }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    @Composable override fun Content() {
+        if (!visible) return
+        val phase = when {
+            speaking -> VoiceSessionPhase.SPEAKING
+            listening -> VoiceSessionPhase.LISTENING
+            active -> VoiceSessionPhase.THINKING
+            else -> VoiceSessionPhase.IDLE
+        }
+        val cyan = Color(0xff55e5ff)
+        val blue = Color(0xff678aff)
+        Box(Modifier.fillMaxSize()) {
+            if (mode == VoiceVisualMode.CAMERA_HOLOGRAM) FrontCameraPreviewSurface(Modifier.fillMaxSize())
+            if (mode == VoiceVisualMode.PYRAMID_4X)
+                PeppersGhostPyramidStage(phase, level, cyan, blue, onTap, Modifier.fillMaxSize())
+            else
+                SciFiHologramStage(phase, level, cyan, blue, tiltX, tiltY, true, onTap, Modifier.fillMaxSize())
+        }
+    }
 }

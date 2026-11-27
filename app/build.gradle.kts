@@ -1,5 +1,6 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
+plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose") }
 android {
+ buildFeatures { compose = true }
  namespace = "com.xilon.jarvis"
  androidResources { noCompress += listOf("onnx", "bz2") }
  compileSdk = 36
@@ -46,3 +47,9 @@ dependencies { implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:
 dependencies { androidTestImplementation("androidx.test:runner:1.6.2"); androidTestImplementation("junit:junit:4.13.2") }
 
 dependencies { implementation("com.github.wendykierp:JTransforms:3.1") }
+
+dependencies {
+ implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+ implementation("androidx.compose.foundation:foundation")
+ implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+}

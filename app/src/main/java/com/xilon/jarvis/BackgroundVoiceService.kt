@@ -38,6 +38,8 @@ class BackgroundVoiceService:Service(){
   private const val CHANNEL="xilon_background_voice"
   private const val NOTIFICATION_ID=4206
  }
+ private val mainHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ private var speaker:OfflineVoice?=null
  private val running=AtomicBoolean(false)
  private val executor=Executors.newSingleThreadExecutor()
  @Volatile private var engine:NeuralSpeech?=null
@@ -65,6 +67,7 @@ class BackgroundVoiceService:Service(){
   manager.createNotificationChannel(NotificationChannel(CHANNEL,"JARVIS • microfon în fundal",NotificationManager.IMPORTANCE_LOW))
   try{startForeground(NOTIFICATION_ID,notification("Ascultare locală activă"))}
   catch(e:Exception){running.set(false);sessionActive=false;sessionSlot.set(false);stopSelf();return START_NOT_STICKY}
+  speaker=OfflineVoice(this)
   executor.execute{
    try{
     val speech=NeuralSpeechFactory.create(applicationContext)
@@ -101,10 +104,7 @@ class BackgroundVoiceService:Service(){
        )}.getOrNull()?.trim().orEmpty()
        if(running.get() && answer.isNotBlank()){
         manager.notify(NOTIFICATION_ID,notification("JARVIS răspunde local"))
-        val voice=piper
-        if(voice!=null){
-         speakUntilStopped(voice,answer)
-        }
+        speakAnswer(answer)
        }
       }
      }else{
@@ -119,9 +119,7 @@ class BackgroundVoiceService:Service(){
        )}.getOrNull()?.trim().orEmpty()
        if(running.get() && initiative && message.isNotBlank()){
         manager.notify(NOTIFICATION_ID,notification("JARVIS inițiază conversația"))
-        piper?.let{voice->
-         speakUntilStopped(voice,message)
-        }
+        speakAnswer(message)
        }
       }
       Thread.sleep(250)
@@ -139,6 +137,30 @@ class BackgroundVoiceService:Service(){
    }
   }
   return START_NOT_STICKY
+ }
+ private fun speakAnswer(text:String){
+  val done=CountDownLatch(1)
+  val failed=AtomicBoolean(false)
+  val active=AtomicBoolean(true)
+  mainHandler.post {
+   if(!active.get() || !running.get()){done.countDown();return@post}
+   val voice=speaker
+   voice?.onAllFinished={done.countDown()}
+   voice?.onFailure={failed.set(true);done.countDown()}
+   if(voice==null || voice.speak(text)!=null){failed.set(true);done.countDown()}
+  }
+  val deadline=SystemClock.elapsedRealtime()+60000L
+  try{
+   while(running.get() && SystemClock.elapsedRealtime()<deadline && !done.await(100,TimeUnit.MILLISECONDS)){}
+  }finally{
+   active.set(false)
+   mainHandler.post{speaker?.stop()}
+  }
+  if(failed.get() && running.get()){
+   val fallback=piper
+   if(fallback!=null)speakUntilStopped(fallback,text)
+   else getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,notification("Vocea română offline lipsește."))
+  }
  }
  private fun speakUntilStopped(voice:NeuralVoice,text:String){
   if(!running.get())return
@@ -170,6 +192,7 @@ class BackgroundVoiceService:Service(){
   runCatching{model?.stop()}
   runCatching{piper?.stop()}
   // The worker releases native engines in its finally block, after decoding exits.
+  speaker?.close();speaker=null
   executor.shutdown()
   super.onDestroy()
  }

@@ -13,6 +13,14 @@ class NaturalToolCommandsTest {
   assertEquals("whatsapp_message",NaturalToolCommands.parse("Scrie lui Ana pe WhatsApp: Bună!")?.tool)
   assertNull(NaturalToolCommands.parse("Nu trimite lui Ana pe WhatsApp: Bună"))
  }
+ @Test fun savedMusicAndDictatedRecipient(){
+  val message=NaturalToolCommands.parse("Trimite mesaj lui Olivia pe whatsapp spunei buna dimineața")
+  assertEquals("whatsapp_send",message?.tool)
+  assertEquals(JsonPrimitive("Olivia"),message?.args?.get("contact"))
+  assertEquals(JsonPrimitive("buna dimineața"),message?.args?.get("message"))
+  assertEquals(JsonPrimitive("local"),NaturalToolCommands.parse("Dă drumul la muzica salvată")?.args?.get("action"))
+  assertEquals(JsonPrimitive("Luna"),NaturalToolCommands.parse("Pune Luna de pe telefon")?.args?.get("query"))
+ }
  @Test fun spokenClockCommandsResolveHourAndMinutes(){
   val next=NaturalToolCommands.parse("Trezește-mă la șapte și jumătate dimineața")
   assertEquals("set_alarm",next?.tool)

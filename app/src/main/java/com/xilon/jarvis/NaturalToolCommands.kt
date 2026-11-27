@@ -29,10 +29,10 @@ object NaturalToolCommands {
   val raw=input.trim().trimEnd('!','.')
   fun direct(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
   fun rawMatch(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(raw)
-  rawMatch("(?:pune|redă|reda|pornește|porneste|dă drumul la|da drumul la|ascultă|asculta) (?:muzica|muzică|melodiile|muzica salvată|muzica salvata) (?:de pe telefon|din telefon|locală|locala|offline)")?.let{
+  rawMatch("(?:pune|redă|reda|pornește|porneste|dă drumul la|da drumul la|ascultă|asculta) (?:(?:muzica|muzică|melodiile)(?: salvată| salvata)? (?:de pe telefon|din telefon|locală|locala|offline)|muzic[ăa] salvat[ăa])")?.let{
    return direct("media_play_pause","action" to JsonPrimitive("local"))
   }
-  rawMatch("(?:pune|redă|reda|pornește|porneste) (?:melodia|piesa) (.+) (?:de pe telefon|din telefon|offline)")?.let{
+  rawMatch("(?:pune|redă|reda|pornește|porneste) (?:(?:melodia|piesa) )?(.+) (?:de pe telefon|din telefon|offline)")?.let{
    return direct("media_play_pause","action" to JsonPrimitive("local"),"query" to JsonPrimitive(it.groupValues[1]))
   }
   val spokenClock=Regex("""(?:trezeste-ma|(?:pune|seteaza|programeaza) (?:o )?alarma) la (?:ora )?(\d{1,2}|unu|una|doi|doua|trei|patru|cinci|sase|sapte|opt|noua|zece|unsprezece|doisprezece|douasprezece)(?: (si un sfert|si jumatate|fara un sfert))?(?: (dimineata|seara|dupa[ -]amiaza))?""")
@@ -50,7 +50,7 @@ object NaturalToolCommands {
   rawMatch("(?:sună|suna|apelează|apeleaza|telefonează|telefoneaza) (?:pe |la )?(.+)")?.let{
    return direct("call_contact","contact" to JsonPrimitive(it.groupValues[1]))
   }
-  val dictatedWhatsApp=Regex("""^(trimite|scrie)(?:-i)? (?:un )?(?:mesaj )?(?:lui |către |catre )?(.+?) pe whatsapp(?:\s*:\s*|\s+(?:cu (?:textul|mesajul)|mesajul)\s*:?\s+)(.+)$""",RegexOption.IGNORE_CASE).matchEntire(input.trim())
+  val dictatedWhatsApp=Regex("""^(trimite|scrie)(?:-i)? (?:un )?(?:mesaj )?(?:lui |către |catre )?(.+?) pe whatsapp(?:\s*:\s*|\s+(?:cu (?:textul|mesajul)|mesajul|spune[- ]?i)\s*:?\s+)(.+)$""",RegexOption.IGNORE_CASE).matchEntire(input.trim())
   if(dictatedWhatsApp!=null){
    val (verb,recipient,body)=dictatedWhatsApp.destructured
    return direct(if(verb.equals("trimite",true)) "whatsapp_send" else "whatsapp_message",

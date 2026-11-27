@@ -633,7 +633,29 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă document TXT"; setOnClickListener { if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43) } })
   transcript = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(8),dp(12),dp(8),dp(12)) }
   scroll = ScrollView(this).apply { addView(transcript) }
+  val stagePrefs=getSharedPreferences("voice_stage",MODE_PRIVATE)
   val core=OmegaCoreView(this)
+  core.mode=if(stagePrefs.getBoolean("pyramid",false))com.xilon.jarvis.ui.VoiceVisualMode.PYRAMID_4X else com.xilon.jarvis.ui.VoiceVisualMode.VOID_HOLOGRAM
+  core.onTap={if(omegaCore.speaking)stopAllSpeech() else startMicrophone()}
+  val stageButton=Button(this).apply { text="Hologramă";isAllCaps=false }
+  header.addView(stageButton,1)
+  stageButton.setOnClickListener {
+   android.app.AlertDialog.Builder(this).setTitle("Hologramă și voce")
+    .setItems(arrayOf("Hologramă 3D","Piramidă 4X","Hologramă cu camera frontală","Alege vocea")){_,index->
+     when(index){
+      0,1->{stagePrefs.edit().putBoolean("pyramid",index==1).apply();core.mode=if(index==1)com.xilon.jarvis.ui.VoiceVisualMode.PYRAMID_4X else com.xilon.jarvis.ui.VoiceVisualMode.VOID_HOLOGRAM}
+      2->{if(checkSelfPermission(android.Manifest.permission.CAMERA)==android.content.pm.PackageManager.PERMISSION_GRANTED)core.mode=com.xilon.jarvis.ui.VoiceVisualMode.CAMERA_HOLOGRAM else requestPermissions(arrayOf(android.Manifest.permission.CAMERA),81)}
+      3->{val personas=VoicePersona.entries
+       android.app.AlertDialog.Builder(this).setTitle("Voce conversațională")
+        .setItems(personas.map{it.displayName+" • "+it.tagline}.toTypedArray()){_,i->
+         stopAllSpeech();romanianNeuralVoice=false;englishNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF"
+         val chosen=personas[i];stagePrefs.edit().putString("persona",chosen.id).apply()
+         voice.setPersona(chosen);voice.speak("Bună, sunt Jarvis. Cu ce te pot ajuta?")?.let{append(it)}
+        }.show()
+      }
+     }
+    }.show()
+  }
   omegaCore=core
   val corePanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=android.view.Gravity.CENTER}
   corePanel.addView(core,LinearLayout.LayoutParams(-1,dp(140)))
@@ -659,7 +681,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
   voice.onFailure={message->append(message)}
-  voice.onSpeaking={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
+  voice.onSpeechCadence={level->omegaCore.level=level}
+  voice.onSpeakingChanged={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
@@ -1233,7 +1256,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      var inferenceFinished=false
      val voiceStream=RealtimeVoiceTurn()
      val voiceStreamId=voiceStream.start()
-     val streamSpeechEnabled=(speakReplies || continuousVoice) && !englishNeuralVoice
+     val streamSpeechEnabled=(speakReplies || continuousVoice) && !englishNeuralVoice && !romanianNeuralVoice && voice.romanianVoiceAvailable()
      var firstSpeechChunk=true
      var streamingSpeechStarted=false
      var streamingSpeechFailed=false
@@ -1245,7 +1268,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
        if(firstSpeechChunk)listening.close()
        // Register each spoken chunk for the microphone echo filter.
        echoGate.remember(chunk)
-       val error=voice.speakStreamChunk(chunk,first=firstSpeechChunk)
+       if(firstSpeechChunk)voice.beginStream()
+       val error=voice.enqueueStreamSentence(chunk)
        if(error!=null){
         append(error)
         streamingSpeechFailed=true
@@ -1372,7 +1396,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
            voiceStream.finish(voiceStreamId)
            drainSpeechChunks()
            if(streamingSpeechStarted && !streamingSpeechFailed)
-           voice.finishStream()?.let{append(it)}
+           voice.finishStream()
           }else {
            voiceStream.interrupt()
            // The final answer was revised: do not append conflicting audio.
@@ -2228,7 +2252,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   stopWake()
   wakeCommandPending=fromWake
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
-  startNeural(true)
+  startAndroidMicrophone()
  }
  private fun startAndroidMicrophone(){
   if(BackgroundVoiceService.sessionActive)return
@@ -2237,10 +2261,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   stopAllSpeech()
-  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){wakeCommandPending=false;voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.startsWith("Româna nu este acceptată")||error.startsWith("Modelul vocal offline pentru română")||error.startsWith("Recunoașterea offline nu este disponibilă"))stopVoiceLoop()} })
+  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){wakeCommandPending=false;voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.contains("nu este disponibil") && conversationForeground)startNeural(false)} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==82){
+   val music=pendingMusic
+   pendingMusic=null
+   if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && music!=null)executeRequestedTool("media_play_pause",music)
+   else append("Accesul la muzica salvată este necesar pentru a alege o piesă din telefon.")
+  }
+  if(requestCode==81 && grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && ::omegaCore.isInitialized)omegaCore.mode=com.xilon.jarvis.ui.VoiceVisualMode.CAMERA_HOLOGRAM
   if(requestCode==48){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startNeural() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==47){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED)startWake() else append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==59){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED){window.decorView.post{if(!isDestroyed && conversationForeground)startLiveVision() else if(!isDestroyed)pendingLiveVisionStart=true}} else append("Permisiunea camerei a fost refuzată.")}
@@ -2260,8 +2291,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if((!manual && !speakReplies && !continuousVoice && !wakeReplyPending) || text.isBlank())return
   wakeReplyPending=false
   listening.close();echoGate.remember(text)
-  val piper=piperVoice
-  if(romanianNeuralVoice && piper!=null && piper.installed()){
+  val piper=piperVoice ?: if(!voice.romanianVoiceAvailable() && !englishNeuralVoice) NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}?.also{piperVoice=it} else null
+  if((romanianNeuralVoice || (!englishNeuralVoice && !voice.romanianVoiceAvailable())) && piper!=null && piper.installed()){
    playNeural(text,piper);return
   }
   val neural=kokoroVoice
@@ -2713,8 +2744,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
 
   }
  }
+ private var pendingMusic: kotlinx.serialization.json.JsonObject? = null
  private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject,approved:Boolean=false,remaining:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()){
   if(busy)return
+  if(name=="media_play_pause" && args["action"]==kotlinx.serialization.json.JsonPrimitive("local")){
+   val permission=if(android.os.Build.VERSION.SDK_INT>=33) android.Manifest.permission.READ_MEDIA_AUDIO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+   if(checkSelfPermission(permission)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+    pendingMusic=args
+    requestPermissions(arrayOf(permission),82)
+    return
+   }
+  }
   busy=true;refreshOmegaStatus()
   worker.execute{
    val result=runCatching{kotlinx.coroutines.runBlocking{ToolEnvironment.execute(name,args,approved)}}

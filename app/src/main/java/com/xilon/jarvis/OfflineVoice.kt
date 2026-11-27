@@ -1,79 +1,284 @@
 package com.xilon.jarvis
+
 import android.content.Context
+import android.media.AudioAttributes
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
+import com.jarvis.assistant.voice.SpeechChunks
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class OfflineVoice(context: Context) : AutoCloseable {
- var onSpeaking:(Boolean)->Unit={}
- var onFailure:(String)->Unit={}
- private val main=android.os.Handler(android.os.Looper.getMainLooper())
- private var generation=0L
- @Volatile private var ready=false
- @Volatile private var closed=false
- private val tts=TextToSpeech(context.applicationContext) { status -> ready=!closed && status==TextToSpeech.SUCCESS }
- /** Runtime truth: a downloaded Piper file does not automatically install a system TTS engine. */
- fun romanianVoiceAvailable():Boolean=ready && !closed && runCatching{
-  tts.voices?.any{it.locale.language=="ro" && !it.isNetworkConnectionRequired && !it.features.orEmpty().contains("notInstalled")}==true
- }.getOrDefault(false)
- fun speak(text:String):String? {
-  if(!ready || closed) return "Motorul vocal nu este disponibil."
-  val voice=tts.voices?.filter { !it.isNetworkConnectionRequired && it.locale.language=="ro" && !it.features.orEmpty().contains("notInstalled") }?.maxByOrNull { it.quality }
-   ?: return "Instalează o voce română offline în configurarea Android."
-  if(tts.setVoice(voice)!=TextToSpeech.SUCCESS) return "Vocea nu poate fi activată."
-  val chunks=com.jarvis.assistant.voice.SpeechChunks.split(text,first=180,max=350)
-  if(chunks.isEmpty())return null
-  val id=++generation
-  tts.setOnUtteranceProgressListener(object:android.speech.tts.UtteranceProgressListener(){
-   private fun publish(value:Boolean){main.post{if(!closed && generation==id)onSpeaking(value)}}
-   override fun onStart(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)publish(true)}
-   override fun onDone(utteranceId:String?){if(utteranceId=="xilon-$id-${chunks.lastIndex}")publish(false)}
-   override fun onError(utteranceId:String?){if(utteranceId?.startsWith("xilon-$id-")==true)main.post{if(!closed && generation==id){stop();onFailure("Sinteza vocală a eșuat.")}}}
-   override fun onStop(utteranceId:String?,interrupted:Boolean){if(utteranceId?.startsWith("xilon-$id-")==true)publish(false)}
-  })
-  onSpeaking(true)
-  for((i,chunk) in chunks.withIndex()){
-   if(tts.speak(chunk,if(i==0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,null,"xilon-$id-$i")!=TextToSpeech.SUCCESS){stop();return "Sinteza vocală a eșuat."}
-  }
-  return null
- }
- private var streaming=false
- private var streamSequence=0
- /** Queue one completed sentence without flushing previously queued audio. */
- fun speakStreamChunk(text:String,first:Boolean=false,last:Boolean=false):String? {
-  if(!ready || closed)return "Motorul vocal nu este disponibil."
-  val selected=tts.voices?.filter{!it.isNetworkConnectionRequired && it.locale.language=="ro" && !it.features.orEmpty().contains("notInstalled")}?.maxByOrNull{it.quality}
-   ?:return "Instalează o voce română offline în configurarea Android."
-  if(first){
-   stop()
-   if(tts.setVoice(selected)!=TextToSpeech.SUCCESS)return "Vocea nu poate fi activată."
-   streaming=true
-   streamSequence=0
-   val id=generation
-   tts.setOnUtteranceProgressListener(object:android.speech.tts.UtteranceProgressListener(){
-    override fun onStart(utteranceId:String?){main.post{if(!closed && generation==id)onSpeaking(true)}}
-    override fun onDone(utteranceId:String?){if(utteranceId?.endsWith("-end")==true)main.post{if(!closed && generation==id){streaming=false;onSpeaking(false)}}}
-    override fun onError(utteranceId:String?){main.post{if(!closed && generation==id){stop();onFailure("Sinteza vocală a eșuat.")}}}
-   })
-  }
-  if(!streaming)return "Fluxul vocal nu este activ."
-  val chunk=text.trim()
-  if(chunk.isEmpty())return null
-  val utteranceId="xilon-stream-$generation-${streamSequence++}"+if(last)"-end" else ""
-  if(tts.speak(chunk,TextToSpeech.QUEUE_ADD,null,utteranceId)!=TextToSpeech.SUCCESS){
-   stop();return "Sinteza vocală a eșuat."
-  }
-  return null
- }
- /** Mark the end of a streaming turn after all queued audio has played. */
- fun finishStream():String? {
-  if(!streaming || closed)return null
-  val id="xilon-stream-$generation-${streamSequence++}-end"
-  if(tts.playSilentUtterance(1L,TextToSpeech.QUEUE_ADD,id)!=TextToSpeech.SUCCESS){
-   stop()
-   return "Nu am putut finaliza redarea vocală."
-  }
-  return null
- }
- fun stop(){ generation++;streaming=false;if(!closed)tts.stop();onSpeaking(false) }
- override fun close(){ if(!closed){ stop();closed=true; ready=false; tts.shutdown() } }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val utteranceCounter = AtomicLong(1L)
+    private val pendingUtterances = AtomicInteger(0)
+
+    @Volatile private var ready = false
+    @Volatile private var closed = false
+    @Volatile private var streamOpen = false
+    @Volatile private var currentPersona: VoicePersona = VoicePersona.fromId(context.getSharedPreferences("voice_stage", Context.MODE_PRIVATE).getString("persona", null))
+    @Volatile private var activeGeneration = 0L
+
+    var onFailure: (String) -> Unit = {}
+    fun romanianVoiceAvailable() = ready && !closed && tts.voice?.let { it.locale.language == "ro" && !it.isNetworkConnectionRequired } == true
+    var onSpeakingChanged: ((Boolean) -> Unit)? = null
+    var onSpeechCadence: ((Float) -> Unit)? = null
+    var onAllFinished: (() -> Unit)? = null
+
+    private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
+        ready = !closed && status == TextToSpeech.SUCCESS
+        if (ready) {
+            configureAudioAttributes()
+            applyPersonaVoice(currentPersona)
+        }
+    }
+
+    init {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                val generation = activeGeneration
+                if (utteranceId?.startsWith("xilon-gen-$generation-") != true) return
+                mainHandler.post {
+                    if (closed || generation != activeGeneration) return@post
+                    onSpeakingChanged?.invoke(true)
+                    onSpeechCadence?.invoke(0.75f)
+                }
+            }
+
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                if (closed) return
+                val pulse = 0.45f + ((end - start).coerceIn(1, 14) / 14f) * 0.55f
+                mainHandler.post { if (!closed && utteranceId?.startsWith("xilon-gen-$activeGeneration-") == true) onSpeechCadence?.invoke(pulse) }
+            }
+
+            override fun onDone(utteranceId: String?) {
+                mainHandler.post { handleUtteranceComplete(utteranceId) }
+            }
+
+            @Deprecated("Deprecated in API 21")
+            override fun onError(utteranceId: String?) {
+                reportFailure(utteranceId)
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                reportFailure(utteranceId)
+            }
+        })
+    }
+
+    private fun reportFailure(id: String?) {
+        mainHandler.post {
+            if (!closed && id?.startsWith("xilon-gen-$activeGeneration-") == true) {
+                stop()
+                onFailure("Sinteza vocală a eșuat.")
+            }
+        }
+    }
+
+    private fun handleUtteranceComplete(utteranceId: String?) {
+        if (closed) return
+        val gen = utteranceId?.substringAfter("gen-", "")?.substringBefore("-")?.toLongOrNull()
+        if (gen != activeGeneration) return
+        val remaining = pendingUtterances.decrementAndGet().coerceAtLeast(0)
+        if (remaining == 0 && !streamOpen) {
+            mainHandler.post {
+                if (gen != activeGeneration || closed) return@post
+                onSpeakingChanged?.invoke(false)
+                onSpeechCadence?.invoke(0f)
+                onAllFinished?.invoke()
+            }
+        }
+    }
+
+    private fun configureAudioAttributes() {
+        runCatching {
+            tts.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+        }
+    }
+
+    fun setPersona(persona: VoicePersona) {
+        currentPersona = persona
+        if (ready && !closed) {
+            applyPersonaVoice(persona)
+        }
+    }
+
+    fun activeVoiceSummary(): String {
+        if (!ready || closed) return "Se inițializează vocea..."
+        val v = tts.voice
+        return if (v != null) {
+            val quality = when {
+                v.quality >= Voice.QUALITY_VERY_HIGH -> "HD"
+                v.quality >= Voice.QUALITY_HIGH -> "Natural"
+                else -> "Standard"
+            }
+            val mode = if (v.isNetworkConnectionRequired) "Neural" else "Offline"
+            "${v.locale.displayLanguage} • $quality ($mode)"
+        } else {
+            "Voce sistem (${Locale.getDefault().language.uppercase(Locale.ROOT)})"
+        }
+    }
+
+    private fun applyPersonaVoice(persona: VoicePersona) {
+        val available = runCatching { tts.voices?.toList().orEmpty() }.getOrDefault(emptyList())
+            .filter { !it.isNetworkConnectionRequired && !it.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+
+        val roVoices = available.filter { it.locale.language.equals("ro", ignoreCase = true) }
+        val chosen = pickBestVoice(roVoices, persona)
+
+        if (chosen != null) tts.setVoice(chosen)
+        tts.setSpeechRate(persona.speechRate)
+        tts.setPitch(persona.pitch)
+    }
+
+    private fun pickBestVoice(candidates: List<Voice>, persona: VoicePersona): Voice? {
+        if (candidates.isEmpty()) return null
+        return candidates.maxWithOrNull(
+            compareBy<Voice>(
+                { it.quality },
+                { !it.isNetworkConnectionRequired },
+                {
+                    val lowerName = it.name.lowercase(Locale.ROOT)
+                    when {
+                        persona.preferLowerTone && (lowerName.contains("male") || lowerName.contains("m-") || lowerName.contains("d-")) -> 2
+                        !persona.preferLowerTone && (lowerName.contains("female") || lowerName.contains("f-") || lowerName.contains("a-")) -> 2
+                        else -> 1
+                    }
+                },
+                { it.name.contains("local", ignoreCase = true) || it.name.contains("network", ignoreCase = true) }
+            )
+        )
+    }
+
+    /**
+     * Speaks a complete conversational response naturally (cleans markdown & splits into low-latency chunks).
+     */
+    fun speak(text: String, persona: VoicePersona = currentPersona): String? {
+        if (!ready || closed) return "Motorul vocal se inițializează sau nu este disponibil."
+        if (!romanianVoiceAvailable()) return "Instalează o voce română offline în setările Android sau selectează Piper."
+        val clean = ConversationalSpeechFormatter.cleanForSpeech(text)
+        if (clean.isBlank()) {
+            mainHandler.post { onAllFinished?.invoke() }
+            return null
+        }
+
+        currentPersona = persona
+        applyPersonaVoice(persona)
+        streamOpen = false
+        val gen = ++activeGeneration
+        pendingUtterances.set(0)
+
+        val chunks = SpeechChunks.split(clean, first = 72, max = 140)
+        if (chunks.isEmpty()) {
+            mainHandler.post { onAllFinished?.invoke() }
+            return null
+        }
+
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+        }
+
+        for ((index, chunk) in chunks.withIndex()) {
+            val id = "xilon-gen-$gen-${utteranceCounter.getAndIncrement()}"
+            pendingUtterances.incrementAndGet()
+            val mode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            val status = tts.speak(chunk, mode, params, id)
+            if (status != TextToSpeech.SUCCESS) {
+                pendingUtterances.set(0)
+                tts.stop()
+                return "Sinteza vocală a eșuat."
+            }
+        }
+        return null
+    }
+
+    /**
+     * Begins a low-latency streaming speech session (speaks sentences as the LLM produces them).
+     */
+    fun beginStream(persona: VoicePersona = currentPersona) {
+        if (!ready || closed) return
+        currentPersona = persona
+        applyPersonaVoice(persona)
+        tts.stop()
+        activeGeneration++
+        pendingUtterances.set(0)
+        streamOpen = true
+    }
+
+    /**
+     * Queues a single newly-completed sentence during streaming generation.
+     */
+    fun enqueueStreamSentence(sentence: String): String? {
+        if (!ready || closed || !streamOpen || !romanianVoiceAvailable()) return "Vocea română offline nu este disponibilă."
+        val clean = ConversationalSpeechFormatter.cleanForSpeech(sentence)
+        if (clean.isBlank()) return null
+        val gen = activeGeneration
+        val isFirst = pendingUtterances.get() == 0
+        val id = "xilon-gen-$gen-${utteranceCounter.getAndIncrement()}"
+        pendingUtterances.incrementAndGet()
+        val mode = if (isFirst) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        val status = tts.speak(clean, mode, null, id)
+        if (status != TextToSpeech.SUCCESS) {
+            stop()
+            return "Sinteza vocală a eșuat."
+        }
+        return null
+    }
+
+    /**
+     * Flushes any final trailing fragment and closes the stream so [onAllFinished] fires cleanly.
+     */
+    fun finishStream(trailingFragment: String = "") {
+        if (closed) return
+        if (trailingFragment.isNotBlank()) {
+            enqueueStreamSentence(trailingFragment)
+        }
+        streamOpen = false
+        val generation = activeGeneration
+        if (pendingUtterances.get() <= 0) {
+            mainHandler.post {
+                if (closed || generation != activeGeneration) return@post
+                onSpeakingChanged?.invoke(false)
+                onSpeechCadence?.invoke(0f)
+                onAllFinished?.invoke()
+            }
+        }
+    }
+
+    fun isSpeaking(): Boolean = !closed && ready && (tts.isSpeaking || pendingUtterances.get() > 0)
+
+    fun stop() {
+        streamOpen = false
+        activeGeneration++
+        pendingUtterances.set(0)
+        if (!closed) {
+            tts.stop()
+        }
+        mainHandler.post {
+            onSpeakingChanged?.invoke(false)
+            onSpeechCadence?.invoke(0f)
+        }
+    }
+
+    override fun close() {
+        if (!closed) {
+            closed = true
+            ready = false
+            streamOpen = false
+            activeGeneration++
+            pendingUtterances.set(0)
+            tts.stop()
+            tts.shutdown()
+        }
+    }
 }
