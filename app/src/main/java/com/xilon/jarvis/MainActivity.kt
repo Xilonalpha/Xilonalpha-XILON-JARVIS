@@ -323,11 +323,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }
  }
- private fun stopAllSpeech(){voiceTicket++;kokoroVoice?.stop();piperVoice?.stop();voice.stop();voiceEndedAt=android.os.SystemClock.elapsedRealtime();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
+ private var neuralSpeaking=false
+ private fun stopAllSpeech(){voiceTicket++;neuralSpeaking=false;kokoroVoice?.stop();piperVoice?.stop();voice.stop();voiceEndedAt=android.os.SystemClock.elapsedRealtime();if(::omegaCore.isInitialized){omegaCore.speaking=false;refreshOmegaStatus()}}
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
-  omegaCore.speaking=true;refreshOmegaStatus()
-  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);voice.speak(text)?.let{append(it)}}
+  neuralSpeaking=true;omegaCore.speaking=true;refreshOmegaStatus()
+  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){neuralSpeaking=false;omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);voice.speak(text)?.let{append(it)}}
  }
  private var englishNeuralVoice=false
  private var romanianNeuralVoice=false
@@ -520,7 +521,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
  }}
- private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();stopNeural();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
+ private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
  private var pendingVoiceInterruption:String?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime())){wakeCommandPending=false;return}
@@ -691,7 +692,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   listening.onListening={enabled->omegaCore.listening=enabled;refreshOmegaStatus()}
   voice.onFailure={message->append(message)}
   voice.onSpeechCadence={level->omegaCore.level=level}
-  voice.onSpeakingChanged={enabled->omegaCore.speaking=enabled;if(!enabled)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
+  voice.onSpeakingChanged={enabled->omegaCore.speaking=enabled || neuralSpeaking;if(!omegaCore.speaking)voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
