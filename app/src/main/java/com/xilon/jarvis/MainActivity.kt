@@ -2087,9 +2087,36 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else dialog.setNegativeButton("Închide",null)
    dialog.show()
   }})
+  settings.addView(Button(this).apply{text="Catalog Silero VAD";setOnClickListener{
+   if(busy)return@setOnClickListener
+   val entry=ModelCatalog.silero
+   val downloads=ModelDownloads(this@MainActivity)
+   val uri=downloads.uri(entry)
+   val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle(entry.name)
+    .setMessage(ModelInventory.display(ModelInventory.installed(this@MainActivity,entry),downloads.transfer(entry)))
+    .setNegativeButton("Închide",null)
+   if(ModelInventory.installed(this@MainActivity,entry)){
+    dialog.setMessage("Model instalat local.")
+   }else if(uri!=null){
+    dialog.setPositiveButton("Instalează"){_,_->
+     if(!busy){busy=true;worker.execute{
+      val result=runCatching{
+       val ref=downloads.reference(entry)
+       contentResolver.openInputStream(uri)?.use{ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)}?:error("Fișier inaccesibil")
+       contentResolver.openInputStream(uri)?.use{OfflineVadModelInstaller.install(it,java.io.File(filesDir,"models/silero_vad.onnx"))}?:error("Fișier inaccesibil")
+       "Silero VAD instalat. Repornește aplicația pentru reinițializare."
+      }.getOrElse{"Instalare Silero eșuată: "+it.message}
+      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+     }}
+    }
+   }else if(downloads.canStart(entry)){
+    dialog.setPositiveButton("Descarcă"){_,_->append(runCatching{downloads.start(entry);"Transfer Silero solicitat."}.getOrElse{"Transfer eșuat: "+it.message})}
+   }
+   dialog.show()
+  }})
   val manualModelLabels=setOf("Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
   val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
-  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Sherpa Streaming • Full Duplex","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
+  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Sherpa Streaming • Full Duplex","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
   settings.addView(Button(this).apply{text="OMEGA Model Center";setOnClickListener{
    if(busy)return@setOnClickListener
@@ -2103,7 +2130,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
    center.addView(resources)
    val manager=ModelDownloads(this@MainActivity)
-   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Sherpa Streaming • Full Duplex" to ModelCatalog.streamingAsr,"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Silero VAD" to listOf(ModelCatalog.silero),"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Sherpa Streaming • Full Duplex" to ModelCatalog.streamingAsr,"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
    val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
