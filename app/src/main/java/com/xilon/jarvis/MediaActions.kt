@@ -1,12 +1,13 @@
 package com.xilon.jarvis
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.view.KeyEvent
 import java.util.Locale
 
-class MediaActions(private val activity:Activity){
+class MediaActions(private val activity:Context){
  fun execute(command:String):String? {
   val raw=command.trim()
   val q=raw.lowercase(Locale.ROOT)
@@ -59,7 +60,7 @@ class MediaActions(private val activity:Activity){
    val query=raw.substringAfter(" ").substringAfter(" ").trim()
    if(query.isBlank())return "Specifică melodia."
    val uri=Uri.parse("https://www.youtube.com/results").buildUpon().appendQueryParameter("search_query",query).build()
-   return runCatching{activity.startActivity(Intent(Intent.ACTION_VIEW,uri));"Căutare YouTube deschisă; redarea automată nu este confirmată."}.getOrElse{"YouTube indisponibil: "+it.javaClass.simpleName}
+   return runCatching{activity.startActivity(Intent(Intent.ACTION_VIEW,uri).apply{if(activity !is Activity)addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)});"Căutare YouTube deschisă; redarea automată nu este confirmată."}.getOrElse{"YouTube indisponibil: "+it.javaClass.simpleName}
   }
   return null
  }
