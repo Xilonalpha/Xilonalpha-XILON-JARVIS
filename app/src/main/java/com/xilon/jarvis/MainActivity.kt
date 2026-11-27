@@ -1419,6 +1419,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
   }})
   settings.addView(Button(this).apply{text="Air Touch: anulează calibrarea";setOnClickListener{if(::cursor.isInitialized)cursor.cancelCalibration()}})
+  settings.addView(android.widget.CheckBox(this).apply{
+   text="Air Touch: iluminare redusă (experimental)"
+   val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
+   isChecked=prefs.getBoolean("low_light",false)
+   setOnCheckedChangeListener{_,checked->prefs.edit().putBoolean("low_light",checked).apply()}
+  })
   settings.addView(Button(this).apply{text="Air Touch: calibrare ciupire";setOnClickListener{
    val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
    val slider=SeekBar(this@MainActivity).apply{max=40;progress=((prefs.getFloat("pinch_ratio",0.32f).coerceIn(0.15f,0.55f)-0.15f)*100).toInt()}

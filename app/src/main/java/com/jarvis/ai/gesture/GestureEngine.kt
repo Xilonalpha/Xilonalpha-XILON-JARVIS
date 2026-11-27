@@ -78,6 +78,19 @@ class GestureEngine(
                 bitmap = source.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
                 source.recycle()
             }
+            if(settings.getBoolean("low_light",false)){
+                val input=checkNotNull(bitmap)
+                val pixels=IntArray(input.width*input.height)
+                input.getPixels(pixels,0,input.width,0,0,input.width,input.height)
+                val config=LowLightConfig(enabled=true)
+                val luma=LowLight.meanLuma(pixels,input.width,input.height)
+                if(luma<config.darkLuma){
+                    LowLight.applyLut(pixels,LowLight.gammaLut(luma,config.targetLuma,config.minGamma))
+                    val corrected=android.graphics.Bitmap.createBitmap(pixels,input.width,input.height,android.graphics.Bitmap.Config.ARGB_8888)
+                    bitmap=corrected
+                    input.recycle()
+                }
+            }
             mpImage = BitmapImageBuilder(checkNotNull(bitmap)).build()
             val timestamp = maxOf(SystemClock.uptimeMillis(), lastTimestampMs + 1)
             lastTimestampMs = timestamp
