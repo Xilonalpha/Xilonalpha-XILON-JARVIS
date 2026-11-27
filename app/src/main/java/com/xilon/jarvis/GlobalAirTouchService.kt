@@ -25,6 +25,28 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
   val lock=getSystemService(KeyguardManager::class.java)
   return power.isInteractive && !lock.isKeyguardLocked && LocalScreen.connected()
  }
+ private fun executeBinding(action:String):Boolean{
+  if(action=="Implicit")return false
+  if(action=="Dezactivat")return true
+  if(!available())return true
+  val now=android.os.SystemClock.elapsedRealtime()
+  if(now-lastTap<700L)return true
+  val obs=LocalScreen.observe()?:return true
+  if(obs.packageName==packageName)return true
+  anchor=null
+  lastTap=now
+  val global=when(action){
+   "Înapoi"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+   "Acasă"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
+   "Recente"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
+   else->null
+  }
+  if(global!=null)LocalScreen.service()?.performGlobalAction(global)
+  else if(action in listOf("următoarea melodie","melodia anterioară","crește volumul","scade volumul"))MediaActions(this).execute(action)
+  // Microphone remains explicitly controlled by the voice UI.
+  return true
+ }
+ private fun binding(key:String)=GestureBindings.resolve(getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString(key,null))
  private fun scroll(direction:Int){
   anchor=null
   if(!available())return
@@ -53,6 +75,7 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
    view.onPointTap=tap@{x,y->
     val now=android.os.SystemClock.elapsedRealtime()
     if(!available()){anchor=null;return@tap}
+    if(executeBinding(binding("pinch")))return@tap
     if(now-lastTap>=700L){
      val svc=LocalScreen.service()
      val obs=LocalScreen.observe()
@@ -72,7 +95,9 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
      }
     }
    }
-   view.onScroll={scroll(it)}
+   view.onCustomGesture={id->controller?.savedGestures()?.firstOrNull{it.template.id==id}?.let{executeBinding(GestureBindings.resolve(it.action))}}
+   view.onHorizontal={direction->executeBinding(binding(if(direction>0)"right" else "left"))}
+   view.onScroll={if(!executeBinding(binding(if(it>0)"up" else "down")))scroll(it)}
    view.onTwoFingerScroll={scroll(it)}
    view.onFistHold={anchor=null;stopSelf()}
    registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
