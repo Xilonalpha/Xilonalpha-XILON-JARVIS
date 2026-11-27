@@ -20,6 +20,8 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
  private var lastTap=0L
  private data class DragAnchor(val x:Int,val y:Int,val pkg:String,val fingerprint:String,val time:Long)
  private var anchor:DragAnchor?=null
+ private var continuous:ContinuousAirDrag?=null
+ private fun endDrag(){continuous?.finish();continuous=null;anchor=null}
  private fun available():Boolean{
   val power=getSystemService(android.os.PowerManager::class.java)
   val lock=getSystemService(KeyguardManager::class.java)
@@ -33,7 +35,7 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
   if(now-lastTap<700L)return true
   val obs=LocalScreen.observe()?:return true
   if(obs.packageName==null || obs.packageName==packageName)return true
-  anchor=null
+  endDrag()
   lastTap=now
   val global=when(action){
    "Înapoi"->android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
@@ -48,7 +50,7 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
  }
  private fun binding(key:String)=GestureBindings.resolve(getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString(key,null))
  private fun scroll(direction:Int){
-  anchor=null
+  endDrag()
   if(!available())return
   val now=android.os.SystemClock.elapsedRealtime()
   if(now-lastTap<700L)return
@@ -85,28 +87,25 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
       val sx=(x+loc[0]).toInt();val sy=(y+loc[1]).toInt()
       val selected=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString("advanced_touch","off")
       val mode=if(selected in setOf("double","long","drag","zoom_in","zoom_out"))selected!! else "tap"
-      val previous=anchor
-      anchor=null
+      endDrag()
       if(mode=="drag"){
-       if(previous==null || now-previous.time>10000L || previous.pkg!=obs.packageName || previous.fingerprint!=obs.fingerprint()){
-        anchor=DragAnchor(sx,sy,obs.packageName,obs.fingerprint(),now)
-       }else svc.airTouchMotion(previous.x,previous.y,sx,sy,mode,obs.packageName,obs.fingerprint())
+       anchor=DragAnchor(sx,sy,obs.packageName,obs.fingerprint(),now)
+       continuous=ContinuousAirDrag(svc).also{it.start(sx.toFloat(),sy.toFloat())}
+      }else svc.airTouchMotion(previous.x,previous.y,sx,sy,mode,obs.packageName,obs.fingerprint())
       }else svc.airTouchMotion(sx,sy,sx,sy,mode,obs.packageName,obs.fingerprint())
      }
     }
    }
-   view.onTrackingLost={anchor=null}
-   view.onPinchRelease={x,y->
+   view.onTrackingLost={endDrag()}
+   view.onPinchMove={x,y->
     val previous=anchor
-    anchor=null
-    if(previous!=null && available()){
+    if(previous!=null){
      val obs=LocalScreen.observe()
-     val loc=IntArray(2);view.getLocationOnScreen(loc)
-     if(obs!=null && obs.packageName==previous.pkg && obs.fingerprint()==previous.fingerprint && android.os.SystemClock.elapsedRealtime()-previous.time<=10000L){
-      LocalScreen.service()?.airTouchMotion(previous.x,previous.y,(x+loc[0]).toInt(),(y+loc[1]).toInt(),"drag",previous.pkg,previous.fingerprint)
-     }
+     if(!available() || obs?.packageName!=previous.pkg || android.os.SystemClock.elapsedRealtime()-previous.time>10000L)endDrag()
+     else {val loc=IntArray(2);view.getLocationOnScreen(loc);continuous?.move((x+loc[0]).coerceIn(0f,(resources.displayMetrics.widthPixels-1).toFloat()),(y+loc[1]).coerceIn(0f,(resources.displayMetrics.heightPixels-1).toFloat()))}
     }
    }
+   view.onPinchRelease={_,_->endDrag()}
    view.onCustomGesture={id->controller?.savedGestures()?.firstOrNull{it.template.id==id}?.let{executeBinding(GestureBindings.resolve(it.action))}}
    view.onHorizontal={direction->executeBinding(binding(if(direction>0)"right" else "left"))}
    view.onScroll={if(!executeBinding(binding(if(it>0)"up" else "down")))scroll(it)}
@@ -118,6 +117,7 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
   return START_NOT_STICKY
  }
  override fun onDestroy(){
+  endDrag()
   controller?.close();controller=null
   cursor?.let{runCatching{(getSystemService(WINDOW_SERVICE) as WindowManager).removeView(it)}};cursor=null
   registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)

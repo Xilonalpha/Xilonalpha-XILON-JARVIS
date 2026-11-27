@@ -39,6 +39,7 @@ class GestureCursorView(
     private val scrollDetector=ScrollDetector(ScrollConfig())
     private var swipeThreshold=0.22f
     private var swipeDetector=SwipeDetector(SwipeConfig(minDistance=swipeThreshold))
+    var onPinchMove: ((Float,Float)->Unit)?=null
     var onPinchRelease: ((Float,Float)->Unit)?=null
     var onTrackingLost: ()->Unit={}
     private var held=false
@@ -144,6 +145,7 @@ class GestureCursorView(
             }
             if(held && !frame.pinchHeld){onPinchRelease?.invoke(cursor.x,cursor.y)}
             held=frame.pinchHeld
+            if(held)onPinchMove?.invoke(cursor.x,cursor.y)
             if(frame.gesture!=scrollPose){swipeDetector.reset();scrollDetector.resetStroke();palmAnchor=null;palmX=null;scrollPose=frame.gesture}
             when (frame.gesture) {
                 HandGesture.FIST -> {
