@@ -114,7 +114,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
   listening.close();stopAllSpeech();busy=true;neuralCancelled=false
   omegaCore.listening=true;refreshOmegaStatus()
   speechWorker.execute {
-   if(speechClosing || !speechSessions.isCurrent(turn) || neuralCancelled){speechCapture.finish(turn);return@execute}
+   if(speechClosing || !speechSessions.isCurrent(turn) || neuralCancelled){
+    speechCapture.finish(turn)
+    runOnUiThread{
+     if(!isDestroyed && !speechClosing && !speechCapture.active()){
+      busy=false;omegaCore.listening=false;refreshOmegaStatus()
+     }
+    }
+    return@execute
+   }
    var engine:NeuralSpeech?=null
    val result:Result<String> = try {
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{created ->
