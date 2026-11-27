@@ -128,6 +128,7 @@ class GestureEngine(
                         point = PointF(indexTip.x.coerceIn(0f, 1f), indexTip.y.coerceIn(0f, 1f)),
                         gesture = if(output.event is PointerEvent.Press && trackingGuard.settled(timestamp)) HandGesture.PINCH_TAP else if(gesture==HandGesture.PINCH_TAP) HandGesture.NONE else gesture,
                         pressPoint = (output.event as? PointerEvent.Press)?.at,
+                        pinchHeld = output.pinchClosed && trackingGuard.settled(timestamp),
                     ),
                 )
             }
@@ -187,6 +188,7 @@ data class GestureFrame(
     val gesture: HandGesture,
     val pressPoint: NormPoint? = null,
     val customGestureId: Long? = null,
+    val pinchHeld: Boolean = false,
 )
 
 /** Shortcut classes supported by Jarvis Air Touch. */

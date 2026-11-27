@@ -39,6 +39,9 @@ class GestureCursorView(
     private val scrollDetector=ScrollDetector(ScrollConfig())
     private var swipeThreshold=0.22f
     private var swipeDetector=SwipeDetector(SwipeConfig(minDistance=swipeThreshold))
+    var onPinchRelease: ((Float,Float)->Unit)?=null
+    var onTrackingLost: ()->Unit={}
+    private var held=false
     var onPointTap: ((Float,Float)->Unit)?=null
     private val profile = context.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     var smoothing=profile.getFloat("smoothing", 0.22f).coerceIn(0.1f,0.65f)
@@ -108,7 +111,7 @@ class GestureCursorView(
             onCalibrationFinished(solved!=null)
         }else onCalibrationProgress(calibrationPoints.size,0f)
     }
-    fun setTracking(enabled:Boolean){trackingEpoch++;if(!enabled)cancelCalibration();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    fun setTracking(enabled:Boolean){held=false;onTrackingLost();trackingEpoch++;if(!enabled)cancelCalibration();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
@@ -117,7 +120,7 @@ class GestureCursorView(
             if(!active || epoch!=trackingEpoch)return@post
             if(calibrationActive){captureCalibration(frame);invalidate();return@post}
             if(frame.customGestureId!=null){onCustomGesture(frame.customGestureId);return@post}
-            if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){held=false;onTrackingLost();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val now=android.os.SystemClock.elapsedRealtime()
@@ -139,6 +142,8 @@ class GestureCursorView(
                     cursor.y += smoothing.coerceIn(0.1f,0.65f) * (targetY - cursor.y)
                 }
             }
+            if(held && !frame.pinchHeld){onPinchRelease?.invoke(cursor.x,cursor.y)}
+            held=frame.pinchHeld
             if(frame.gesture!=scrollPose){swipeDetector.reset();scrollDetector.resetStroke();palmAnchor=null;palmX=null;scrollPose=frame.gesture}
             when (frame.gesture) {
                 HandGesture.FIST -> {

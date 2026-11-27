@@ -95,6 +95,18 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
      }
     }
    }
+   view.onTrackingLost={anchor=null}
+   view.onPinchRelease={x,y->
+    val previous=anchor
+    anchor=null
+    if(previous!=null && available()){
+     val obs=LocalScreen.observe()
+     val loc=IntArray(2);view.getLocationOnScreen(loc)
+     if(obs!=null && obs.packageName==previous.pkg && obs.fingerprint()==previous.fingerprint && android.os.SystemClock.elapsedRealtime()-previous.time<=10000L){
+      LocalScreen.service()?.airTouchMotion(previous.x,previous.y,(x+loc[0]).toInt(),(y+loc[1]).toInt(),"drag",previous.pkg,previous.fingerprint)
+     }
+    }
+   }
    view.onCustomGesture={id->controller?.savedGestures()?.firstOrNull{it.template.id==id}?.let{executeBinding(GestureBindings.resolve(it.action))}}
    view.onHorizontal={direction->executeBinding(binding(if(direction>0)"right" else "left"))}
    view.onScroll={if(!executeBinding(binding(if(it>0)"up" else "down")))scroll(it)}
