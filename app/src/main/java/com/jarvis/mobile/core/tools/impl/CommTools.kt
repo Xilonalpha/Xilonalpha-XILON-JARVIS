@@ -233,6 +233,17 @@ class WhatsAppMessageTool(private val send: Boolean = false) : Tool(
                     runCatching { context.startActivity(i.setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
                 }
                 if (ok) {
+                    if (send) {
+                        // Wait for the addressed conversation to become visible.
+                        // Never click an arbitrary send button or an unverified draft.
+                        repeat(20) {
+                            kotlinx.coroutines.delay(250)
+                            val submitted = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                com.xilon.jarvis.LocalScreen.service()?.sendVerifiedWhatsAppDraft(phone, body) == true
+                            }
+                            if (submitted) return ToolResult.ok("Am apăsat Trimite în conversația verificată. Livrarea nu este confirmată.", Verification.UNVERIFIED)
+                        }
+                    }
                     if (send) return ToolResult(
                         com.jarvis.mobile.core.tools.ToolStatus.REQUIRES_CONFIRMATION,
                         "Mesajul este pregătit, dar NU a fost trimis. Apasă Trimite în WhatsApp.",
