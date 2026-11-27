@@ -75,13 +75,23 @@ class GestureCursorView(
                         val anchor=palmAnchor
                         val now=android.os.SystemClock.elapsedRealtime()
                         if(anchor==null){palmAnchor=y;palmX=frame.point?.x}
-                        else if(kotlin.math.abs(y-anchor)>profile.getFloat("vertical_threshold",0.18f).coerceIn(0.08f,0.40f) && now-lastScroll>700L){
-                            onScroll(if(y<anchor)1 else -1);lastScroll=now;palmAnchor=y;palmX=frame.point?.x
-                        }else{
-                            val x=frame.point?.x
-                            val ax=palmX
-                            if(x!=null && ax!=null && kotlin.math.abs(x-ax)>profile.getFloat("horizontal_threshold",0.22f).coerceIn(0.08f,0.40f) && now-lastScroll>900L){
-                                onHorizontal(if(x<ax)1 else -1);lastScroll=now;palmX=x;palmAnchor=y
+                        else {
+                            val x=frame.point?.x ?: return@post
+                            val ax=palmX ?: x
+                            val dx=x-ax
+                            val dy=y-anchor
+                            val horizontal=kotlin.math.abs(dx)/profile.getFloat("horizontal_threshold",0.22f).coerceIn(0.08f,0.40f)
+                            val vertical=kotlin.math.abs(dy)/profile.getFloat("vertical_threshold",0.18f).coerceIn(0.08f,0.40f)
+                            // Reject ambiguous diagonal motion rather than firing the wrong shortcut.
+                            if(now-lastScroll>=900L && maxOf(horizontal,vertical)>=1f){
+                                if(horizontal>=vertical*1.35f){
+                                    onHorizontal(if(dx<0)1 else -1)
+                                }else if(vertical>=horizontal*1.35f){
+                                    onScroll(if(dy<0)1 else -1)
+                                }else return@post
+                                lastScroll=now
+                                palmAnchor=y
+                                palmX=x
                             }
                         }
                     }
