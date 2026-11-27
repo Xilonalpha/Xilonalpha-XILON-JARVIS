@@ -229,18 +229,21 @@ class MainActivity : androidx.activity.ComponentActivity() {
    dialog.dismiss()
   }
  }
+ private var airDragStartedAt=0L
  private var airDragStart:Pair<Int,Int>?=null
  private var airDragFingerprint:String?=null
  private var airDragPackage:String?=null
  private fun airTouchAdvanced(x:Float,y:Float):Boolean{
   val mode=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString("advanced_touch","off") ?: "off"
   if(mode=="off")return false
-  val svc=LocalScreen.service() ?: run{modelStatus.text="Activează accesibilitatea JARVIS.";return true}
-  val obs=LocalScreen.observe() ?: return true
+  val svc=LocalScreen.service() ?: run{airDragStart=null;modelStatus.text="Activează accesibilitatea JARVIS.";return true}
+  val obs=LocalScreen.observe() ?: run{airDragStart=null;return true}
   if(obs.packageName!=packageName){airDragStart=null;return true}
   val loc=IntArray(2);cursor.getLocationOnScreen(loc)
   val sx=(x+loc[0]).toInt();val sy=(y+loc[1]).toInt()
+  if(mode=="drag" && android.os.SystemClock.elapsedRealtime()-airDragStartedAt>10000L)airDragStart=null
   if(mode=="drag" && airDragStart==null){
+   airDragStartedAt=android.os.SystemClock.elapsedRealtime()
    airDragStart=sx to sy;airDragFingerprint=obs.fingerprint();airDragPackage=obs.packageName
    modelStatus.text="Indică destinația și repetă gestul.";return true
   }

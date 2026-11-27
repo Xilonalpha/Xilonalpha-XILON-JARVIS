@@ -65,6 +65,7 @@ class LocalScreen:AccessibilityService(){
   if(mode in setOf("tap","double","long"))return elementGesture(x,y,mode,pkg,fingerprint)
   val builder=android.accessibilityservice.GestureDescription.Builder()
   if(mode=="drag"){
+   if(x==endX && y==endY)return false
    val path=android.graphics.Path().apply{moveTo(x.toFloat(),y.toFloat());lineTo(endX.toFloat(),endY.toFloat())}
    builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,900))
   }else if(mode=="zoom_in" || mode=="zoom_out"){
@@ -79,7 +80,10 @@ class LocalScreen:AccessibilityService(){
     builder.addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path,0,450))
    }
   }else return false
-  return dispatchGesture(builder.build(),null,null)
+  return dispatchGesture(builder.build(),object:GestureResultCallback(){
+   override fun onCompleted(gestureDescription:android.accessibilityservice.GestureDescription?){android.util.Log.d("JarvisAirTouch","Gesture completed: "+mode)}
+   override fun onCancelled(gestureDescription:android.accessibilityservice.GestureDescription?){android.util.Log.w("JarvisAirTouch","Gesture cancelled: "+mode)}
+  },null)
  }
  internal fun elementGesture(x:Int,y:Int,mode:String,pkg:String?,fingerprint:String):Boolean {
   val obs=structuredScreen()?:return false
