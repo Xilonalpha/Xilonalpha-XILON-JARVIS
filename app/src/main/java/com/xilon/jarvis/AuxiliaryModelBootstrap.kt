@@ -10,7 +10,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Installs auxiliary on-device assets automatically on unmetered networks.
- * GGUF conversational models are deliberately excluded.
+ * Only core offline speech assets are automatic. Optional vision, OCR,
+ * wake-word, TTS and GGUF assets are installed explicitly from OMEGA.
  * Failed downloads are retried on a later app launch, not in a tight loop.
  */
 internal object AuxiliaryModelBootstrap {
@@ -18,8 +19,7 @@ internal object AuxiliaryModelBootstrap {
  private val executor=Executors.newSingleThreadExecutor()
  private const val TAG="JarvisAuxModels"
  val required:List<ModelCatalog.Entry> get()=
-  ModelCatalog.ocr+ModelCatalog.whisper+ModelCatalog.wake+
-   ModelCatalog.vision+listOf(ModelCatalog.hand,ModelCatalog.kokoro,ModelCatalog.silero)
+  ModelCatalog.whisper+listOf(ModelCatalog.silero)
 
  fun launch(context:Context){
   val app=context.applicationContext
@@ -82,7 +82,7 @@ internal object AuxiliaryModelBootstrap {
      }?:error("Missing downloaded file")
      val ref=ModelDownloads(context).reference(entry)
      ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
-     if(!target.isFile)check(temp.renameTo(target))
+     if(!target.isFile || target.length()==0L)check(temp.renameTo(target))
     }finally{temp.delete()}
    }
   }
