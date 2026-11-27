@@ -431,10 +431,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
  }
  private fun toggleContinuousVoice(){
-  if(continuousVoice){stopVoiceLoop();updateContinuousVoiceButton();append("Conversație continuă oprită.");return}
+  if(continuousVoice){stopVoiceLoop();listening.close();stopAllSpeech();updateContinuousVoiceButton();append("Conversație continuă oprită.");return}
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
-   requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
-   append("Acordă permisiunea microfonului, apoi apasă din nou ∞ OFF.")
+   requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),83)
    return
   }
   if(!conversationForeground){append("Deschide conversația JARVIS pentru a activa ascultarea continuă.");return}
@@ -636,15 +635,24 @@ class MainActivity : androidx.activity.ComponentActivity() {
   val stagePrefs=getSharedPreferences("voice_stage",MODE_PRIVATE)
   val core=OmegaCoreView(this)
   core.mode=if(stagePrefs.getBoolean("pyramid",false))com.xilon.jarvis.ui.VoiceVisualMode.PYRAMID_4X else com.xilon.jarvis.ui.VoiceVisualMode.VOID_HOLOGRAM
-  core.onTap={if(omegaCore.speaking)stopAllSpeech() else startMicrophone()}
+  core.onTap={if(omegaCore.speaking)stopAllSpeech() else toggleContinuousVoice()}
   val stageButton=Button(this).apply { text="Hologramă";isAllCaps=false }
   header.addView(stageButton,1)
+  fun expandStage(){
+   val dialog=androidx.activity.ComponentDialog(this,android.R.style.Theme_Material_NoActionBar)
+   val stage=OmegaCoreView(this).apply { session=core;mode=core.mode;onTap=core.onTap }
+   dialog.setContentView(stage)
+   core.visibility=android.view.View.INVISIBLE
+   dialog.setOnDismissListener{core.visibility=android.view.View.VISIBLE}
+   dialog.show()
+  }
   stageButton.setOnClickListener {
    android.app.AlertDialog.Builder(this).setTitle("Hologramă și voce")
-    .setItems(arrayOf("Hologramă 3D","Piramidă 4X","Hologramă cu camera frontală","Alege vocea")){_,index->
+    .setItems(arrayOf("Hologramă 3D","Piramidă 4X","Hologramă cu camera frontală","Alege vocea","Ecran complet")){_,index->
      when(index){
-      0,1->{stagePrefs.edit().putBoolean("pyramid",index==1).apply();core.mode=if(index==1)com.xilon.jarvis.ui.VoiceVisualMode.PYRAMID_4X else com.xilon.jarvis.ui.VoiceVisualMode.VOID_HOLOGRAM}
+      0,1->{stagePrefs.edit().putBoolean("pyramid",index==1).apply();core.mode=if(index==1)com.xilon.jarvis.ui.VoiceVisualMode.PYRAMID_4X else com.xilon.jarvis.ui.VoiceVisualMode.VOID_HOLOGRAM;if(index==1)expandStage()}
       2->{if(checkSelfPermission(android.Manifest.permission.CAMERA)==android.content.pm.PackageManager.PERMISSION_GRANTED)core.mode=com.xilon.jarvis.ui.VoiceVisualMode.CAMERA_HOLOGRAM else requestPermissions(arrayOf(android.Manifest.permission.CAMERA),81)}
+      4->expandStage()
       3->{val personas=VoicePersona.entries
        android.app.AlertDialog.Builder(this).setTitle("Voce conversațională")
         .setItems(personas.map{it.displayName+" • "+it.tagline}.toTypedArray()){_,i->
@@ -686,7 +694,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
-   val visible=if(root.height<dp(540)||transcript.childCount>1)android.view.View.GONE else android.view.View.VISIBLE
+   val visible=if(root.height<dp(360))android.view.View.GONE else android.view.View.VISIBLE
+   val stageHeight=if(root.height<dp(540))dp(64) else dp(140)
+   if(core.layoutParams.height!=stageHeight)core.layoutParams=core.layoutParams.apply{height=stageHeight}
    if(corePanel.visibility!=visible)corePanel.visibility=visible
   }
   fun rounded(color:Int,radius:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=dp(radius).toFloat()}
@@ -1425,7 +1435,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Microfon în fundal • pornește";setOnClickListener{
    if(busy || BackgroundVoiceService.sessionActive){append("Așteaptă finalizarea operațiunii vocale curente.");return@setOnClickListener}
    if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
-    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),47)
+    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),84)
     append("Acordă microfonul și apasă din nou pentru ascultarea în fundal.")
    }else{
     wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()
@@ -2246,13 +2256,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(restored!=null){for(i in maxOf(0,restored.length()-150) until restored.length()){val item=restored.optString(i);if(item.isNotBlank()){visibleHistory.add(item);messageBubble(item)}}}
   if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
+ private var useLocalSpeechModel=false
  private fun startMicrophone(fromWake:Boolean=false){
   if(BackgroundVoiceService.sessionActive){append("Serviciul vocal în fundal este activ sau se oprește.");return}
   if(busy || speechCapture.active() || voiceBargeIn.active())return
   stopWake()
   wakeCommandPending=fromWake
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
-  startAndroidMicrophone()
+  if(useLocalSpeechModel)startNeural(false) else startAndroidMicrophone()
  }
  private fun startAndroidMicrophone(){
   if(BackgroundVoiceService.sessionActive)return
@@ -2261,10 +2272,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   stopAllSpeech()
-  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){wakeCommandPending=false;voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.contains("nu este disponibil") && conversationForeground)startNeural(false)} })
+  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.contains("nu este disponibil") && conversationForeground){useLocalSpeechModel=true;startNeural(false)}else wakeCommandPending=false} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==83){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && !continuousVoice)toggleContinuousVoice() else if(!continuousVoice)append("Permisiunea microfonului a fost refuzată.")}
   if(requestCode==82){
    val music=pendingMusic
    pendingMusic=null

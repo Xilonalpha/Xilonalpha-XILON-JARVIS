@@ -5,7 +5,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -19,6 +18,7 @@ import androidx.compose.ui.platform.AbstractComposeView
 import com.xilon.jarvis.ui.*
 
 class OmegaCoreView(context: Context) : AbstractComposeView(context), SensorEventListener {
+    var session: OmegaCoreView? = null
     var active by mutableStateOf(false)
     var speaking by mutableStateOf(false)
     var listening by mutableStateOf(false)
@@ -52,10 +52,11 @@ class OmegaCoreView(context: Context) : AbstractComposeView(context), SensorEven
 
     @Composable override fun Content() {
         if (!visible) return
+        val source = session ?: this
         val phase = when {
-            speaking -> VoiceSessionPhase.SPEAKING
-            listening -> VoiceSessionPhase.LISTENING
-            active -> VoiceSessionPhase.THINKING
+            source.speaking -> VoiceSessionPhase.SPEAKING
+            source.listening -> VoiceSessionPhase.LISTENING
+            source.active -> VoiceSessionPhase.THINKING
             else -> VoiceSessionPhase.IDLE
         }
         val cyan = Color(0xff55e5ff)
@@ -63,9 +64,9 @@ class OmegaCoreView(context: Context) : AbstractComposeView(context), SensorEven
         Box(Modifier.fillMaxSize()) {
             if (mode == VoiceVisualMode.CAMERA_HOLOGRAM) FrontCameraPreviewSurface(Modifier.fillMaxSize())
             if (mode == VoiceVisualMode.PYRAMID_4X)
-                PeppersGhostPyramidStage(phase, level, cyan, blue, onTap, Modifier.fillMaxSize())
+                PeppersGhostPyramidStage(phase, source.level, cyan, blue, onTap, Modifier.fillMaxSize())
             else
-                SciFiHologramStage(phase, level, cyan, blue, tiltX, tiltY, true, onTap, Modifier.fillMaxSize())
+                SciFiHologramStage(phase, source.level, cyan, blue, tiltX, tiltY, true, onTap, Modifier.fillMaxSize())
         }
     }
 }

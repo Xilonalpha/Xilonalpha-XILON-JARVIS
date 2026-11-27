@@ -91,7 +91,6 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
       if(mode=="drag"){
        anchor=DragAnchor(sx,sy,obs.packageName,obs.fingerprint(),now)
        continuous=ContinuousAirDrag(svc).also{it.start(sx.toFloat(),sy.toFloat())}
-      }else svc.airTouchMotion(previous.x,previous.y,sx,sy,mode,obs.packageName,obs.fingerprint())
       }else svc.airTouchMotion(sx,sy,sx,sy,mode,obs.packageName,obs.fingerprint())
      }
     }
