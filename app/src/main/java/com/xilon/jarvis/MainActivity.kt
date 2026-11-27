@@ -271,6 +271,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  private fun startAirTouch(){
   if(busy || airTouch!=null)return
+  stopService(Intent(this,GlobalAirTouchService::class.java))
   if(!java.io.File(filesDir,"hand_landmarker.task").isFile){append("Importă modelul MediaPipe.");return}
   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return}
   if(liveVision!=null){combinedAirVision=true;stopLiveVision()}
@@ -1391,7 +1392,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   } },LinearLayout.LayoutParams(dp(48),dp(48)))
-  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopLiveVision();refreshOmegaStatus();append("JARVIS: Oprire solicitată. Aștept oprirea operației active înainte de o nouă comandă.") } }
+  val stopControl=composerIcon("stop","Oprește").apply { setOnClickListener { wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopVoiceLoop();agentCancelled=true; invalidatePreview(); screenHandler.removeCallbacksAndMessages(null); observedScreen=null; ocrText=null; visualObservation.clear(); recorder.cancel(); stopAllSpeech(); nativeModel?.stop(); listening.close(); stopNeural(); stopWake(); stopAirTouch(); stopService(Intent(this,GlobalAirTouchService::class.java)); stopLiveVision();refreshOmegaStatus();append("JARVIS: Oprire solicitată. Aștept oprirea operației active înainte de o nouă comandă.") } }
   actions.addView(stopControl,LinearLayout.LayoutParams(dp(48),dp(48)))
   stopControl.visibility=android.view.View.GONE
   composerUpdate={stopControl.visibility=if(busy)android.view.View.VISIBLE else android.view.View.GONE;sendControl.visibility=if(busy)android.view.View.GONE else android.view.View.VISIBLE}
@@ -1543,6 +1544,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
    override fun onStopTrackingTouch(bar:android.widget.SeekBar?){}
   })})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch + vedere frontală (local)";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_combined",false);combinedAirVision=isChecked;setOnCheckedChangeListener{_,checked->combinedAirVision=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_combined",checked).apply();if(airTouch!=null){stopAirTouch();startAirTouch()}}})
+  settings.addView(Button(this).apply{text="Air Touch global • pornește";setOnClickListener{
+   if(!LocalScreen.connected()){startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));return@setOnClickListener}
+   if(!android.provider.Settings.canDrawOverlays(this@MainActivity)){startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,android.net.Uri.parse("package:"+packageName)));return@setOnClickListener}
+   if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.CAMERA),44);return@setOnClickListener}
+   stopAirTouch();stopLiveVision()
+   runCatching{androidx.core.content.ContextCompat.startForegroundService(this@MainActivity,Intent(this@MainActivity,GlobalAirTouchService::class.java))}.onFailure{append("Air Touch global: "+it.message)}
+  }})
+  settings.addView(Button(this).apply{text="Air Touch global • oprește";setOnClickListener{stopService(Intent(this@MainActivity,GlobalAirTouchService::class.java))}})
   settings.addView(Button(this).apply { text="Air Touch ON/OFF (ciupire: microfon; pumn: oprire opțională)";setOnClickListener{if(airTouch!=null)stopAirTouch() else startAirTouch()}})
   for(i in 0 until settings.childCount){val v=settings.getChildAt(i);if(v is TextView){v.setTextColor(android.graphics.Color.WHITE);if(v is Button)v.isAllCaps=false}}
   val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
