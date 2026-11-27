@@ -45,7 +45,8 @@ class GestureCursorView(
     private var lastScroll=0L
     private var fistSince=0L
     private var fistFired=false
-    private var active=false
+    @Volatile private var active=false
+    @Volatile private var trackingEpoch=0L
     private val calibrationPoints=mutableListOf<NormPoint>()
     private var calibrationActive=false
     private var calibrationStart=0L
@@ -60,6 +61,8 @@ class GestureCursorView(
         calibrationSamples.clear()
         calibrationAnchor=null
         calibrationActive=true
+        hasPosition=false
+        invalidate()
         onCalibrationProgress(0,0f)
     }
     fun cancelCalibration(){
@@ -67,6 +70,7 @@ class GestureCursorView(
         calibrationPoints.clear()
         calibrationSamples.clear()
         calibrationAnchor=null
+        invalidate()
     }
     private fun captureCalibration(frame:GestureFrame){
         val p=frame.point
@@ -102,13 +106,14 @@ class GestureCursorView(
             onCalibrationFinished(solved!=null)
         }else onCalibrationProgress(calibrationPoints.size,0f)
     }
-    fun setTracking(enabled:Boolean){if(!enabled)cancelCalibration();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    fun setTracking(enabled:Boolean){trackingEpoch++;if(!enabled)cancelCalibration();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
+        val epoch=trackingEpoch
         post {
-            if(!active)return@post
-            if(calibrationActive){captureCalibration(frame);return@post}
+            if(!active || epoch!=trackingEpoch)return@post
+            if(calibrationActive){captureCalibration(frame);invalidate();return@post}
             if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
@@ -198,6 +203,14 @@ class GestureCursorView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if(calibrationActive){
+            val target=Calibration.TARGETS.getOrNull(calibrationPoints.size) ?: return
+            val x=target.x*width
+            val y=target.y*height
+            canvas.drawCircle(x,y,18f*density,outlinePaint)
+            canvas.drawCircle(x,y,5f*density,cursorPaint)
+            return
+        }
         if (!cursorVisible || !hasPosition) return
         canvas.withSave {
             val radius = min(width, height).coerceAtLeast(1) * CURSOR_RADIUS_FRACTION
