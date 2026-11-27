@@ -645,6 +645,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    core.visibility=android.view.View.INVISIBLE
    dialog.setOnDismissListener{core.visibility=android.view.View.VISIBLE}
    dialog.show()
+   dialog.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,android.view.ViewGroup.LayoutParams.MATCH_PARENT)
   }
   stageButton.setOnClickListener {
    android.app.AlertDialog.Builder(this).setTitle("Hologramă și voce")
