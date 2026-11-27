@@ -32,7 +32,7 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
   val now=android.os.SystemClock.elapsedRealtime()
   if(now-lastTap<700L)return true
   val obs=LocalScreen.observe()?:return true
-  if(obs.packageName==packageName)return true
+  if(obs.packageName==null || obs.packageName==packageName)return true
   anchor=null
   lastTap=now
   val global=when(action){
@@ -80,7 +80,7 @@ class GlobalAirTouchService: Service(), LifecycleOwner {
      val svc=LocalScreen.service()
      val obs=LocalScreen.observe()
      val loc=IntArray(2);view.getLocationOnScreen(loc)
-     if(svc!=null && obs!=null && obs.packageName!=packageName){
+     if(svc!=null && obs!=null && obs.packageName!=null && obs.packageName!=packageName){
       lastTap=now
       val sx=(x+loc[0]).toInt();val sy=(y+loc[1]).toInt()
       val selected=getSharedPreferences("air_touch_profile",MODE_PRIVATE).getString("advanced_touch","off")
