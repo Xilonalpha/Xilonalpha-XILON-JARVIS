@@ -24,7 +24,7 @@ import kotlinx.serialization.json.JsonObject
 object ContactResolver {
 
     sealed class Resolution {
-        data class Found(val name: String, val phone: String) : Resolution()
+        data class Found(val name: String, val phone: String, val normalized: String? = null) : Resolution()
         data class Ambiguous(val query: String, val candidates: List<String>) : Resolution()
         data class NotFound(val query: String, val reason: String) : Resolution()
     }
@@ -60,7 +60,7 @@ object ContactResolver {
             return Resolution.NotFound(q, "Contacts permission not granted")
         }
 
-        data class Row(val name: String, val phone: String)
+        data class Row(val name: String, val phone: String, val normalized: String?)
         val rows = mutableListOf<Row>()
         runCatching {
             context.contentResolver.query(
@@ -68,14 +68,15 @@ object ContactResolver {
                 arrayOf(
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                     ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER,
                 ),
                 null, null,
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC",
             )?.use { c ->
-                while (c.moveToNext() && rows.size < 800) {
+                while (c.moveToNext()) {
                     val n = c.getString(0) ?: continue
                     val p = c.getString(1) ?: continue
-                    rows.add(Row(n.trim(), p.trim()))
+                    rows.add(Row(n.trim(), p.trim(), c.getString(2)))
                 }
             }
         }
@@ -84,15 +85,15 @@ object ContactResolver {
         val lower = q.lowercase()
         // Tier 1: exact (case-insensitive)
         val exact = rows.filter { it.name.equals(q, ignoreCase = true) }.distinctBy { it.phone }
-        if(exact.size == 1) return Resolution.Found(exact[0].name, exact[0].phone)
+        if(exact.size == 1) return Resolution.Found(exact[0].name, exact[0].phone, exact[0].normalized)
         if(exact.size > 1) return Resolution.Ambiguous(q, exact.take(5).map { "${it.name} ${it.phone}" })
         // Tier 2: LIKE
         val like = rows.filter { it.name.lowercase().contains(lower) }
-        if (like.size == 1) return Resolution.Found(like[0].name, like[0].phone)
+        if (like.size == 1) return Resolution.Found(like[0].name, like[0].phone, like[0].normalized)
         if (like.size > 1) return Resolution.Ambiguous(q, like.take(5).map { "${it.name} ${it.phone}" })
         // Tier 3: word-start fuzzy (first/last name token starts with query)
         val fuzzy = rows.filter { r -> r.name.lowercase().split(Regex("\\s+")).any { it.startsWith(lower) } }
-        if (fuzzy.size == 1) return Resolution.Found(fuzzy[0].name, fuzzy[0].phone)
+        if (fuzzy.size == 1) return Resolution.Found(fuzzy[0].name, fuzzy[0].phone, fuzzy[0].normalized)
         if (fuzzy.size > 1) return Resolution.Ambiguous(q, fuzzy.take(5).map { "${it.name} ${it.phone}" })
         // Tier 4: relationship nicknames ("dad" matches "Papa Ali", "Father", ...)
         val synonyms = NICKNAMES[lower] ?: listOf(lower)
@@ -100,7 +101,7 @@ object ContactResolver {
             val n = r.name.lowercase()
             synonyms.any { s -> n.contains(s) }
         }
-        if (nick.size == 1) return Resolution.Found(nick[0].name, nick[0].phone)
+        if (nick.size == 1) return Resolution.Found(nick[0].name, nick[0].phone, nick[0].normalized)
         if (nick.size > 1) return Resolution.Ambiguous(q, nick.take(5).map { "${it.name} ${it.phone}" })
         return Resolution.NotFound(q, "no contact matched")
     }
@@ -185,14 +186,15 @@ class SendSmsTool : Tool(
     }
 }
 
-class WhatsAppMessageTool : Tool(
+class WhatsAppMessageTool(private val send: Boolean = false) : Tool(
     ToolSpec(
-        "whatsapp_message", "Open WhatsApp to a contact/number with the message text prefilled (the user or the agent presses send).",
+        if (send) "whatsapp_send" else "whatsapp_message",
+        if (send) "Send a message through an available direct WhatsApp reply, or open the addressed draft." else "Open a WhatsApp draft.",
         listOf(
-            com.jarvis.mobile.core.tools.ParamSpec("contact", "string", false, "contact name, nickname, or raw number with country code"),
+            com.jarvis.mobile.core.tools.ParamSpec("contact", "string", send, "contact name, nickname, or raw number with country code"),
             com.jarvis.mobile.core.tools.ParamSpec("message", "string", true, "message text"),
         ),
-        com.jarvis.mobile.core.tools.Risk.MEDIUM,
+        if (send) com.jarvis.mobile.core.tools.Risk.HIGH else com.jarvis.mobile.core.tools.Risk.MEDIUM,
     ),
 ) {
     override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
@@ -202,7 +204,19 @@ class WhatsAppMessageTool : Tool(
         val encoded = Uri.encode(body)
         if (who != null) {
             val phone = when (val r = ContactResolver.resolve(who)) {
-                is ContactResolver.Resolution.Found -> r.phone.filter { it.isDigit() }
+                is ContactResolver.Resolution.Found -> {
+                    val region = context.getSystemService(android.telephony.TelephonyManager::class.java)?.simCountryIso.orEmpty()
+                    val raw = android.telephony.PhoneNumberUtils.normalizeNumber(r.phone)
+                    val international = r.normalized?.takeIf { it.matches(Regex("[+][1-9][0-9]{6,14}")) }
+                        ?: when {
+                            raw.startsWith("+") -> raw
+                            raw.startsWith("00") -> "+" + raw.drop(2)
+                            region.isNotBlank() -> android.telephony.PhoneNumberUtils.formatNumberToE164(raw, region.uppercase(java.util.Locale.ROOT))
+                            else -> null
+                        }
+                    international?.takeIf { it.matches(Regex("[+][1-9][0-9]{6,14}")) }?.drop(1)
+                        ?: return ToolResult.fail("Pentru acest contact am nevoie de numărul cu prefix internațional.")
+                }
                 is ContactResolver.Resolution.Ambiguous -> return ToolResult.fail(
                     "Several contacts match \"$who\": ${r.candidates.joinToString("; ")}. Ask the user which one.",
                     "ask-user-to-pick-contact",
@@ -210,11 +224,15 @@ class WhatsAppMessageTool : Tool(
                 is ContactResolver.Resolution.NotFound -> return ToolResult.fail("Recipient not resolved; provide an international number.")
             }
             if (phone.length in 7..15) {
+                if (send && com.xilon.jarvis.LocalNotifications.replyToWhatsApp(phone, body))
+                    return ToolResult.ok("Am transmis textul către WhatsApp. Livrarea nu este confirmată.", Verification.UNVERIFIED)
                 val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=$phone&text=$encoded")).apply {
                     setPackage("com.whatsapp")
                 }
-                val ok = runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
-                if (ok) return ToolResult.ok("WhatsApp chat open with the message prefilled - press send to deliver.", Verification.UNVERIFIED, detail = "phone=$phone")
+                val ok = listOf("com.whatsapp", "com.whatsapp.w4b").any { pkg ->
+                    runCatching { context.startActivity(i.setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+                }
+                if (ok) return ToolResult.ok("Conversația este deschisă cu mesajul pregătit. Apasă Trimite în WhatsApp.", Verification.UNVERIFIED, detail = "phone=$phone")
             }
             return ToolResult.fail("Could not open the requested WhatsApp recipient.")
         }

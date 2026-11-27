@@ -17,17 +17,35 @@ object NaturalToolCommands {
   val wa=Regex("^(?:scrie|trimite) (?:un )?mesaj (?:pe |prin )?whatsapp (?:lui |către |catre )?(.+?)\\s+(?:întreabă|intreaba)\\s+(?:ce face|cum se simte)\\s*[.!?]?$",RegexOption.IGNORE_CASE).matchEntire(input.trim())
   if(wa!=null){
    val body=if(wa.value.contains(Regex("cum se simte",RegexOption.IGNORE_CASE))) "Cum te simți?" else "Ce faci?"
-   return PlannedAction("whatsapp_message",JsonObject(mapOf("contact" to JsonPrimitive(wa.groupValues[1].trim()),"message" to JsonPrimitive(body))))
+   return PlannedAction(if(wa.value.startsWith("trimite",true)) "whatsapp_send" else "whatsapp_message",JsonObject(mapOf("contact" to JsonPrimitive(wa.groupValues[1].trim()),"message" to JsonPrimitive(body))))
   }
   // Direct Romanian commands with arbitrary argument values, no GGUF.
   val raw=input.trim().trimEnd('!','.')
   fun direct(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
   fun rawMatch(pattern:String)=Regex(pattern,RegexOption.IGNORE_CASE).matchEntire(raw)
+  val spokenClock=Regex("""(?:trezeste-ma|(?:pune|seteaza|programeaza) (?:o )?alarma) la (?:ora )?(\d{1,2}|unu|una|doi|doua|trei|patru|cinci|sase|sapte|opt|noua|zece|unsprezece|doisprezece|douasprezece)(?: (si un sfert|si jumatate|fara un sfert))?(?: (dimineata|seara|dupa[ -]amiaza))?""")
+   .matchEntire(RomanianLexicon.normalize(raw))
+  if(spokenClock!=null){
+   val (word,fraction,period)=spokenClock.destructured
+   val names=listOf("zero","unu","doi","trei","patru","cinci","sase","sapte","opt","noua","zece","unsprezece","doisprezece")
+   var hour=word.toIntOrNull() ?: when(word){"una"->1;"doua"->2;"douasprezece"->12;else->names.indexOf(word)}
+   if(hour !in 0..23 || period.isNotEmpty() && hour !in 1..12)return null
+   if(period.isNotEmpty())hour=hour%12 + if(period=="dimineata")0 else 12
+   if(fraction=="fara un sfert")hour=(hour+23)%24
+   val minute=when(fraction){"si un sfert"->15;"si jumatate"->30;"fara un sfert"->45;else->0}
+   return direct("set_alarm","hour" to JsonPrimitive(hour),"minute" to JsonPrimitive(minute))
+  }
   rawMatch("(?:sună|suna|apelează|apeleaza|telefonează|telefoneaza) (?:pe |la )?(.+)")?.let{
    return direct("call_contact","contact" to JsonPrimitive(it.groupValues[1]))
   }
-  rawMatch("(?:scrie|trimite) (?:un )?(?:mesaj (?:pe |prin )?)?(whatsapp|sms) (?:lui |către |catre )?([^:]+):\\s*(.+)")?.let{
-   return direct(if(it.groupValues[1].equals("sms",true))"send_sms" else "whatsapp_message","contact" to JsonPrimitive(it.groupValues[2].trim()),"message" to JsonPrimitive(it.groupValues[3]))
+  val dictatedWhatsApp=Regex("""^(trimite|scrie)(?:-i)? (?:un )?(?:mesaj )?(?:lui |către |catre )?(.+?) pe whatsapp(?:\s*:\s*|\s+(?:cu (?:textul|mesajul)|mesajul)\s*:?\s+)(.+)$""",RegexOption.IGNORE_CASE).matchEntire(input.trim())
+  if(dictatedWhatsApp!=null){
+   val (verb,recipient,body)=dictatedWhatsApp.destructured
+   return direct(if(verb.equals("trimite",true)) "whatsapp_send" else "whatsapp_message",
+    "contact" to JsonPrimitive(recipient.trim()), "message" to JsonPrimitive(body.trim()))
+  }
+  Regex("(?:scrie|trimite) (?:un )?(?:mesaj (?:pe |prin )?)?(whatsapp|sms) (?:lui |către |catre )?([^:]+):\\s*(.+)",RegexOption.IGNORE_CASE).matchEntire(input.trim())?.let{
+   return direct(if(it.groupValues[1].equals("sms",true))"send_sms" else if(raw.startsWith("trimite",true))"whatsapp_send" else "whatsapp_message","contact" to JsonPrimitive(it.groupValues[2].trim()),"message" to JsonPrimitive(it.groupValues[3]))
   }
   rawMatch("(?:deschide|arată|arata) (?:conversația|conversatia|chatul) (?:pe |din )?telegram (?:cu )?(.+)")?.let{
    return direct("telegram_message","handle" to JsonPrimitive(it.groupValues[1]))

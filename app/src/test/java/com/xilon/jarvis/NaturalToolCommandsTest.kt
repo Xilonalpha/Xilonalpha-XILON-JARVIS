@@ -3,6 +3,24 @@ import org.junit.Test
 import org.junit.Assert.*
 import kotlinx.serialization.json.*
 class NaturalToolCommandsTest {
+ @Test fun dictatedMessagesPreserveContentAndDistinguishSendingFromDrafting(){
+  val sent=NaturalToolCommands.parse("Trimite-i lui Ana Maria pe WhatsApp mesajul Ajung în zece minute!")
+  assertEquals("whatsapp_send",sent?.tool)
+  assertEquals(JsonPrimitive("Ana Maria"),sent?.args?.get("contact"))
+  assertEquals(JsonPrimitive("Ajung în zece minute!"),sent?.args?.get("message"))
+  assertEquals("whatsapp_message",NaturalToolCommands.parse("Scrie lui Ana pe WhatsApp: Bună!")?.tool)
+  assertNull(NaturalToolCommands.parse("Nu trimite lui Ana pe WhatsApp: Bună"))
+ }
+ @Test fun spokenClockCommandsResolveHourAndMinutes(){
+  val next=NaturalToolCommands.parse("Trezește-mă la șapte și jumătate dimineața")
+  assertEquals("set_alarm",next?.tool)
+  assertEquals(JsonPrimitive(7),next?.args?.get("hour"))
+  assertEquals(JsonPrimitive(30),next?.args?.get("minute"))
+  val prior=NaturalToolCommands.parse("Pune alarma la douăsprezece fără un sfert dimineața")
+  assertEquals(JsonPrimitive(23),prior?.args?.get("hour"))
+  assertEquals(JsonPrimitive(45),prior?.args?.get("minute"))
+  assertNull(NaturalToolCommands.parse("Nu mă trezi la șapte"))
+ }
  @Test fun flashlight(){
   assertEquals(JsonPrimitive(true),NaturalToolCommands.parse("Aprinde lanterna")!!.args["on"])
   assertEquals(JsonPrimitive(false),NaturalToolCommands.parse("Stinge lanterna")!!.args["on"])

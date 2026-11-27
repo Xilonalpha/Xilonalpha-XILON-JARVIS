@@ -4,6 +4,29 @@ import android.app.Notification
 class LocalNotifications:NotificationListenerService(){
  companion object {
   @Volatile private var active:LocalNotifications?=null
+  fun replyToWhatsApp(phone: String, body: String): Boolean {
+   val service = active ?: return false
+   if (android.os.Build.VERSION.SDK_INT < 30) return false
+   val matches = service.activeNotifications.orEmpty().mapNotNull { item ->
+    if (item.packageName !in setOf("com.whatsapp", "com.whatsapp.w4b") || item.user != android.os.Process.myUserHandle()) return@mapNotNull null
+    val notification = item.notification
+    if ((notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return@mapNotNull null
+    val style = Notification.MessagingStyle.extractMessagingStyleFromNotification(notification) ?: return@mapNotNull null
+    if (style.isGroupConversation || style.conversationTitle != null) return@mapNotNull null
+    val sender = style.messages.lastOrNull()?.senderPerson?.uri ?: return@mapNotNull null
+    val uri = android.net.Uri.parse(sender)
+    if (uri.scheme != "tel" || android.telephony.PhoneNumberUtils.normalizeNumber(uri.schemeSpecificPart) != "+$phone") return@mapNotNull null
+    notification.actions.orEmpty().singleOrNull { action ->
+     action.semanticAction == Notification.Action.SEMANTIC_ACTION_REPLY && action.actionIntent?.creatorPackage == item.packageName &&
+      action.remoteInputs.orEmpty().count { it.allowFreeFormInput } == 1
+    }
+   }
+   val action = matches.singleOrNull() ?: return false
+   val input = action.remoteInputs.single { it.allowFreeFormInput }
+   val result = android.content.Intent()
+   android.app.RemoteInput.addResultsToIntent(arrayOf(input), result, android.os.Bundle().apply { putCharSequence(input.resultKey, body) })
+   return try { action.actionIntent.send(service, 0, result); true } catch (_: android.app.PendingIntent.CanceledException) { false }
+  }
   fun snapshot():List<String>? {
    val svc=active?:return null
    return try { svc.activeNotifications?.map { n ->
