@@ -120,7 +120,7 @@ class GestureCursorView(
         post {
             if(!active || epoch!=trackingEpoch)return@post
             if(calibrationActive){captureCalibration(frame);invalidate();return@post}
-            if(frame.customGestureId!=null){onCustomGesture(frame.customGestureId);return@post}
+            if(frame.customGestureId!=null){held=false;onTrackingLost();onCustomGesture(frame.customGestureId);return@post}
             if(frame.point==null){held=false;onTrackingLost();swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;cursorSmoother.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
@@ -145,7 +145,7 @@ class GestureCursorView(
             }
             if(held && !frame.pinchHeld){onPinchRelease?.invoke(cursor.x,cursor.y)}
             held=frame.pinchHeld
-            if(held)onPinchMove?.invoke(cursor.x,cursor.y)
+            if(held && frame.gesture!=HandGesture.PINCH_TAP){onPinchMove?.invoke(cursor.x,cursor.y);cursorVisible=true;invalidate();return@post}
             if(frame.gesture!=scrollPose){swipeDetector.reset();scrollDetector.resetStroke();palmAnchor=null;palmX=null;scrollPose=frame.gesture}
             when (frame.gesture) {
                 HandGesture.FIST -> {
