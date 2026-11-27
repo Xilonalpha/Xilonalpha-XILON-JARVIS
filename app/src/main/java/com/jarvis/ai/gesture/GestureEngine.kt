@@ -24,6 +24,7 @@ class GestureEngine(
     private val appContext = context.applicationContext
     private var landmarker: HandLandmarker? = null
     private var lastTimestampMs = 0L
+    val customGestures = CustomGestureSession()
     private val throttle = PowerSaveThrottler()
     private val settings = appContext.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     private var lastPinchAtMs = 0L
@@ -105,6 +106,7 @@ class GestureEngine(
             if (landmarks == null || landmarks.size < REQUIRED_LANDMARKS) {
                 trackingGuard.onNoHand(timestamp)
                 pointer.process(HandFrame(timestamp,null))
+                customGestures.process(HandFrame(timestamp,null))
                 emit( GestureFrame(point = null, gesture = HandGesture.NONE) )
             } else {
                 val aspect = if (imageProxy.imageInfo.rotationDegrees % 180 == 0) imageProxy.width.toFloat() / imageProxy.height else imageProxy.height.toFloat() / imageProxy.width
@@ -113,7 +115,11 @@ class GestureEngine(
                 if (restart) { pointer.reset(); emit(GestureFrame(null, HandGesture.NONE)) }
                 val threshold=settings.getFloat("pinch_ratio",PINCH_RATIO).coerceIn(0.15f,0.55f)
                 if(threshold!=pointerThreshold){pointerThreshold=threshold;pointer=PointerEngine(PointerConfig(pinchClose=threshold,pinchOpen=threshold+0.12f,pinchMinClosedFrames=3,pinchArmMs=250,scrollEnabled=false))}
-                val output=pointer.process(HandFrame(timestamp,raw,aspect))
+                val handFrame=HandFrame(timestamp,raw,aspect)
+                val custom=customGestures.process(handFrame)
+                if(customGestures.isRecording()){emit(GestureFrame(null,HandGesture.NONE));return}
+                if(custom!=null && trackingGuard.settled(timestamp)){emit(GestureFrame(null,HandGesture.NONE,customGestureId=custom.template.id));return}
+                val output=pointer.process(handFrame)
                 val positions = landmarks.map { PointF(it.x(), it.y()) }
                 val gesture = if (trackingGuard.settled(timestamp)) classify(raw) else HandGesture.NONE
                 val indexTip = if (gesture == HandGesture.TWO_FINGERS) PointF((positions[8].x + positions[12].x)/2f, (positions[8].y + positions[12].y)/2f) else if (gesture == HandGesture.OPEN_PALM) raw.centroid(TrackedPoint.PALM_CENTER.indices).let { PointF(it.first,it.second) } else positions[INDEX_TIP]
@@ -138,6 +144,7 @@ class GestureEngine(
     override fun close() {
         runCatching { landmarker?.close() }
         landmarker = null
+        customGestures.cancel()
     }
 
     private val poseClassifier = StaticGestureClassifier(PalmConfig())
@@ -179,6 +186,7 @@ data class GestureFrame(
     val point: PointF?,
     val gesture: HandGesture,
     val pressPoint: NormPoint? = null,
+    val customGestureId: Long? = null,
 )
 
 /** Shortcut classes supported by Jarvis Air Touch. */
