@@ -4,6 +4,8 @@ import org.junit.Assert.*
 import kotlinx.serialization.json.*
 class NaturalToolCommandsTest {
  @Test fun dictatedMessagesPreserveContentAndDistinguishSendingFromDrafting(){
+  assertEquals("Ana Maria",NaturalToolCommands.whatsAppRecipient("Trimite un mesaj lui Ana Maria pe WhatsApp"))
+  assertNull(NaturalToolCommands.whatsAppRecipient("Nu trimite un mesaj lui Ana pe WhatsApp"))
   val sent=NaturalToolCommands.parse("Trimite-i lui Ana Maria pe WhatsApp mesajul Ajung în zece minute!")
   assertEquals("whatsapp_send",sent?.tool)
   assertEquals(JsonPrimitive("Ana Maria"),sent?.args?.get("contact"))

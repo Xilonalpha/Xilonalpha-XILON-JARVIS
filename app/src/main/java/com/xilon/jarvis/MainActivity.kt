@@ -1090,6 +1090,26 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // A greeting before an imperative must not send a phone command to chat inference.
     // Keep the original utterance for display and all unrelated conversation branches.
     val commandQ=CommandGreeting.stripBeforeCommand(q)
+    val recipient=NaturalToolCommands.whatsAppRecipient(commandQ)
+    if(recipient!=null){
+     val message=EditText(this@MainActivity).apply{hint="Mesaj pentru "+recipient}
+     val compose=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ce mesaj îi trimit lui "+recipient+"?")
+      .setView(message).setPositiveButton("Continuă",null).setNegativeButton("Anulează",null).create()
+     compose.setOnShowListener{
+      compose.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
+       val body=message.text.toString().trim()
+       if(body.isEmpty())message.error="Introdu mesajul" else {
+        compose.dismiss()
+        executeRequestedTool("whatsapp_send",kotlinx.serialization.json.buildJsonObject{
+         put("contact",kotlinx.serialization.json.JsonPrimitive(recipient))
+         put("message",kotlinx.serialization.json.JsonPrimitive(body))
+        })
+       }
+      }
+     }
+     compose.show()
+     return@setOnClickListener
+    }
     val lexicalCompound=RomanianLexicon.split(commandQ).size>1
     // Route ALL known single Android capabilities without model inference.
     // NaturalToolCommands enforces negation and multi-action guards. Its

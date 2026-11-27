@@ -2,6 +2,12 @@ package com.xilon.jarvis
 import kotlinx.serialization.json.*
 import com.jarvis.mobile.core.tools.PlannedAction
 object NaturalToolCommands {
+ /** Recipient-only requests need the user's message before they can enter the tool runner. */
+ fun whatsAppRecipient(input:String):String? {
+  if(RomanianLexicon.negated(input) || RegistryIntent.compound(input))return null
+  val pattern=Regex("""^trimite(?:-i)? (?:un )?mesaj (?:lui |către |catre )?([\p{L}\p{M}\d +()'-]+?) pe whatsapp[.!?]?$""",RegexOption.IGNORE_CASE)
+  return pattern.matchEntire(input.trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+ }
  fun parse(input:String):PlannedAction? {
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
