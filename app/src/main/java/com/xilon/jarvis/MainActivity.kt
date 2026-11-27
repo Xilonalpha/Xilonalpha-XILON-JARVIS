@@ -2299,7 +2299,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(restored!=null){for(i in maxOf(0,restored.length()-150) until restored.length()){val item=restored.optString(i);if(item.isNotBlank()){visibleHistory.add(item);messageBubble(item)}}}
   if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
- private var useLocalSpeechModel=false
+ private var useLocalSpeechModel=true
  private fun startMicrophone(fromWake:Boolean=false){
   if(BackgroundVoiceService.sessionActive){append("Serviciul vocal în fundal este activ sau se oprește.");return}
   if(!conversationForeground || speechClosing || omegaCore.listening || busy || speechCapture.active() || voiceBargeIn.active())return
