@@ -2087,7 +2087,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    else dialog.setNegativeButton("Închide",null)
    dialog.show()
   }})
-  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Hey Jarvis","Catalog Kokoro","Catalog gesturi","Catalog OCR")
+  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Sherpa Streaming • Full Duplex","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
   settings.addView(Button(this).apply{text="OMEGA Model Center";setOnClickListener{
    if(busy)return@setOnClickListener
@@ -2101,7 +2101,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
    center.addView(resources)
    val manager=ModelDownloads(this@MainActivity)
-   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Vision" to ModelCatalog.visionModels,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Sherpa Streaming • Full Duplex" to ModelCatalog.streamingAsr,"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
    val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
