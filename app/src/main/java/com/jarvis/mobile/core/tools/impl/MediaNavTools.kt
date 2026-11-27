@@ -62,7 +62,7 @@ class YoutubeSearchTool : Tool(
             setPackage("com.google.android.youtube")
         }
         if (runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) {
-            return ToolResult.ok("YouTube search results for \"$q\" are open.", Verification.UNVERIFIED)
+            return ToolResult.ok("Rezultatele YouTube pentru \"$q\" sunt deschise; redarea nu este confirmată.", Verification.UNVERIFIED)
         }
         return CommStart.start(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$enc")))
             
@@ -132,11 +132,26 @@ class SetTimerTool : Tool(
 }
 
 class MediaPlayPauseTool : Tool(
-    ToolSpec("media_play_pause", "Control current media: toggle, play, pause, next, previous.", listOf(com.jarvis.mobile.core.tools.ParamSpec("action", "string", false, "toggle|play|pause|next|previous")), com.jarvis.mobile.core.tools.Risk.LOW),
+    ToolSpec("media_play_pause", "Control current media or request playback in a local music player.", listOf(com.jarvis.mobile.core.tools.ParamSpec("action", "string", false, "toggle|play|pause|next|previous|local"), com.jarvis.mobile.core.tools.ParamSpec("query", "string", false, "local song title")), com.jarvis.mobile.core.tools.Risk.LOW),
 ) {
     override suspend fun execute(args: JsonObject, ctx: ToolContext): ToolResult {
         val am = ToolEnvironment.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val action = T.str(args, "action") ?: "toggle"
+        if (action == "local") {
+            val query = T.str(args, "query")?.trim().orEmpty()
+            val intent = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
+                putExtra(android.app.SearchManager.QUERY, query)
+                putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, if (query.isEmpty()) "vnd.android.cursor.item/*" else "vnd.android.cursor.item/audio")
+                if (query.isNotEmpty()) putExtra(android.provider.MediaStore.EXTRA_MEDIA_TITLE, query)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            return try {
+                ToolEnvironment.context.startActivity(Intent.createChooser(intent, "Alege playerul muzical local").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ToolResult.ok("Am solicitat redarea în playerul muzical ales. Redarea efectivă nu este verificată.", Verification.UNVERIFIED)
+            } catch (e: Exception) {
+                ToolResult.fail("Nu am putut deschide un player compatibil: "+e.message?.take(80))
+            }
+        }
         val key = when(action) {
             "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
             "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
