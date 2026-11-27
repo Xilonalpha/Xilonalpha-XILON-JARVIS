@@ -33,6 +33,7 @@ class GestureCursorView(
     var onScroll: (Int)->Unit={}
     var onHorizontal: (Int)->Unit={}
     private var palmX:Float?=null
+    private var scrollPose:HandGesture?=null
     var onPointTap: ((Float,Float)->Unit)?=null
     private val profile = context.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     var smoothing=profile.getFloat("smoothing", 0.22f).coerceIn(0.1f,0.65f)
@@ -63,7 +64,7 @@ class GestureCursorView(
                     cursor.y += smoothing.coerceIn(0.1f,0.65f) * (targetY - cursor.y)
                 }
             }
-            if(frame.gesture!=HandGesture.OPEN_PALM){palmAnchor=null;palmX=null}
+            if(frame.gesture!=scrollPose){palmAnchor=null;palmX=null;scrollPose=frame.gesture}
             when (frame.gesture) {
                 HandGesture.FIST -> {
                     cursorVisible=false
@@ -71,7 +72,7 @@ class GestureCursorView(
                     if(fistSince==0L)fistSince=now
                     if(!fistFired && now-fistSince>=900L){fistFired=true;onFistHold()}
                 }
-                HandGesture.OPEN_PALM -> {
+                HandGesture.OPEN_PALM, HandGesture.TWO_FINGERS -> {
                     cursorVisible=true
                     val y=frame.point?.y
                     if(y!=null){
@@ -87,7 +88,7 @@ class GestureCursorView(
                             val vertical=kotlin.math.abs(dy)/profile.getFloat("vertical_threshold",0.18f).coerceIn(0.08f,0.40f)
                             // Reject ambiguous diagonal motion rather than firing the wrong shortcut.
                             if(now-lastScroll>=900L && maxOf(horizontal,vertical)>=1f){
-                                if(horizontal>=vertical*1.35f){
+                                if(horizontal>=vertical*1.35f && frame.gesture==HandGesture.OPEN_PALM){
                                     onHorizontal(if(dx<0)1 else -1)
                                 }else if(vertical>=horizontal*1.35f){
                                     onScroll(if(dy<0)1 else -1)
@@ -104,6 +105,7 @@ class GestureCursorView(
                     val action=onPointTap
                     if(action!=null && hasPosition)action(cursor.x,cursor.y) else onPinchTap()
                 }
+                HandGesture.POINTING -> { cursorVisible=true }
                 HandGesture.NONE -> Unit
             }
             invalidate()

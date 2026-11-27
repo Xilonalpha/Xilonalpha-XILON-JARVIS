@@ -128,6 +128,8 @@ class GestureEngine(
         return when (pose) {
             HandPose.FIST -> HandGesture.FIST
             HandPose.OPEN_PALM -> HandGesture.OPEN_PALM
+            HandPose.TWO_FINGERS -> HandGesture.TWO_FINGERS
+            HandPose.POINTING -> HandGesture.POINTING
             else -> HandGesture.NONE
         }
     }
@@ -170,4 +172,6 @@ enum class HandGesture {
     PINCH_TAP,
     FIST,
     OPEN_PALM,
+    TWO_FINGERS,
+    POINTING,
 }
