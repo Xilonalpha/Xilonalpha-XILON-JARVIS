@@ -192,7 +192,8 @@ class GestureCursorView(
                 HandGesture.PINCH_TAP -> {
                     cursorVisible = true
                     val action=onPointTap
-                    if(action!=null && hasPosition)action(cursor.x,cursor.y) else onPinchTap()
+                    val at=frame.pressPoint?.let{mapper.map(NormPoint(1f-it.x,it.y))}
+                    if(action!=null && hasPosition)action(at?.x?.times((width-1).coerceAtLeast(0))?:cursor.x,at?.y?.times((height-1).coerceAtLeast(0))?:cursor.y) else onPinchTap()
                 }
                 HandGesture.POINTING -> { cursorVisible=true }
                 HandGesture.NONE -> Unit
