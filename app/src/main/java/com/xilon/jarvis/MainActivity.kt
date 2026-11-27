@@ -1407,6 +1407,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch navigare Android: palmă orizontală = Înapoi / Acasă";isChecked=getPreferences(MODE_PRIVATE).getBoolean("air_navigation",false);gestureNavigation=isChecked;setOnCheckedChangeListener{_,checked->gestureNavigation=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("air_navigation",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: înlocuiește Acasă cu Aplicații recente";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_recent",false);gestureRecent=isChecked;setOnCheckedChangeListener{_,checked->gestureRecent=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_recent",checked).apply()}})
   settings.addView(android.widget.CheckBox(this).apply{text="Air Touch: inversează direcțiile";isChecked=getPreferences(MODE_PRIVATE).getBoolean("gesture_reverse",false);gestureReverse=isChecked;setOnCheckedChangeListener{_,checked->gestureReverse=checked;getPreferences(MODE_PRIVATE).edit().putBoolean("gesture_reverse",checked).apply()}})
+  settings.addView(Button(this).apply{text="Air Touch: calibrare cursor în 3 puncte";setOnClickListener{
+   if(airTouch==null || !::cursor.isInitialized){
+    android.widget.Toast.makeText(this@MainActivity,"Activează Air Touch înainte de calibrare.",android.widget.Toast.LENGTH_LONG).show()
+   }else{
+    android.app.AlertDialog.Builder(this@MainActivity).setTitle("Calibrare cursor").setMessage("Ține degetul arătător nemișcat timp de o secundă pentru fiecare dintre cele trei ținte afișate. Gesturile normale sunt suspendate în timpul calibrării.").setNegativeButton("Anulează",null).setPositiveButton("Începe"){_,_->
+     cursor.onCalibrationProgress={index,progress->modelStatus.text="Calibrare: punct ${index+1}/3 · ${(progress*100).toInt()}%"}
+     cursor.onCalibrationFinished={ok->modelStatus.text=if(ok)"Calibrare salvată." else "Calibrare nereușită. Repetă cu puncte mai depărtate.";android.widget.Toast.makeText(this@MainActivity,modelStatus.text,android.widget.Toast.LENGTH_LONG).show()}
+     cursor.startCalibration()
+    }.show()
+   }
+  }})
+  settings.addView(Button(this).apply{text="Air Touch: anulează calibrarea";setOnClickListener{if(::cursor.isInitialized)cursor.cancelCalibration()}})
   settings.addView(Button(this).apply{text="Air Touch: calibrare ciupire";setOnClickListener{
    val prefs=getSharedPreferences("air_touch_profile",MODE_PRIVATE)
    val slider=SeekBar(this@MainActivity).apply{max=40;progress=((prefs.getFloat("pinch_ratio",0.32f).coerceIn(0.15f,0.55f)-0.15f)*100).toInt()}
