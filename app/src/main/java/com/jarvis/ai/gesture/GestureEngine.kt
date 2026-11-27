@@ -97,7 +97,7 @@ class GestureEngine(
                 if (restart) emit(GestureFrame(null, HandGesture.NONE))
                 val positions = landmarks.map { PointF(it.x(), it.y()) }
                 val gesture = if (trackingGuard.settled(timestamp)) classify(raw) else HandGesture.NONE
-                val indexTip = if (gesture == HandGesture.TWO_FINGERS) PointF((positions[8].x + positions[12].x)/2f, (positions[8].y + positions[12].y)/2f) else positions[INDEX_TIP]
+                val indexTip = if (gesture == HandGesture.TWO_FINGERS) PointF((positions[8].x + positions[12].x)/2f, (positions[8].y + positions[12].y)/2f) else if (gesture == HandGesture.OPEN_PALM) raw.centroid(TrackedPoint.PALM_CENTER.indices).let { PointF(it.first,it.second) } else positions[INDEX_TIP]
                 emit(
                     GestureFrame(
                         point = PointF(indexTip.x.coerceIn(0f, 1f), indexTip.y.coerceIn(0f, 1f)),

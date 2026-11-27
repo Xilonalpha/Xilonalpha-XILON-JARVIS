@@ -35,6 +35,8 @@ class GestureCursorView(
     private var palmX:Float?=null
     private var scrollPose:HandGesture?=null
     private val scrollDetector=ScrollDetector(ScrollConfig())
+    private var swipeThreshold=0.22f
+    private var swipeDetector=SwipeDetector(SwipeConfig(minDistance=swipeThreshold))
     var onPointTap: ((Float,Float)->Unit)?=null
     private val profile = context.getSharedPreferences("air_touch_profile", Context.MODE_PRIVATE)
     var smoothing=profile.getFloat("smoothing", 0.22f).coerceIn(0.1f,0.65f)
@@ -44,13 +46,13 @@ class GestureCursorView(
     private var fistSince=0L
     private var fistFired=false
     private var active=false
-    fun setTracking(enabled:Boolean){scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
+    fun setTracking(enabled:Boolean){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;lastScroll=0L;active=enabled;hasPosition=false;fistSince=0;fistFired=false;cursorVisible=true;invalidate()}
 
     /** Updates the smoothed position and handles open-palm, fist, and pinch transitions. */
     fun update(frame: GestureFrame) {
         post {
             if(!active)return@post
-            if(frame.point==null){scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
+            if(frame.point==null){swipeDetector.reset();scrollDetector.resetStroke();scrollPose=null;filterX.reset();filterY.reset();palmAnchor=null;palmX=null;hasPosition=false;fistSince=0;fistFired=false;invalidate();return@post}
             if(frame.gesture!=HandGesture.FIST){fistSince=0;fistFired=false}
             frame.point?.let { normalized ->
                 val now=android.os.SystemClock.elapsedRealtime()
@@ -65,7 +67,7 @@ class GestureCursorView(
                     cursor.y += smoothing.coerceIn(0.1f,0.65f) * (targetY - cursor.y)
                 }
             }
-            if(frame.gesture!=scrollPose){scrollDetector.resetStroke();palmAnchor=null;palmX=null;scrollPose=frame.gesture}
+            if(frame.gesture!=scrollPose){swipeDetector.reset();scrollDetector.resetStroke();palmAnchor=null;palmX=null;scrollPose=frame.gesture}
             when (frame.gesture) {
                 HandGesture.FIST -> {
                     cursorVisible=false
@@ -86,30 +88,36 @@ class GestureCursorView(
                 }
                 HandGesture.OPEN_PALM -> {
                     cursorVisible=true
-                    val y=frame.point?.y
-                    if(y!=null){
-                        val anchor=palmAnchor
+                    val point=frame.point
+                    if(point!=null){
                         val now=android.os.SystemClock.elapsedRealtime()
-                        if(anchor==null){palmAnchor=y;palmX=frame.point?.x}
-                        else {
-                            val x=frame.point?.x ?: return@post
-                            val ax=palmX ?: x
-                            val dx=x-ax
-                            val dy=y-anchor
-                            val horizontal=kotlin.math.abs(dx)/profile.getFloat("horizontal_threshold",0.22f).coerceIn(0.08f,0.40f)
-                            val vertical=kotlin.math.abs(dy)/profile.getFloat("vertical_threshold",0.18f).coerceIn(0.08f,0.40f)
-                            // Reject ambiguous diagonal motion rather than firing the wrong shortcut.
-                            if(now-lastScroll>=900L && maxOf(horizontal,vertical)>=1f){
-                                if(horizontal>=vertical*1.35f && frame.gesture==HandGesture.OPEN_PALM){
-                                    onHorizontal(if(dx<0)1 else -1)
-                                }else if(vertical>=horizontal*1.35f){
-                                    onScroll(if(dy<0)1 else -1)
-                                }else return@post
-                                lastScroll=now
-                                palmAnchor=y
-                                palmX=x
-                            }
+                        val threshold=profile.getFloat("horizontal_threshold",0.22f).coerceIn(0.08f,0.40f)
+                        if(threshold!=swipeThreshold){
+                            swipeThreshold=threshold
+                            swipeDetector=SwipeDetector(SwipeConfig(minDistance=threshold))
                         }
+                        if(now-lastScroll>=900L){
+                            val direction=swipeDetector.update(now,point.x,point.y)
+                            if(direction!=null){
+                                onHorizontal(if(direction==SwipeDirection.LEFT)1 else -1)
+                                lastScroll=now
+                                palmAnchor=point.y
+                            }else{
+                                val anchor=palmAnchor
+                                if(anchor==null){palmAnchor=point.y;palmX=point.x}
+                                else {
+                                    val dy=point.y-anchor
+                                    val dx=point.x-(palmX?:point.x)
+                                    if(kotlin.math.abs(dy)>=profile.getFloat("vertical_threshold",0.18f).coerceIn(0.08f,0.40f) && kotlin.math.abs(dy)>=kotlin.math.abs(dx)*1.5f){
+                                        onScroll(if(dy<0)1 else -1)
+                                        lastScroll=now
+                                        palmAnchor=point.y
+                                        palmX=point.x
+                                        swipeDetector.reset()
+                                    }
+                                }
+                            }
+                        }else swipeDetector.reset()
                     }
                 }
                 HandGesture.PINCH_TAP -> {
