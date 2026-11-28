@@ -384,7 +384,6 @@ object RomanianLexicon {
  fun canonicalCommand(text: String): String {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')
-  val key = normalize(first)
   val replacement = commandVerb(first) ?: return cleaned
   return replacement + cleaned.substring(first.length)
  }
@@ -592,13 +591,11 @@ object RomanianLexicon {
  // Split only when the next clause starts with a recognized action verb.
  // Ordinary object conjunctions ("jazz și blues", "Andrei și Maria") are
  // arguments, not separate commands. Keep semicolons as explicit separators.
- private val separators get() = Regex(
-  "(?:\\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\\s+|;\\s*)(?=(?:(?:te rog|jarvis)[,\\s]+)*(?:"
-   + (verbs + listOf("deschide","lanseaza","seteaza","activeaza","dezactiveaza","cauta","porneste","arata","citeste","trimite","creeaza","apeleaza","navigheaza","opreste","inchide","pune","reda","asculta","aprinde","stinge","regleaza","deruleaza","afiseaza","listeaza","suna","du-ma","mergi","da"))
-    .map { Regex.escape(normalize(it)) }.distinct().joinToString("|")
-   + ")\\b)",
-  RegexOption.IGNORE_CASE
- )
+ private val separators = Regex("""(?:\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\s+|;\s*)""",RegexOption.IGNORE_CASE)
+ private fun beginsAction(text:String):Boolean {
+  val first=clean(text).substringBefore(' ').trim(',',':',';')
+  return commandVerb(first)!=null || messagingVerb(first)!=null || normalize(first) in setOf("du-ma","mergi","da","creeaza","afiseaza","listeaza")
+ }
  fun split(text: String): List<String> {
   val source = clean(text)
   val parts = ArrayList<String>()
@@ -613,7 +610,7 @@ object RomanianLexicon {
     quote = when(ch) { '„' -> '”'; '“' -> '”'; '«' -> '»'; else -> '"' }
    } else {
     val match = separators.matchAt(source,i)
-    if (match != null) {
+    if (match != null && beginsAction(source.substring(match.range.last+1))) {
      parts.add(source.substring(start,i).trim())
      i = match.range.last + 1
      start = i
@@ -635,7 +632,7 @@ object RomanianLexicon {
   if (text.length > 2000 || text.count { it == '"' } % 2 != 0) return null
   val parts = split(text)
   if (parts.size !in 2..20 || parts.any { negated(it) }) return null
-  return parts.map { parse(it) ?: NaturalToolCommands.parse(it) ?: return null }
+  return parts.map { NaturalToolCommands.parse(it) ?: parse(it) ?: return null }
  }
  fun translateKnown(text: String): String? = entries[normalize(text)]?.english ?: glossary[normalize(text)]
 }
