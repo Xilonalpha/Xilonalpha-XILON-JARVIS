@@ -120,7 +120,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         .getBoolean("allow_english_streaming", false)
 
     /** English streaming is explicitly selected in OMEGA and requires the complete model. */
-    fun supportsConcurrentPlayback():Boolean = englishStreamingEnabled() && hasStreamingModelFiles()
+    fun supportsConcurrentPlayback():Boolean = !useFineTuned() && englishStreamingEnabled() && hasStreamingModelFiles()
 
     private fun streamingFiles(): List<File>? {
         val directory = File(modelDirectory, "streaming-asr")
