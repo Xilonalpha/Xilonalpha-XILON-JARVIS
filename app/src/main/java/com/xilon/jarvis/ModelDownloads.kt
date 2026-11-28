@@ -91,7 +91,34 @@ class ModelDownloads(context:Context){
   }catch(e:Exception){
    // Preserve partial bytes for the next verified retry.
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_FAILED).putString(entry.file+".error",e.message?:"Eroare").apply()
-  }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry)}
+  }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry) else if(file(entry).isFile)runCatching{backupCompleted(entry)}.onFailure{context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).edit().putString("last_error",it.message).apply()}}
+ }
+ private fun backupCompleted(entry:ModelCatalog.Entry){
+  val settings=context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE)
+  val tree=settings.getString("tree",null)?.let{Uri.parse(it)}?:return
+  val resolver=context.contentResolver
+  val rootId=android.provider.DocumentsContract.getTreeDocumentId(tree)
+  val parent=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,rootId)
+  val source=file(entry)
+  val ref=reference(entry)
+  val name=ref.sha256+"-"+source.name
+  val children=android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree,rootId)
+  val exists=resolver.query(children,arrayOf("document_id","_display_name","_size"),null,null,null)?.use{cursor->
+   var found=false
+   while(cursor.moveToNext())if(cursor.getString(1)==name && cursor.getLong(2)==source.length()){
+    val existing=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,cursor.getString(0))
+    found=runCatching{resolver.openInputStream(existing)?.use{ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)}?:error("Backup inaccesibil");true}.getOrDefault(false)
+    if(found)break
+   }
+   found
+  }?:false
+  if(exists)return
+  val dest=android.provider.DocumentsContract.createDocument(resolver,parent,"application/octet-stream",name)?:error("Nu pot crea backup")
+  try{
+   resolver.openOutputStream(dest,"w")?.use{out->source.inputStream().use{it.copyTo(out,65536)}}?:error("Backup inaccesibil")
+   resolver.openInputStream(dest)?.use{ModelIntegrity.verify(it,ref.sha256,ref.bytes,ref.algorithm)}?:error("Backup inaccesibil")
+   settings.edit().remove("last_error").apply()
+  }catch(e:Exception){runCatching{android.provider.DocumentsContract.deleteDocument(resolver,dest)};throw e}
  }
  fun reference(entry:ModelCatalog.Entry):ModelMetadata.Reference{
   if(prefs.getString(entry.file+".sha",null)==null && file(entry).isFile){

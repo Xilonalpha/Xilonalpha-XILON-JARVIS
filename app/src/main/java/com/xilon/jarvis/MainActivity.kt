@@ -2136,7 +2136,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply{text="Restaurează toate modelele";setOnClickListener{
    if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},295)
   }})
-  val manualModelLabels=setOf("Restaurează toate modelele","Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
+  settings.addView(Button(this).apply{text="Alege director permanent OMEGA";setOnClickListener{
+   if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)},296)
+  }})
+  val manualModelLabels=setOf("Alege director permanent OMEGA","Restaurează toate modelele","Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
   val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
   val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Zipformer • streaming engleză","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
@@ -2944,6 +2947,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
   return java.io.File(filesDir,name).takeIf{it.isFile}
  }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+  if(requestCode==296){
+   super.onActivityResult(requestCode,resultCode,data)
+   if(resultCode==RESULT_OK){
+    val uri=data?.data
+    if(uri!=null)runCatching{
+     contentResolver.takePersistableUriPermission(uri,data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
+     check(getSharedPreferences("omega_backup",MODE_PRIVATE).edit().putString("tree",uri.toString()).commit())
+     append("Director permanent OMEGA selectat. Descărcările noi vor fi copiate automat.")
+    }.onFailure{append("Director OMEGA indisponibil: "+it.message)}
+   }
+   return
+  }
   if(requestCode==295){
    super.onActivityResult(requestCode,resultCode,data)
    val uri=data?.data
@@ -2999,7 +3014,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
        for(file in files)check(hashes.optString(file.relativeTo(staging).invariantSeparatorsPath)==sha256(file)){"Integritate SHA-256 invalidă: "+file.name}
       }
       var restored=0
-      for(file in files){
+      for((index,file) in files.withIndex()){
+       runOnUiThread{if(!isDestroyed)modelStatus.text="Restaurare OMEGA: "+(index+1)+"/"+files.size+" • "+file.name}
        val target=java.io.File(filesDir,file.relativeTo(staging).path)
        check(target.canonicalPath.startsWith(filesDir.canonicalPath+"/"))
        if(target.exists()){
@@ -3049,7 +3065,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
        java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(out)).use{zip->
         zip.setLevel(0)
         val hashes=org.json.JSONObject()
-        for(file in files){
+        for((index,file) in files.withIndex()){
+         runOnUiThread{if(!isDestroyed)modelStatus.text="Backup OMEGA: "+(index+1)+"/"+files.size+" • "+file.name}
          val expected=file.length()
          val entry=java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath)
          entry.size=expected
