@@ -57,12 +57,10 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
    try{
     if(id!=epoch.get())return@execute
     val tts=runtime()
-    val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { id==epoch.get() })
-    if(id!=epoch.get())return@execute
-    val samples=audio.samples
-    val sampleRate=audio.sampleRate
-    check(samples.isNotEmpty() && sampleRate>0){"Piper nu a generat sunet"}
-    check(samples.all{it.isFinite()} && samples.any{kotlin.math.abs(it)>0.0001f}){"Piper a generat semnal audio invalid sau silențios"}
+    // Sherpa exposes PCM chunks during inference. Use its runtime sample rate
+    // and play each chunk immediately instead of waiting for the whole reply.
+    val sampleRate=tts.sampleRate()
+    check(sampleRate>0){"Piper sample rate invalid"}
     val buffer=AudioTrack.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT)
     check(buffer>0){"AudioTrack indisponibil"}
     val player=AudioTrack.Builder()
@@ -73,23 +71,37 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     track=player
     try{
      check(player.state==AudioTrack.STATE_INITIALIZED){"AudioTrack nu s-a inițializat"}
-     player.play()
-     check(player.playState==AudioTrack.PLAYSTATE_PLAYING){"Android nu a pornit redarea Piper"}
+     var frames=0L
+     var audible=false
+     var callbackError:String?=null
      val pcm=ShortArray(2048)
-     var offset=0
-     while(offset<samples.size && id==epoch.get()){
-      val count=minOf(pcm.size,samples.size-offset)
-      for(i in 0 until count)pcm[i]=(samples[offset+i].coerceIn(-1f,1f)*32767).toInt().toShort()
-      val written=player.write(pcm,0,count,AudioTrack.WRITE_BLOCKING)
-      check(written>0){"AudioTrack write failed"}
-      offset+=written
+     fun emit(samples:FloatArray):Boolean {
+      if(id!=epoch.get())return false
+      if(samples.isEmpty())return true
+      return try{
+       check(samples.all{it.isFinite()}){"Semnal Piper invalid"}
+       audible=audible||samples.any{kotlin.math.abs(it)>0.0001f}
+       if(player.playState!=AudioTrack.PLAYSTATE_PLAYING)player.play()
+       var offset=0
+       while(offset<samples.size && id==epoch.get()){
+        val count=minOf(pcm.size,samples.size-offset)
+        for(i in 0 until count)pcm[i]=(samples[offset+i].coerceIn(-1f,1f)*32767).toInt().toShort()
+        val written=player.write(pcm,0,count,AudioTrack.WRITE_BLOCKING)
+        if(id!=epoch.get())return false
+        check(written>0){"AudioTrack write failed"}
+        offset+=written;frames+=written
+       }
+       id==epoch.get()
+      }catch(e:Exception){callbackError=e.message?:"Eroare audio Piper";false}
      }
-     if(id==epoch.get()) {
-      val durationMs=(samples.size.toLong()*1000L/sampleRate).coerceAtMost(120000L)
-      val deadline=android.os.SystemClock.elapsedRealtime()+durationMs+2000
-      while(id==epoch.get() && player.playbackHeadPosition.toLong()<samples.size && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
-      if(id==epoch.get())check(player.playbackHeadPosition.toLong()>=samples.size){"Redarea Piper nu s-a terminat în intervalul permis"}
-     }
+     val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { emit(it) })
+     if(id!=epoch.get())return@execute
+     check(callbackError==null){callbackError?:"Eroare audio"}
+     if(frames==0L)check(emit(audio.samples)){callbackError?:"Piper nu a generat sunet"}
+     check(frames>0 && audible){"Piper a generat semnal audio silențios"}
+     val deadline=android.os.SystemClock.elapsedRealtime()+(frames*1000L/sampleRate).coerceAtMost(120000L)+2000
+     while(id==epoch.get() && (player.playbackHeadPosition.toLong() and 0xffffffffL)<frames && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
+     if(id==epoch.get())check((player.playbackHeadPosition.toLong() and 0xffffffffL)>=frames){"Redarea Piper nu s-a terminat în intervalul permis"}
     }finally{track=null;runCatching{player.stop()};player.release()}
    }catch(e:Exception){error=e.message?:"Eroare Piper"}catch(e:LinkageError){error=e.message?:"Motor Sherpa indisponibil"}
    finally{if(error!=null)releaseCached();if(id==epoch.get())done(error)}
