@@ -2133,7 +2133,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply{text="Salvează toate modelele în telefon";setOnClickListener{
    if(!busy)startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE);putExtra(Intent.EXTRA_TITLE,"XILON-OMEGA-models.zip")}, 294)
   }})
-  val manualModelLabels=setOf("Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
+  settings.addView(Button(this).apply{text="Restaurează toate modelele";setOnClickListener{
+   if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},295)
+  }})
+  val manualModelLabels=setOf("Restaurează toate modelele","Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
   val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
   val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Zipformer • streaming engleză","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
@@ -2941,6 +2944,82 @@ class MainActivity : androidx.activity.ComponentActivity() {
   return java.io.File(filesDir,name).takeIf{it.isFile}
  }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+  if(requestCode==295){
+   super.onActivityResult(requestCode,resultCode,data)
+   val uri=data?.data
+   if(resultCode==RESULT_OK && uri!=null && !busy){
+    busy=true;stopVoiceLoop();stopAllSpeech();stopWake()
+    worker.execute{
+     val staging=java.io.File(cacheDir,"omega-restore-"+java.util.UUID.randomUUID())
+     val result=runCatching{
+      check(staging.mkdirs())
+      val roots=setOf("models","downloads","kokoro","tesseract")
+      val seen=mutableSetOf<String>()
+      var metadata:org.json.JSONObject?=null
+      var total=0L
+      val limit=minOf(64L*1024*1024*1024,staging.usableSpace-100L*1024*1024)
+      contentResolver.openInputStream(uri)?.use{input->
+       java.util.zip.ZipInputStream(java.io.BufferedInputStream(input)).use{zip->
+        val buffer=ByteArray(65536)
+        while(true){
+         val entry=zip.nextEntry?:break
+         check(seen.add(entry.name)&&seen.size<=20000){"Arhivă invalidă sau duplicată"}
+         if(entry.isDirectory){zip.closeEntry();continue}
+         if(entry.name=="model-metadata.json"){
+          val bytes=java.io.ByteArrayOutputStream()
+          while(true){val n=zip.read(buffer);if(n<0)break;check(bytes.size()+n<=2097152);bytes.write(buffer,0,n)}
+          metadata=org.json.JSONObject(bytes.toString("UTF-8"))
+         }else{
+          check(entry.name.startsWith("models-backup/")){"Intrare necunoscută"}
+          val relative=entry.name.removePrefix("models-backup/")
+          val parts=relative.split('/')
+          check(parts.all{it.isNotBlank()&&it!="."&&it!=".."&&!it.contains('\\\\')}){"Cale invalidă"}
+          check((parts.size>1&&parts.first() in roots)||(parts.size==1&&relative.substringAfterLast('.').lowercase() in setOf("gguf","onnx","tflite","task"))){"Fișier nepermis"}
+          check(!relative.endsWith(".part")&&!relative.endsWith(".tmp"))
+          val target=java.io.File(staging,relative)
+          check(target.canonicalPath.startsWith(staging.canonicalPath+"/"))
+          target.parentFile?.mkdirs()
+          target.outputStream().use{out->while(true){val n=zip.read(buffer);if(n<0)break;total+=n;check(total<=limit){"Spațiu insuficient sau arhivă prea mare"};out.write(buffer,0,n)}}
+          check(target.length()>0)
+         }
+         zip.closeEntry()
+        }
+       }
+      }?:error("Arhivă inaccesibilă")
+      val files=staging.walkTopDown().filter{it.isFile}.toList()
+      check(files.isNotEmpty()){"Arhiva nu conține modele"}
+      var restored=0
+      for(file in files){
+       val target=java.io.File(filesDir,file.relativeTo(staging).path)
+       check(target.canonicalPath.startsWith(filesDir.canonicalPath+"/"))
+       if(target.exists())continue
+       target.parentFile?.mkdirs()
+       check(file.renameTo(target)){"Restaurare incompletă: "+target.name}
+       restored++
+      }
+      for(name in listOf("catalog_inventory","model_labels","omega_private_downloads")){
+       val values=metadata?.optJSONObject(name)?:continue
+       val prefs=getSharedPreferences(name,MODE_PRIVATE)
+       val edit=prefs.edit()
+       for(key in values.keys()){
+        if(prefs.contains(key))continue
+        when(val value=values.get(key)){
+         is String->edit.putString(key,value)
+         is Int->if(name=="omega_private_downloads"&&!key.endsWith(".state"))edit.putLong(key,value.toLong()) else edit.putInt(key,value)
+         is Long->edit.putLong(key,value)
+         is Boolean->edit.putBoolean(key,value)
+        }
+       }
+       check(edit.commit())
+      }
+      "Restaurare OMEGA: "+restored+" fișiere recuperate. Repornește JARVIS pentru reîncărcarea motoarelor."
+     }.getOrElse{"Restaurare eșuată sau incompletă: "+it.message}
+     staging.deleteRecursively()
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }
+   }
+   return
+  }
   if(requestCode==294){
    super.onActivityResult(requestCode,resultCode,data)
    val uri=data?.data
