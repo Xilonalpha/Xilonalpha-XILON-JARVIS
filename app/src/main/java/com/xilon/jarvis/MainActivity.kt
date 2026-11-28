@@ -2321,11 +2321,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   stopWake()
   wakeCommandPending=fromWake
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
-  startNeural(fallback=true)
+  startNeural(fallback=false)
  }
  private fun startAndroidMicrophone(){
   if(BackgroundVoiceService.sessionActive)return
-  if(busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
+  if(!conversationForeground || speechClosing || omegaCore.listening || busy || wake!=null || speechCapture.active() || voiceBargeIn.active())return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
