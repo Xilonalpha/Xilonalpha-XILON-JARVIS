@@ -11,6 +11,29 @@ import java.util.Date
 class MainActivity : androidx.activity.ComponentActivity() {
  private var pendingLanguageChoices:List<String> = emptyList()
  private var pendingLanguageUntil=0L
+ private var pendingLanguageOriginal=""
+ private fun learnLanguageVerb(original:String,selected:String){
+  val from=RomanianLexicon.clean(original)
+  val to=RomanianLexicon.clean(selected)
+  val first=from.substringBefore(' ')
+  val replacement=to.substringBefore(' ')
+  if(first.length !in 2..40 || !first.all(Char::isLetter) || from.substring(first.length)!=to.substring(replacement.length))return
+  val key=RomanianLexicon.normalize(first)
+  val verb=RomanianLexicon.commandVerb(replacement)?:return
+  if(key==verb || RomanianLexicon.commandVerb(first)!=null)return
+  val prefs=getSharedPreferences("learned_language_verbs",MODE_PRIVATE)
+  if(prefs.all.size>=256 && !prefs.contains(key))return
+  prefs.edit().putString(key,verb).apply()
+ }
+ private fun learnedLanguageCommand(original:String):String?{
+  if(RomanianLexicon.negated(original)||RomanianLexicon.split(original).size!=1)return null
+  val clean=RomanianLexicon.clean(original)
+  val first=clean.substringBefore(' ')
+  if(RomanianLexicon.commandVerb(first)!=null)return null
+  val verb=getSharedPreferences("learned_language_verbs",MODE_PRIVATE).getString(RomanianLexicon.normalize(first),null)?:return null
+  val candidate=verb+clean.substring(first.length)
+  return candidate.takeIf{it in RomanianLexicon.semanticCommandSuggestions(original)}
+ }
  @Volatile private var neural:NeuralSpeech?=null
  @Volatile private var neuralCancelled=false
  @Volatile private var cachedNeural:NeuralSpeech?=null
@@ -850,7 +873,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      if(selected!=null){
       val action=NaturalToolCommands.parse(selected)
-      if(action!=null){executeRequestedTool(action.tool,action.args);return@setOnClickListener}
+      if(action!=null){learnLanguageVerb(pendingLanguageOriginal,selected);executeRequestedTool(action.tool,action.args);return@setOnClickListener}
      }
      if(answer in setOf("da","corect","exact","1","2","3","prima","a doua","a treia")){
       pendingLanguageChoices=choices;pendingLanguageUntil=android.os.SystemClock.elapsedRealtime()+30000L
@@ -1255,6 +1278,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // NaturalToolCommands enforces negation and multi-action guards. Its
     // dedicated YouTube clause is one intent, despite containing "și".
     val directTool=NaturalToolCommands.parse(commandQ)
+    val learnedAlternative=if(directTool==null && !lexicalCompound)learnedLanguageCommand(commandQ) else null
     if(directTool!=null && (!lexicalCompound || directTool.tool in setOf("youtube_search","whatsapp_send","whatsapp_message"))){
      executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
@@ -1267,7 +1291,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(RegistryIntent.matches(commandQ) || semanticAlternatives.isNotEmpty()){
      if(nativeModel==null){
       val suggestions=(RomanianLexicon.suggestedPhrases(commandQ)+semanticAlternatives).distinct()
-      pendingLanguageChoices=suggestions.filter{NaturalToolCommands.parse(it)!=null}.take(3)
+      pendingLanguageOriginal=commandQ
+      pendingLanguageChoices=(listOfNotNull(learnedAlternative)+suggestions).distinct().filter{NaturalToolCommands.parse(it)!=null}.take(3)
       pendingLanguageUntil=android.os.SystemClock.elapsedRealtime()+30000L
       val reply=if(pendingLanguageChoices.isNotEmpty())"Nu am identificat sigur comanda. Ai vrut să spui: "+pendingLanguageChoices.mapIndexed{i,v->"${i+1}. $v"}.joinToString(" / ")+"?" else "Nu am identificat complet acțiunea sau parametrii. Spune-mi ce vrei să fac și asupra cărui contact, aplicație sau obiect."
       append(reply);if(continuousVoice)speakReply(reply,manual=true)
