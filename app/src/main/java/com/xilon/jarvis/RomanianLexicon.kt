@@ -88,6 +88,8 @@ object RomanianLexicon {
   }
  }
  private val conjugations = mapOf(
+  "trimiti" to "trimite", "trimiteti" to "trimite", "trimita" to "trimite",
+  "scrii" to "scrie", "scrieti" to "scrie", "transmiti" to "transmite",
   "deschizi" to "deschide", "deschideti" to "deschide", "deschida" to "deschide",
   "pornesti" to "porneste", "porniti" to "porneste", "porneasca" to "porneste",
   "opresti" to "opreste", "opriti" to "opreste", "opreasca" to "opreste",
@@ -361,6 +363,15 @@ object RomanianLexicon {
  private val typos = mapOf("deschde" to "deschide", "deshide" to "deschide",
   "pornste" to "porneste", "oprestee" to "opreste", "setaza" to "seteaza",
   "catu a" to "cauta", "actveaza" to "activeaza", "dezactveaza" to "dezactiveaza")
+ fun messagingVerb(word:String):String? {
+  val key=normalize(word).removeSuffix("-i")
+  val direct=conjugations[key]?:key
+  if(direct in setOf("trimite","transmite","expediaza","scrie"))return if(direct=="scrie")"scrie" else "trimite"
+  val roots=(grammarMatches(key).map{normalize(it.lemma)}+morphologicalRoots(key).map{normalize(it)}).toSet()
+  val send=roots.any{it in setOf("trimite","transmite","expedia","expediaza","a trimite","a transmite","a expedia")}
+  val write=roots.any{it in setOf("scrie","a scrie")}
+  return if(send&&!write)"trimite" else if(write&&!send)"scrie" else null
+ }
  fun canonicalCommand(text: String): String {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')

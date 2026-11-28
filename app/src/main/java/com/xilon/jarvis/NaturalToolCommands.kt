@@ -11,7 +11,10 @@ object NaturalToolCommands {
  fun parse(input:String):PlannedAction? {
   // Separate routing syntax from arbitrary dictated text. Never interpret
   // message contents as device commands or replace them with canned replies.
-  val envelope=input.trim()
+  val cleaned=RomanianLexicon.clean(input)
+  val initial=cleaned.substringBefore(' ')
+  val canonical=RomanianLexicon.messagingVerb(initial)
+  val envelope=if(canonical!=null)canonical+cleaned.substring(initial.length) else cleaned
   val verbPattern="(trimite|scrie)(?:-i)?"
   val recipientPattern="(?:lui |către |catre |la )?"
   val separator="""(?:\s*[:,]\s*|\s+(?=(?:spune[- ]?i|zi[- ]?i|întreab[ăa](?:-?o|-?l)?|intreab[ao](?:-?o|-?l)?|cu textul|cu mesajul|mesajul|că|ca)\b))"""
