@@ -1358,16 +1358,54 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val playbackAtStart=playbackInterruption
      val voiceStream=RealtimeVoiceTurn()
      val voiceStreamId=voiceStream.start()
-     val streamSpeechEnabled=(speakReplies || continuousVoice) && !englishNeuralVoice && !romanianNeuralVoice && voice.romanianVoiceAvailable()
+     val streamNeural=if(romanianNeuralVoice || (!englishNeuralVoice && !voice.romanianVoiceAvailable())){
+      (piperVoice ?: NeuralVoiceFactory.romanian(applicationContext)?.also{piperVoice=it})?.takeIf{it.installed()}
+     }else if(englishNeuralVoice){
+      (kokoroVoice ?: NeuralVoiceFactory.create(applicationContext)?.also{kokoroVoice=it})?.takeIf{it.installed()}
+     }else null
+     val streamSpeechEnabled=(speakReplies || continuousVoice) && !deliberateRequest(q) && (streamNeural!=null || (!englishNeuralVoice && !romanianNeuralVoice && voice.romanianVoiceAvailable()))
+     val neuralQueue=java.util.ArrayDeque<String>()
+     var neuralActive=false
+     var neuralTicket=-1L
+     var neuralFinished=false
      var firstSpeechChunk=true
      var streamingSpeechStarted=false
      var streamingSpeechFailed=false
+     fun pumpNeural(){
+      val engine=streamNeural ?: return
+      if(isDestroyed || playbackAtStart!=playbackInterruption || neuralTicket!=voiceTicket || streamingSpeechFailed)return
+      if(neuralActive)return
+      val next=neuralQueue.pollFirst()
+      if(next==null){
+       if(neuralFinished){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
+       return
+      }
+      neuralActive=true;neuralSpeaking=true;omegaCore.speaking=true;refreshOmegaStatus()
+      echoGate.remember(next)
+      fun completed(error:String?){
+       runOnUiThread{
+        if(!isDestroyed && neuralTicket==voiceTicket && playbackAtStart==playbackInterruption){
+         neuralActive=false
+         if(error!=null){streamingSpeechFailed=true;neuralQueue.clear();voiceStream.interrupt();stopAllSpeech();append("Voce neuronală: "+error)}
+         else pumpNeural()
+        }
+       }
+      }
+      try{engine.speakTracked(next){completed(it)}}catch(e:Exception){completed(e.message?:"Eroare TTS")}catch(e:LinkageError){completed(e.message?:"Motor TTS indisponibil")}
+     }
      fun drainSpeechChunks(){
       if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return
       while(true){
        val chunk=voiceStream.poll(voiceStreamId) ?: break
        if(chunk.isBlank())continue
        if(firstSpeechChunk)listening.close()
+       if(streamNeural!=null){
+        if(firstSpeechChunk){stopAllSpeech();neuralTicket=voiceTicket}
+        neuralQueue.addLast(chunk)
+        streamingSpeechStarted=true;firstSpeechChunk=false
+        pumpNeural()
+        continue
+       }
        // Register each spoken chunk for the microphone echo filter.
        echoGate.remember(chunk)
        if(firstSpeechChunk)voice.beginStream()
@@ -1497,8 +1535,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
             voiceStream.offerSnapshot(voiceStreamId,answer)
            voiceStream.finish(voiceStreamId)
            drainSpeechChunks()
-           if(streamingSpeechStarted && !streamingSpeechFailed)
-           voice.finishStream()
+           if(streamingSpeechStarted && !streamingSpeechFailed){
+            if(streamNeural!=null){neuralFinished=true;pumpNeural()}else voice.finishStream()
+           }
           }else {
            voiceStream.interrupt()
            // The final answer was revised: do not append conflicting audio.
