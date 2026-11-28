@@ -26,6 +26,7 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
  }
  // Conservative token alignment: tolerate one ASR substitution in a long
  // contiguous phrase, never suppress short commands or explicit stop requests.
+ private val polarity=setOf("nu","nici","fara","da","opreste","porneste","inchide","deschide")
  private fun nearEcho(command:String,spoken:String):Boolean {
   val words=command.split(' ').filter{it.isNotBlank()}
   if(words.size<7 || command in stopCommands)return false
@@ -33,6 +34,7 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
   if(source.size<words.size)return false
   return (0..source.size-words.size).any{start->
    words.indices.count{i->words[i]!=source[start+i]}<=1 &&
+    words.indices.none{i->words[i]!=source[start+i] && (words[i] in polarity || source[start+i] in polarity)} &&
     words.first()==source[start] && words.last()==source[start+words.lastIndex]
   }
  }

@@ -31,11 +31,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private val executor=Executors.newSingleThreadScheduledExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val playback=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-player").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
- private fun speechSpeed(text:String):Float {
-  val base=app.getSharedPreferences("voice_prosody",Context.MODE_PRIVATE).getFloat("speed",1f).let{if(it.isFinite())it.coerceIn(0.8f,1.2f) else 1f}
-  val end=text.trimEnd().trimEnd('"', '”', '»', ')')
-  return (base * when {end.endsWith("?")->0.96f;end.endsWith("!")->1.03f;end.endsWith("…") || end.endsWith("...")->0.92f;else->1f}).coerceIn(0.8f,1.2f)
- }
+ private fun speechSpeed(text:String)=VoiceProsody.speed(text,app.getSharedPreferences("voice_prosody",Context.MODE_PRIVATE).getFloat("speed",1f))
  private val preparationEpoch=AtomicLong(0L)
  private data class Prepared(val text:String,val key:String?,val rate:Int,val samples:FloatArray)
  private var prepared:Prepared?=null // accessed only on synthesis executor
@@ -96,6 +92,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     playback.execute play@{
      var playbackError:String?=null
      try{
+    if(id!=epoch.get())return@play
     check(sampleRate>0){"Piper sample rate invalid"}
     val buffer=AudioTrack.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT)
     check(buffer>0){"AudioTrack indisponibil"}
@@ -108,9 +105,9 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     try{
      check(player.state==AudioTrack.STATE_INITIALIZED){"AudioTrack nu s-a inițializat"}
      val speed=speechSpeed(text)
-     if(speed!=1f)runCatching{player.playbackParams=android.media.PlaybackParams().setSpeed(speed).setPitch(1f)}
      var frames=0L
      var firstWriteAt=0L
+     var lastProgressAt=android.os.SystemClock.elapsedRealtime()
      var audible=false
      var callbackError:String?=null
      val pcm=ShortArray(2048)
@@ -120,7 +117,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
       return try{
        check(samples.all{it.isFinite()}){"Semnal Piper invalid"}
        audible=audible||samples.any{kotlin.math.abs(it)>0.0001f}
-       if(player.playState!=AudioTrack.PLAYSTATE_PLAYING)player.play()
+       if(player.playState!=AudioTrack.PLAYSTATE_PLAYING){player.play();if(speed!=1f)runCatching{player.playbackParams=android.media.PlaybackParams().setSpeed(speed).setPitch(1f)}}
        var offset=0
        while(offset<samples.size && id==epoch.get()){
         val count=minOf(pcm.size,samples.size-offset)
@@ -128,7 +125,8 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
         val written=player.write(pcm,0,count,AudioTrack.WRITE_NON_BLOCKING)
         if(id!=epoch.get())return false
         check(written>=0){"AudioTrack write failed: "+written}
-        if(written==0){Thread.sleep(5);continue}
+        if(written==0){check(android.os.SystemClock.elapsedRealtime()-lastProgressAt<5000L){"AudioTrack stalled"};Thread.sleep(5);continue}
+        lastProgressAt=android.os.SystemClock.elapsedRealtime()
         if(firstWriteAt==0L){firstWriteAt=android.os.SystemClock.elapsedRealtime();android.util.Log.i("XilonPiper","first_pcm_write_ms="+(firstWriteAt-requestedAt)+" prepared="+(ready!=null))}
         offset+=written;frames+=written
        }

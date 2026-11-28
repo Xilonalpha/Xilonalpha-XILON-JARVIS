@@ -9,4 +9,11 @@ class VoiceEchoGateRegressionTest {
   assertFalse(gate.isEcho("Jarvis oprește"))
   assertTrue(gate.isStop("Jarvis oprește"))
  }
+ @Test fun toleratesOneSubstitutionButNotNegation(){
+  val gate=VoiceEchoGate()
+  gate.remember("Astăzi putem discuta despre vremea frumoasă din oraș")
+  assertTrue(gate.isEcho("astazi putem discuta despre vremea buna din oras"))
+  assertFalse(gate.isEcho("astazi putem discuta despre vremea nu din oras"))
+  assertFalse(gate.isEcho("astazi putem discuta"))
+ }
 }
