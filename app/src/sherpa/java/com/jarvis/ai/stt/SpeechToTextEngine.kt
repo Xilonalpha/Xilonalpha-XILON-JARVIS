@@ -94,7 +94,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
 
     private fun useFineTuned() = RomanianWhisperOnnx.available(fineTunedDir) &&
         (!hasRomanianWhisper() || appContext.getSharedPreferences("speech_models", Context.MODE_PRIVATE)
-            .getBoolean("prefer_whisper_small_ro", false))
+            .getBoolean("prefer_whisper_small_ro", true))
 
     private fun releaseFineTuned() {
         val previous = fineTuned
@@ -136,8 +136,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         kotlinx.coroutines.runBlocking {
             operationMutex.withLock {
                 check(!closed) { "Speech engine closed" }
-                if (supportsConcurrentPlayback()) checkNotNull(ensureOnlineRecognizer())
-                else if (useFineTuned()) fineTunedRecognizer()
+                if (useFineTuned()) fineTunedRecognizer()
+                else if (supportsConcurrentPlayback()) checkNotNull(ensureOnlineRecognizer())
                 else if (hasRomanianWhisper()) ensureRecognizer()
                 else error("Instalează Whisper multilingv sau Whisper Small RO din OMEGA.")
             }
@@ -158,7 +158,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
-            if (supportsConcurrentPlayback()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial)
+            if (!useFineTuned() && supportsConcurrentPlayback()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial)
             if (useFineTuned()) {
                 val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
                 if (cancelled()) return@withContext ""
