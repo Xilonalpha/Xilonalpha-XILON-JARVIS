@@ -2992,7 +2992,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
       for(file in files){
        val target=java.io.File(filesDir,file.relativeTo(staging).path)
        check(target.canonicalPath.startsWith(filesDir.canonicalPath+"/"))
-       if(target.exists())continue
+       if(target.exists()){
+        check(target.isFile && target.length()==file.length()){"Model existent diferit: "+target.name}
+        continue
+       }
        target.parentFile?.mkdirs()
        check(file.renameTo(target)){"Restaurare incompletă: "+target.name}
        restored++
@@ -3036,8 +3039,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
        java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(out)).use{zip->
         zip.setLevel(0)
         for(file in files){
-         zip.putNextEntry(java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath))
-         file.inputStream().use{it.copyTo(zip,65536)}
+         val expected=file.length()
+         val entry=java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath)
+         entry.size=expected
+         zip.putNextEntry(entry)
+         val copied=file.inputStream().use{it.copyTo(zip,65536)}
+         check(copied==expected && file.length()==expected){"Model modificat în timpul backupului: "+file.name}
          zip.closeEntry()
         }
         val metadata=org.json.JSONObject()
