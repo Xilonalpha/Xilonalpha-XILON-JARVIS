@@ -1283,6 +1283,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
      executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
     }
+    // Reuse a confirmed lexical preference only for reversible UI actions,
+    // and only when all current semantic alternatives resolve identically.
+    if(learnedAlternative!=null){
+     val learned=NaturalToolCommands.parse(learnedAlternative)
+     val alternatives=RomanianLexicon.semanticCommandSuggestions(commandQ).mapNotNull{NaturalToolCommands.parse(it)}
+     if(learned!=null && learned.tool in setOf("open_app","list_apps","scroll","press_back","press_home","press_recents","press_notifications","control_volume","control_brightness","control_flashlight") &&
+      alternatives.isNotEmpty() && alternatives.all{it.tool==learned.tool && it.args==learned.args}){
+      executeRequestedTool(learned.tool,learned.args)
+      return@setOnClickListener
+     }
+    }
     // Multi-action commands use the existing Romanian lexicon and verified
     // tool runner. Never silently downgrade a compound to one action.
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
