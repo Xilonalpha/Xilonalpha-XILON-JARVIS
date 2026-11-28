@@ -34,7 +34,13 @@ class ModelDownloads(context:Context){
  private fun download(entry:ModelCatalog.Entry){
   var connection:HttpURLConnection?=null
   try{
-   if(restoreCompleted(entry))return
+   val restored=runCatching{restoreCompleted(entry)}.getOrElse{failure->
+    check(!cancelled.contains(entry.file)){"Anulat"}
+    context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).edit().putString("last_error",failure.message?:"Backup inaccesibil").apply()
+    false
+   }
+   if(restored)return
+   check(!cancelled.contains(entry.file)){"Anulat"}
    val ref=when(entry){
     ModelCatalog.kokoro -> ModelMetadata.kokoro()
     ModelCatalog.mihai -> ModelMetadata.releaseAsset(ModelCatalog.mihai)
@@ -92,7 +98,7 @@ class ModelDownloads(context:Context){
   }catch(e:Exception){
    // Preserve partial bytes for the next verified retry.
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_FAILED).putString(entry.file+".error",e.message?:"Eroare").apply()
-  }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry) else if(file(entry).isFile)runCatching{backupCompleted(entry)}.onFailure{context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).edit().putString("last_error",it.message).apply()}}
+  }finally{connection?.disconnect();try{if(!cancelled.contains(entry.file)&&file(entry).isFile)runCatching{backupCompleted(entry)}.onFailure{context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).edit().putString("last_error",it.message).apply()}}finally{if(cancelled.remove(entry.file))clear(entry);active.remove(entry.file)}}
  }
  private fun restoreCompleted(entry:ModelCatalog.Entry):Boolean{
   val tree=context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).getString("tree",null)?.let{Uri.parse(it)}?:return false
@@ -103,7 +109,7 @@ class ModelDownloads(context:Context){
   resolver.query(children,arrayOf("document_id","_display_name","_size"),null,null,null)?.use{cursor->
    while(cursor.moveToNext()){
     val name=cursor.getString(1)?:continue
-    val suffix="-"+file(entry).name
+    val suffix="-"+backupKey(entry)
     if(!name.startsWith("omega-")||!name.endsWith(suffix))continue
     val match=Regex("omega-(SHA-256|git-blob-sha1)-([a-fA-F0-9]{40,64})-([a-f0-9]{40}|asset-[0-9]+|pinned-hand|pinned-silero)-([0-9]+)").matchEntire(name.removeSuffix(suffix))?:continue
     val (algorithm,hash,revision,size)=match.destructured
@@ -132,10 +138,14 @@ class ModelDownloads(context:Context){
     part(entry).delete()
     prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).remove(entry.file+".error").apply()
     return true
+   }catch(e:Exception){
+    check(!cancelled.contains(entry.file)){"Anulat"}
+    context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).edit().putString("last_error",e.message?:"Copie invalidă").apply()
    }finally{temp.delete()}
   }
   return false
  }
+ private fun backupKey(entry:ModelCatalog.Entry):String=java.security.MessageDigest.getInstance("SHA-256").digest((entry.url+"|"+entry.file).toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}+"-"+file(entry).name
  private fun backupCompleted(entry:ModelCatalog.Entry){
   val settings=context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE)
   val tree=settings.getString("tree",null)?.let{Uri.parse(it)}?:return
@@ -144,7 +154,7 @@ class ModelDownloads(context:Context){
   val parent=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,rootId)
   val source=file(entry)
   val ref=reference(entry)
-  val name="omega-"+ref.algorithm+"-"+ref.sha256+"-"+ref.revision+"-"+ref.bytes+"-"+source.name
+  val name="omega-"+ref.algorithm+"-"+ref.sha256+"-"+ref.revision+"-"+ref.bytes+"-"+backupKey(entry)
   val children=android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree,rootId)
   val exists=resolver.query(children,arrayOf("document_id","_display_name","_size"),null,null,null)?.use{cursor->
    var found=false
