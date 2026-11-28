@@ -182,7 +182,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
       wakeCommandPending=false
       modelStatus.text="Nicio comandă detectată."
-     }else{voiceRetry.reset();acceptVoice(recognized)}
+     }else{voiceRetry.reset();modelStatus.text="Recunoaștere: "+(engine?.lastBackend() ?: "ASR local");acceptVoice(recognized)}
     },{error->
      cachedNeural=null
      val failedEngine=engine

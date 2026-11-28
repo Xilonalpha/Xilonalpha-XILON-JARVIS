@@ -153,6 +153,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
         return true
     }
 
+    @Volatile var lastBackend:String="ASR local"
+        private set
+
     /** Records until silence is detected, then runs local Sherpa-ONNX decoding. */
     suspend fun listenForCommand(onPartial: (String) -> Unit = {}, prefix: ShortArray = shortArrayOf()): String {
         val requestEpoch = cancellationEpoch.get()
@@ -166,8 +169,12 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
-            if (useStreaming()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial, prefix)
+            if (useStreaming()) {
+                lastBackend=if(useRomanianStreaming()) "Sherpa streaming RO" else "Sherpa streaming EN"
+                return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial, prefix)
+            }
             if (useFineTuned()) {
+                lastBackend="Whisper Small RO"
                 val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
                 if (cancelled()) return@withContext ""
                 val recording = captureUtterance(requestEpoch, prefix)
@@ -175,6 +182,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 val engine = fineTunedRecognizer()
                 return@withContext if (cancelled()) "" else engine.transcribe(recording, cancelled)
             }
+            lastBackend="Whisper Tiny RO"
             check(hasRomanianWhisper()) {
                 "Instalează Whisper multilingv sau Whisper Small RO din OMEGA pentru recunoaștere în română."
             }

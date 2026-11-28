@@ -5,6 +5,7 @@ interface NeuralSpeech : java.io.Closeable {
  /** Interim hypotheses are UI hints only; never dispatch them as commands. */
  suspend fun listen(onPartial:(String)->Unit):String=listen()
  suspend fun listenAfterDetection(prefix:ShortArray):String=listen()
+ fun lastBackend():String="ASR local"
  fun supportsConcurrentPlayback():Boolean=false
  fun stop()
 }
