@@ -120,7 +120,10 @@ class SpeechToTextEngine(context: Context) : Closeable {
         .getBoolean("allow_english_streaming", false)
 
     /** English streaming is explicitly selected in OMEGA and requires the complete model. */
-    fun supportsConcurrentPlayback():Boolean = !useFineTuned() && englishStreamingEnabled() && hasStreamingModelFiles()
+    private fun useStreaming():Boolean = !useFineTuned() && englishStreamingEnabled() && hasStreamingModelFiles()
+
+    // Batch Whisper can capture during playback even though decoding is not incremental.
+    fun supportsConcurrentPlayback():Boolean = useStreaming() || ((useFineTuned() || hasRomanianWhisper()) && android.media.audiofx.AcousticEchoCanceler.isAvailable())
 
     private fun streamingFiles(): List<File>? {
         val directory = File(modelDirectory, "streaming-asr")
@@ -137,7 +140,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             operationMutex.withLock {
                 check(!closed) { "Speech engine closed" }
                 if (useFineTuned()) fineTunedRecognizer()
-                else if (supportsConcurrentPlayback()) checkNotNull(ensureOnlineRecognizer())
+                else if (useStreaming()) checkNotNull(ensureOnlineRecognizer())
                 else if (hasRomanianWhisper()) ensureRecognizer()
                 else error("Instalează Whisper multilingv sau Whisper Small RO din OMEGA.")
             }
@@ -158,7 +161,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
-            if (!useFineTuned() && supportsConcurrentPlayback()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial)
+            if (useStreaming()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial)
             if (useFineTuned()) {
                 val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
                 if (cancelled()) return@withContext ""
