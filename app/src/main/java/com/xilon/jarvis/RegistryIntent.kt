@@ -17,6 +17,6 @@ object RegistryIntent {
  }
  fun compound(text: String): Boolean {
   val q = normalized(text)
-  return matches(q) && separator.containsMatchIn(q)
+  return matches(q) && RomanianLexicon.split(text).size > 1
  }
 }

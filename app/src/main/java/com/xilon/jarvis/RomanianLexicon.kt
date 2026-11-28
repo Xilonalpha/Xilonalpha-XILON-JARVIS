@@ -58,7 +58,7 @@ object RomanianLexicon {
   warmUp()
   initializeDefinitions(context.applicationContext)
  }
- fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să|ai putea sa|ai putea să|te-as ruga sa|te-aș ruga să|as vrea sa|aș vrea să|imi poti|îmi poți|imi poti sa|îmi poți să)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
+ fun clean(text: String): String = text.trim().replace(Regex("^(?:(?:jarvis|te rog|poti sa|poți să|vreau sa|vreau să|ai putea sa|ai putea să|te-as ruga sa|te-aș ruga să|as vrea sa|aș vrea să|imi poti sa|îmi poți să|imi poti|îmi poți)[,\\s]+)+", RegexOption.IGNORE_CASE), "")
  fun negated(text: String): Boolean {
   val key = normalize(clean(text))
   // A negative clause anywhere in a compound instruction must prevent
@@ -401,7 +401,7 @@ object RomanianLexicon {
  fun canonicalCommand(text: String): String {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')
-  val replacement = commandVerb(first) ?: return cleaned
+  val replacement = messagingVerb(first) ?: commandVerb(first) ?: return cleaned
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {

@@ -1279,7 +1279,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // dedicated YouTube clause is one intent, despite containing "și".
     val directTool=NaturalToolCommands.parse(commandQ)
     val learnedAlternative=if(directTool==null && !lexicalCompound)learnedLanguageCommand(commandQ) else null
-    if(directTool!=null && (!lexicalCompound || directTool.tool in setOf("youtube_search","whatsapp_send","whatsapp_message"))){
+    if(directTool!=null && (!lexicalCompound || directTool.tool in setOf("youtube_search","whatsapp_send","whatsapp_message","send_sms"))){
      executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
     }
@@ -1299,9 +1299,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
     val semanticAlternatives=if(nativeModel==null && !lexicalCompound && !RomanianLexicon.negated(commandQ))RomanianLexicon.semanticCommandSuggestions(commandQ) else emptyList()
-    if(RegistryIntent.matches(commandQ) || semanticAlternatives.isNotEmpty()){
+    if(RegistryIntent.matches(commandQ) || semanticAlternatives.isNotEmpty() || learnedAlternative!=null){
      if(nativeModel==null){
-      val suggestions=(RomanianLexicon.suggestedPhrases(commandQ)+semanticAlternatives).distinct()
+      val suggestions=(semanticAlternatives+RomanianLexicon.suggestedPhrases(commandQ)).distinct()
       pendingLanguageOriginal=commandQ
       pendingLanguageChoices=(listOfNotNull(learnedAlternative)+suggestions).distinct().filter{NaturalToolCommands.parse(it)!=null}.take(3)
       pendingLanguageUntil=android.os.SystemClock.elapsedRealtime()+30000L

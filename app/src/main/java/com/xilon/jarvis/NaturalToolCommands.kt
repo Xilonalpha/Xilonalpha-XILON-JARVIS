@@ -6,10 +6,10 @@ object NaturalToolCommands {
  fun whatsAppRecipient(input:String):String? {
   if(RomanianLexicon.negated(input) || RegistryIntent.compound(input))return null
   val pattern=Regex("""^trimite(?:-i)? (?:un )?mesaj (?:lui |către |catre )?([\p{L}\p{M}\d +()'-]+?) pe whatsapp[.!?]?$""",RegexOption.IGNORE_CASE)
-  return pattern.matchEntire(input.trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+  return pattern.matchEntire(RomanianLexicon.canonicalCommand(input).trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
  }
- fun parse(original:String):PlannedAction? {
-  val input=RomanianLexicon.canonicalCommand(original)
+ fun parse(input:String):PlannedAction? = parseCanonical(RomanianLexicon.canonicalCommand(input))
+ private fun parseCanonical(input:String):PlannedAction? {
   // Separate routing syntax from arbitrary dictated text. Never interpret
   // message contents as device commands or replace them with canned replies.
   val cleaned=RomanianLexicon.clean(input)
@@ -28,6 +28,14 @@ object NaturalToolCommands {
    val header=envelope.substring(0,match.groups[3]!!.range.first)
    if(!RomanianLexicon.negated(header)&&!RegistryIntent.compound(header)&&recipient.isNotBlank()&&body.isNotBlank())
     return PlannedAction(if(verb.equals("scrie",true))"whatsapp_message" else "whatsapp_send",JsonObject(mapOf("contact" to JsonPrimitive(recipient.trim()),"message" to JsonPrimitive(body))))
+  }
+  // Explicit payload delimiters protect literal text from command segmentation.
+  val literal=Regex("""^(trimite|scrie)\s+(?:un\s+)?(?:mesaj\s+)?(?:pe\s+|prin\s+)?(sms|whatsapp)\s+(?:lui\s+|către\s+|catre\s+)?([^:]+):\s*([\s\S]+)$""",RegexOption.IGNORE_CASE).matchEntire(input)
+  if(literal!=null){
+   val (verb,channel,recipient,body)=literal.destructured
+   val header=input.substring(0,literal.groups[4]!!.range.first)
+   if(!RomanianLexicon.negated(header)&&!RegistryIntent.compound(header)&&recipient.isNotBlank()&&body.isNotBlank())
+    return PlannedAction(if(channel.equals("sms",true))"send_sms" else if(verb.equals("scrie",true))"whatsapp_message" else "whatsapp_send",JsonObject(mapOf("contact" to JsonPrimitive(recipient.trim()),"message" to JsonPrimitive(body.trim()))))
   }
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
