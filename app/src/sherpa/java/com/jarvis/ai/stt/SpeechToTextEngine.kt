@@ -451,8 +451,12 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val aec=runCatching { if(android.media.audiofx.AcousticEchoCanceler.isAvailable()) android.media.audiofx.AcousticEchoCanceler.create(recorder.audioSessionId) else null }.getOrNull()
         val ns=runCatching { if(android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(recorder.audioSessionId) else null }.getOrNull()
         try {
-            runCatching { aec?.setEnabled(true) }
-            runCatching { ns?.setEnabled(true) }
+            val aecActive=runCatching { aec != null && aec.setEnabled(true)==android.media.audiofx.AudioEffect.SUCCESS && aec.enabled }.getOrDefault(false)
+            val nsActive=runCatching { ns != null && ns.setEnabled(true)==android.media.audiofx.AudioEffect.SUCCESS && ns.enabled }.getOrDefault(false)
+            android.util.Log.i("XilonASR","capture_effects aec="+aecActive+" ns="+nsActive)
+            if(android.media.audiofx.AcousticEchoCanceler.isAvailable() && !aecActive){
+                android.util.Log.w("XilonASR","AEC advertised but not enabled for this recording session")
+            }
             if (closed || captureCancelled || epoch != cancellationEpoch.get()) return FloatArray(0)
             recorder.startRecording()
             while (!closed && !captureCancelled && epoch == cancellationEpoch.get() && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
@@ -501,7 +505,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     if (voiced) { silentSamples = 0; voicedSamples += count } else silentSamples += count
                     // A long utterance can contain brief natural pauses. Avoid
                     // ending on a weak trailing frame until speech has been heard.
-                    if (silentSamples >= SILENCE_SAMPLES && (prefix.isNotEmpty() || voicedSamples >= MIN_VOICED_SAMPLES)) break
+                    if (silentSamples >= SILENCE_SAMPLES) break
                 }
             }
         } finally {
