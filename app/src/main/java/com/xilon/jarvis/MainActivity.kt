@@ -1317,9 +1317,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // tool runner. Never silently downgrade a compound to one action.
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
-    val semanticAlternatives=if(nativeModel==null && !lexicalCompound && !RomanianLexicon.negated(commandQ))RomanianLexicon.semanticCommandSuggestions(commandQ) else emptyList()
+    val semanticAlternatives=if(!lexicalCompound && !RomanianLexicon.negated(commandQ))RomanianLexicon.semanticCommandSuggestions(commandQ) else emptyList()
     if(RegistryIntent.matches(commandQ) || semanticAlternatives.isNotEmpty() || learnedAlternative!=null){
-     if(nativeModel==null){
+     if(nativeModel==null || semanticAlternatives.isNotEmpty() || learnedAlternative!=null){
       val suggestions=(semanticAlternatives+RomanianLexicon.suggestedPhrases(commandQ)).distinct()
       pendingLanguageOriginal=commandQ
       pendingLanguageChoices=(listOfNotNull(learnedAlternative)+suggestions).distinct().filter{NaturalToolCommands.parse(it)!=null}.take(3)
