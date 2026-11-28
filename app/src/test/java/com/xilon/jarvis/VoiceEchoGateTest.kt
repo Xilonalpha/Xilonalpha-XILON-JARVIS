@@ -50,7 +50,7 @@ class VoiceEchoGateTest {
  @Test fun longTextIsBoundedAndStillMatchesShortPhrases(){
   val g=VoiceEchoGate()
   g.remember("jarvis "+("cuvant ".repeat(200)))
-  assertTrue(g.isEcho("jarvis cuvant cuvant"))
+  assertTrue(g.isEcho("cuvant cuvant cuvant"))
  }
  @Test fun stopDoesNotMatchWordFragments(){
   val gate=VoiceEchoGate();gate.remember("Jarvis oprestete acum")

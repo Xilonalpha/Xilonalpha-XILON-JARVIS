@@ -119,6 +119,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
        audible=audible||samples.any{kotlin.math.abs(it)>0.0001f}
        if(player.playState!=AudioTrack.PLAYSTATE_PLAYING){player.play();if(speed!=1f)runCatching{player.playbackParams=android.media.PlaybackParams().setSpeed(speed).setPitch(1f)}}
        var offset=0
+       lastProgressAt=android.os.SystemClock.elapsedRealtime()
        while(offset<samples.size && id==epoch.get()){
         val count=minOf(pcm.size,samples.size-offset)
         for(i in 0 until count)pcm[i]=(samples[offset+i].coerceIn(-1f,1f)*32767).toInt().toShort()
@@ -135,7 +136,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      }
      while(id==epoch.get()){
       val chunk=queue.poll(50,java.util.concurrent.TimeUnit.MILLISECONDS)
-      if(chunk==null){if(synthesisDone.get())break;continue}
+      if(chunk==null){if(synthesisDone.get() && queue.isEmpty())break;check(android.os.SystemClock.elapsedRealtime()-lastProgressAt<30000L){"Piper synthesis stalled"};continue}
       if(!emit(chunk))break
      }
      if(id!=epoch.get())return@play
@@ -158,7 +159,9 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      while(offset<samples.size){
       val end=minOf(offset+4096,samples.size)
       val part=samples.copyOfRange(offset,end)
+      val deadline=android.os.SystemClock.elapsedRealtime()+10000L
       while(id==epoch.get() && !playerFailed.get()){
+       check(android.os.SystemClock.elapsedRealtime()<deadline){"Piper playback queue stalled"}
        if(queue.offer(part,50,java.util.concurrent.TimeUnit.MILLISECONDS))break
       }
       if(id!=epoch.get() || playerFailed.get())return false

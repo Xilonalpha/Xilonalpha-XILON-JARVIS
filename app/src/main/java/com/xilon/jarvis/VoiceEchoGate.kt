@@ -12,10 +12,10 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
   if(normalized.isBlank())return
   val now=clock()
   prune(now)
-  val words=normalized.split(' ')
+  val words=normalized.takeLast(maxChunks*maxEchoChars).split(' ')
   var part=""
   for(word in words){
-   if(part.isNotEmpty() && part.length+word.length+1>maxEchoChars){recentChunks.addLast(Spoken(part,now));part=""}
+   if(part.isNotEmpty() && part.length+word.length+1>maxEchoChars){recentChunks.addLast(Spoken(part,now));while(recentChunks.size>maxChunks)recentChunks.removeFirst();part=""}
    part=if(part.isEmpty())word.take(maxEchoChars) else part+" "+word.take(maxEchoChars)
   }
   if(part.isNotEmpty())recentChunks.addLast(Spoken(part,now))
