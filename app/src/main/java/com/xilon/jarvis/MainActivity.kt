@@ -1294,6 +1294,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
      executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
     }
+    // An incomplete messaging request must not become a free-form GGUF answer.
+    if(directTool==null && !lexicalCompound && !RomanianLexicon.negated(commandQ) &&
+      Regex("\\b(?:whatsapp|what\\s+app|watsapp|wattsapp)\\b").containsMatchIn(RomanianLexicon.normalize(commandQ)) &&
+      Regex("\\b(?:mesaj\\w*|scri\\w*|trim\\w*|spune\\w*|intreab\\w*)\\b").containsMatchIn(RomanianLexicon.normalize(commandQ))){
+     val reply="Nu am înțeles sigur destinatarul sau mesajul WhatsApp. Spune: trimite mesaj pe WhatsApp către numele contactului, urmat de mesaj."
+     append(reply);speakReply(reply)
+     return@setOnClickListener
+    }
     // Reuse a confirmed lexical preference only for reversible UI actions,
     // and only when all current semantic alternatives resolve identically.
     if(learnedAlternative!=null){
