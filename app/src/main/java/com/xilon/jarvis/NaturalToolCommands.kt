@@ -9,22 +9,23 @@ object NaturalToolCommands {
   return pattern.matchEntire(input.trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
  }
  fun parse(input:String):PlannedAction? {
-  // Parse the message envelope before generic clause splitting: the dictated
-  // body is data, not another device command.
-  val envelope=input.trim().replace(Regex("\\s+")," ")
-  val recipientFirst=Regex("""^(trimite|scrie)(?:-i)? (?:un )?mesaj (?:lui |către |catre )?(.+?) (?:pe|prin) whatsapp[, :]+(.+)$""",RegexOption.IGNORE_CASE)
-  val platformFirst=Regex("""^(trimite|scrie)(?:-i)? (?:un )?mesaj (?:pe|prin) whatsapp (?:lui |către |catre )?(.+?)(?:[, :]+)(?=(?:spune[- ]?i|zi[- ]?i|întreab[ăao]|intreab[ao]|cu textul|cu mesajul|mesajul|că|ca)\\b)(.+)$""",RegexOption.IGNORE_CASE)
-  val envelopeMatch=recipientFirst.matchEntire(envelope)?:platformFirst.matchEntire(envelope)
-  if(envelopeMatch!=null){
-   val (verb,recipient,rawBody)=envelopeMatch.destructured
-   val body=when(RomanianLexicon.normalize(rawBody).trimEnd('?','.','!')){
-    "intreabo ce face","intreab-o ce face","intreaba ce face"->"Ce faci?"
-    "intreaba cum se simte","intreab-o cum se simte"->"Cum te simți?"
-    else->rawBody.replaceFirst(Regex("""^(?:spune[- ]?i|zi[- ]?i)(?: (?:că|ca))?\\s+|^(?:cu textul|cu mesajul|mesajul|că|ca)\\s*:?\\s+""",RegexOption.IGNORE_CASE),"").trim()
-   }
-   if(!RomanianLexicon.negated(envelope.substringBefore(rawBody)) && !RegistryIntent.compound(envelope.substringBefore(rawBody)) && recipient.isNotBlank() && body.isNotBlank())
+  // Separate routing syntax from arbitrary dictated text. Never interpret
+  // message contents as device commands or replace them with canned replies.
+  val envelope=input.trim()
+  val verbPattern="(trimite|scrie)(?:-i)?"
+  val recipientPattern="(?:lui |către |catre |la )?"
+  val separator="""(?:\s*[:,]\s*|\s+(?=(?:spune[- ]?i|zi[- ]?i|întreab[ăa](?:-?o|-?l)?|intreab[ao](?:-?o|-?l)?|cu textul|cu mesajul|mesajul|că|ca)\b))"""
+  val first=Regex("""^$verbPattern\s+(?:un\s+)?mesaj\s+$recipientPattern(.+?)\s+(?:pe|prin)\s+whatsapp(?:\s*[:,]\s*|\s+)([\s\S]+)$""",RegexOption.IGNORE_CASE)
+  val second=Regex("""^$verbPattern\s+(?:un\s+)?mesaj\s+(?:pe|prin)\s+whatsapp\s+$recipientPattern(.+?)$separator([\s\S]+)$""",RegexOption.IGNORE_CASE)
+  val match=first.matchEntire(envelope)?:second.matchEntire(envelope)
+  if(match!=null){
+   val (verb,recipient,dictation)=match.destructured
+   val body=dictation.replaceFirst(Regex("""^(?:spune[- ]?i|zi[- ]?i)(?:\s+(?:că|ca))?\s+|^(?:cu textul|cu mesajul|mesajul|că|ca)\s*:?\s+""",RegexOption.IGNORE_CASE),"").trim()
+   val header=envelope.substring(0,match.groups[3]!!.range.first)
+   if(!RomanianLexicon.negated(header)&&!RegistryIntent.compound(header)&&recipient.isNotBlank()&&body.isNotBlank())
     return PlannedAction(if(verb.equals("scrie",true))"whatsapp_message" else "whatsapp_send",JsonObject(mapOf("contact" to JsonPrimitive(recipient.trim()),"message" to JsonPrimitive(body))))
   }
+  if(RomanianLexicon.negated(input) || RomanianLexicon.split(input).any { RomanianLexicon.negated(it) })return null
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
   // Do not bypass the negation and compound-action safety guards.
@@ -37,11 +38,6 @@ object NaturalToolCommands {
   if(!ytQuery.isNullOrBlank() && !Regex("\\b(?:și|si|apoi)\\s+(?:deschide|trimite|apelează|apeleaza|șterge|sterge|cumpără|cumpara)\\b",RegexOption.IGNORE_CASE).containsMatchIn(ytQuery))
    return PlannedAction("youtube_search",JsonObject(mapOf("query" to JsonPrimitive(ytQuery),"play" to JsonPrimitive(!yt.contains(Regex("\\b(?:caută|cauta)\\b",RegexOption.IGNORE_CASE))) )))
   if(RegistryIntent.compound(input))return null
-  val wa=Regex("^(?:scrie|trimite) (?:un )?mesaj (?:pe |prin )?whatsapp (?:lui |către |catre )?(.+?)\\s+(?:întreabă|intreaba)\\s+(?:ce face|cum se simte)\\s*[.!?]?$",RegexOption.IGNORE_CASE).matchEntire(input.trim())
-  if(wa!=null){
-   val body=if(wa.value.contains(Regex("cum se simte",RegexOption.IGNORE_CASE))) "Cum te simți?" else "Ce faci?"
-   return PlannedAction(if(wa.value.startsWith("trimite",true)) "whatsapp_send" else "whatsapp_message",JsonObject(mapOf("contact" to JsonPrimitive(wa.groupValues[1].trim()),"message" to JsonPrimitive(body))))
-  }
   // Direct Romanian commands with arbitrary argument values, no GGUF.
   val raw=input.trim().trimEnd('!','.')
   fun direct(name:String,vararg args:Pair<String,JsonPrimitive>)=PlannedAction(name,JsonObject(mapOf(*args)))
