@@ -140,4 +140,12 @@ class NaturalToolCommandsTest {
   assertNull(NaturalToolCommands.parse("open WhatsApp and open Gmail"))
   assertNull(NaturalToolCommands.parse("do not open WhatsApp"))
  }
+ @Test fun naturalConjugationsAndLiteralPayload(){
+  assertEquals("Ana Maria",NaturalToolCommands.whatsAppRecipient("Îmi poți să trimiți un mesaj lui Ana Maria pe WhatsApp"))
+  val sms=NaturalToolCommands.parse("Trimite SMS lui Daria: Nu pleca și deschide ușa")
+  assertEquals("send_sms",sms?.tool)
+  assertEquals(JsonPrimitive("Nu pleca și deschide ușa"),sms?.args?.get("message"))
+  val message=NaturalToolCommands.parse("Trimite mesaj lui Vlad pe WhatsApp spune-i că nu vin și pornește muzica")
+  assertEquals(JsonPrimitive("nu vin și pornește muzica"),message?.args?.get("message"))
+ }
 }

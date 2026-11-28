@@ -610,7 +610,8 @@ object RomanianLexicon {
  // arguments, not separate commands. Keep semicolons as explicit separators.
  private val separators = Regex("""(?:\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\s+|;\s*)""",RegexOption.IGNORE_CASE)
  private fun beginsAction(text:String):Boolean {
-  val first=clean(text).substringBefore(' ').trim(',',':',';')
+  val clause=text.trim().replace(Regex("^(?:(?:apoi|după aceea|dupa aceea|după care|dupa care)[,\\s]+)+",RegexOption.IGNORE_CASE),"")
+  val first=clean(clause).substringBefore(' ').trim(',',':',';')
   return commandVerb(first)!=null || messagingVerb(first)!=null || normalize(first) in setOf("du-ma","mergi","da","creeaza","afiseaza","listeaza")
  }
  fun split(text: String): List<String> {

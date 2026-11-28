@@ -16,10 +16,10 @@ object NaturalToolCommands {
   val initial=cleaned.substringBefore(' ')
   val canonical=RomanianLexicon.messagingVerb(initial)
   val envelope=if(canonical!=null)canonical+cleaned.substring(initial.length) else cleaned
-  val verbPattern="(trimite|scrie)(?:-i)?"
+  val verbPattern="(trimite|scrie|spune)(?:-i)?"
   val recipientPattern="(?:lui |către |catre |la )?"
   val separator="""(?:\s*[:,]\s*|\s+(?=(?:spune[- ]?i|zi[- ]?i|întreab[ăa](?:-?o|-?l)?|intreab[ao](?:-?o|-?l)?|cu textul|cu mesajul|mesajul|că|ca)\b))"""
-  val first=Regex("""^$verbPattern\s+(?:un\s+)?mesaj\s+$recipientPattern(.+?)\s+(?:pe|prin)\s+whatsapp(?:\s*[:,]\s*|\s+)([\s\S]+)$""",RegexOption.IGNORE_CASE)
+  val first=Regex("""^$verbPattern\s+(?:un\s+)?(?:mesaj\s+)?$recipientPattern(.+?)\s+(?:pe|prin)\s+whatsapp(?:\s*[:,]\s*|\s+)([\s\S]+)$""",RegexOption.IGNORE_CASE)
   val second=Regex("""^$verbPattern\s+(?:un\s+)?mesaj\s+(?:pe|prin)\s+whatsapp\s+$recipientPattern(.+?)$separator([\s\S]+)$""",RegexOption.IGNORE_CASE)
   val match=first.matchEntire(envelope)?:second.matchEntire(envelope)
   if(match!=null){
