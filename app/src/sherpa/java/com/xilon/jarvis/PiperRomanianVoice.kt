@@ -28,8 +28,10 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   "mihai" -> false
   else -> !mihaiReady()
  }
- private val executor=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
+ private val executor=Executors.newSingleThreadScheduledExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
+ private var idleRelease:java.util.concurrent.ScheduledFuture<*>?=null
+ private fun scheduleRelease(){idleRelease?.cancel(false);idleRelease=executor.schedule({releaseCached()},60,java.util.concurrent.TimeUnit.SECONDS)}
  // Worker-owned cache: never release native inference while generation is active.
  private var cachedTts:OfflineTts?=null
  private var cachedKey:String?=null
@@ -52,10 +54,12 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   if(text.isBlank()){done(null);return}
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}
   val id=epoch.incrementAndGet()
+  val previous=track;runCatching{previous?.pause()};runCatching{previous?.flush()}
   executor.execute{
    var error:String?=null
    try{
     if(id!=epoch.get())return@execute
+    idleRelease?.cancel(false)
     val tts=runtime()
     // Sherpa exposes PCM chunks during inference. Use its runtime sample rate
     // and play each chunk immediately instead of waiting for the whole reply.
@@ -104,8 +108,8 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      if(id==epoch.get())check((player.playbackHeadPosition.toLong() and 0xffffffffL)>=frames){"Redarea Piper nu s-a terminat în intervalul permis"}
     }finally{track=null;runCatching{player.stop()};player.release()}
    }catch(e:Exception){error=e.message?:"Eroare Piper"}catch(e:LinkageError){error=e.message?:"Motor Sherpa indisponibil"}
-   finally{if(error!=null)releaseCached();if(id==epoch.get())done(error)}
+   finally{if(error!=null)releaseCached() else scheduleRelease();if(id==epoch.get())done(error)}
   }
  }
- override fun stop(){val stopped=epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};executor.execute{if(epoch.get()==stopped)releaseCached()}}
+ override fun stop(){val stopped=epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};executor.execute{if(epoch.get()==stopped)scheduleRelease()}}
 }
