@@ -9,6 +9,22 @@ object NaturalToolCommands {
   return pattern.matchEntire(input.trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
  }
  fun parse(input:String):PlannedAction? {
+  // Parse the message envelope before generic clause splitting: the dictated
+  // body is data, not another device command.
+  val envelope=input.trim().replace(Regex("\\s+")," ")
+  val recipientFirst=Regex("""^(trimite|scrie)(?:-i)? (?:un )?mesaj (?:lui |către |catre )?(.+?) (?:pe|prin) whatsapp[, :]+(.+)$""",RegexOption.IGNORE_CASE)
+  val platformFirst=Regex("""^(trimite|scrie)(?:-i)? (?:un )?mesaj (?:pe|prin) whatsapp (?:lui |către |catre )?(.+?)(?:[, :]+)(?=(?:spune[- ]?i|zi[- ]?i|întreab[ăao]|intreab[ao]|cu textul|cu mesajul|mesajul|că|ca)\\b)(.+)$""",RegexOption.IGNORE_CASE)
+  val envelopeMatch=recipientFirst.matchEntire(envelope)?:platformFirst.matchEntire(envelope)
+  if(envelopeMatch!=null){
+   val (verb,recipient,rawBody)=envelopeMatch.destructured
+   val body=when(RomanianLexicon.normalize(rawBody).trimEnd('?','.','!')){
+    "intreabo ce face","intreab-o ce face","intreaba ce face"->"Ce faci?"
+    "intreaba cum se simte","intreab-o cum se simte"->"Cum te simți?"
+    else->rawBody.replaceFirst(Regex("""^(?:spune[- ]?i|zi[- ]?i)(?: (?:că|ca))?\\s+|^(?:cu textul|cu mesajul|mesajul|că|ca)\\s*:?\\s+""",RegexOption.IGNORE_CASE),"").trim()
+   }
+   if(!RomanianLexicon.negated(envelope.substringBefore(rawBody)) && !RegistryIntent.compound(envelope.substringBefore(rawBody)) && recipient.isNotBlank() && body.isNotBlank())
+    return PlannedAction(if(verb.equals("scrie",true))"whatsapp_message" else "whatsapp_send",JsonObject(mapOf("contact" to JsonPrimitive(recipient.trim()),"message" to JsonPrimitive(body))))
+  }
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
   // Do not bypass the negation and compound-action safety guards.
