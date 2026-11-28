@@ -401,7 +401,7 @@ object RomanianLexicon {
  fun canonicalCommand(text: String): String {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')
-  val replacement = messagingVerb(first) ?: commandVerb(first) ?: return cleaned
+  val replacement = commandVerb(first) ?: messagingVerb(first) ?: return cleaned
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {
@@ -608,7 +608,7 @@ object RomanianLexicon {
  // Split only when the next clause starts with a recognized action verb.
  // Ordinary object conjunctions ("jazz și blues", "Andrei și Maria") are
  // arguments, not separate commands. Keep semicolons as explicit separators.
- private val separators = Regex("""(?:\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)\s+|;\s*)""",RegexOption.IGNORE_CASE)
+ private val separators = Regex("""(?:\s+(?:și apoi|si apoi|după aceea|dupa aceea|după care|dupa care|apoi|și|si)[,\s]+|;\s*(?:(?:apoi|după aceea|dupa aceea|după care|dupa care)[,\s]+)?)""",RegexOption.IGNORE_CASE)
  private fun beginsAction(text:String):Boolean {
   val clause=text.trim().replace(Regex("^(?:(?:apoi|după aceea|dupa aceea|după care|dupa care)[,\\s]+)+",RegexOption.IGNORE_CASE),"")
   val first=clean(clause).substringBefore(' ').trim(',',':',';')
