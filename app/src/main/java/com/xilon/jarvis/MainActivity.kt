@@ -2139,7 +2139,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply{text="Alege director permanent OMEGA";setOnClickListener{
    if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)},296)
   }})
-  val manualModelLabels=setOf("Alege director permanent OMEGA","Restaurează toate modelele","Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
+  settings.addView(Button(this).apply{text="Salvează modelele instalate în directorul permanent";setOnClickListener{snapshotOmegaPermanent()}})
+  val manualModelLabels=setOf("Salvează modelele instalate în directorul permanent","Alege director permanent OMEGA","Restaurează toate modelele","Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
   val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
   val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Zipformer • streaming engleză","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
@@ -2946,6 +2947,60 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(!name.matches(Regex("vision-projector-[a-f0-9-]+\\.gguf")))return null
   return java.io.File(filesDir,name).takeIf{it.isFile}
  }
+ private fun exportOmegaArchive(uri:android.net.Uri):String{
+      val roots=setOf("models","downloads","kokoro","tesseract")
+      val files=filesDir.listFiles().orEmpty().filter{it.name in roots || (it.isFile && it.extension.lowercase() in setOf("gguf","onnx","tflite","task"))}
+       .flatMap{if(it.isDirectory)it.walkTopDown().filter{f->f.isFile}.toList() else listOf(it)}
+       .filter{it.length()>0 && !it.name.endsWith(".part") && !it.name.endsWith(".tmp") && it.canonicalPath.startsWith(filesDir.canonicalPath+"/")}
+      check(files.isNotEmpty()){"Nu există modele de salvat"}
+      contentResolver.openOutputStream(uri,"w")?.use{out->
+       java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(out)).use{zip->
+        zip.setLevel(0)
+        val hashes=org.json.JSONObject()
+        for((index,file) in files.withIndex()){
+         runOnUiThread{if(!isDestroyed)modelStatus.text="Backup OMEGA: "+(index+1)+"/"+files.size+" • "+file.name}
+         val expected=file.length()
+         val entry=java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath)
+         entry.size=expected
+         zip.putNextEntry(entry)
+         val digest=java.security.MessageDigest.getInstance("SHA-256")
+         val copied=file.inputStream().use{raw->java.security.DigestInputStream(raw,digest).use{it.copyTo(zip,65536)}}
+         hashes.put(file.relativeTo(filesDir).invariantSeparatorsPath,digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)})
+         check(copied==expected && file.length()==expected){"Model modificat în timpul backupului: "+file.name}
+         zip.closeEntry()
+        }
+        val metadata=org.json.JSONObject().put("sha256",hashes)
+        for(name in listOf("catalog_inventory","model_labels","omega_private_downloads")){
+         val values=org.json.JSONObject()
+         for((key,value) in getSharedPreferences(name,MODE_PRIVATE).all)values.put(key,value)
+         metadata.put(name,values)
+        }
+        zip.putNextEntry(java.util.zip.ZipEntry("model-metadata.json"))
+        zip.write(metadata.toString().toByteArray(Charsets.UTF_8));zip.closeEntry()
+       }
+      }?:error("Nu pot deschide fișierul de backup")
+      return "Backup OMEGA salvat: "+files.size+" fișiere."
+ }
+ private fun snapshotOmegaPermanent(){
+  if(busy)return
+  val prefs=getSharedPreferences("omega_backup",MODE_PRIVATE)
+  val tree=prefs.getString("tree",null)?.let{android.net.Uri.parse(it)}?:run{append("Alege întâi directorul permanent OMEGA.");return}
+  busy=true
+  worker.execute{
+   var destination:android.net.Uri?=null
+   val result=runCatching{
+    val root=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,android.provider.DocumentsContract.getTreeDocumentId(tree))
+    val name="XILON-OMEGA-"+System.currentTimeMillis()+".zip"
+    val uri=android.provider.DocumentsContract.createDocument(contentResolver,root,"application/zip",name)?:error("Director inaccesibil")
+    destination=uri
+    exportOmegaArchive(uri)
+   }.getOrElse{failure->
+    destination?.let{runCatching{android.provider.DocumentsContract.deleteDocument(contentResolver,it)}}
+    "Backup permanent eșuat: "+failure.message
+   }
+   runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+  }
+ }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
   if(requestCode==296){
    super.onActivityResult(requestCode,resultCode,data)
@@ -2955,6 +3010,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      contentResolver.takePersistableUriPermission(uri,data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
      check(getSharedPreferences("omega_backup",MODE_PRIVATE).edit().putString("tree",uri.toString()).commit())
      append("Director permanent OMEGA selectat. Descărcările noi vor fi copiate automat.")
+     snapshotOmegaPermanent()
     }.onFailure{append("Director OMEGA indisponibil: "+it.message)}
    }
    return
@@ -3056,38 +3112,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     busy=true
     worker.execute{
      val result=runCatching{
-      val roots=setOf("models","downloads","kokoro","tesseract")
-      val files=filesDir.listFiles().orEmpty().filter{it.name in roots || (it.isFile && it.extension.lowercase() in setOf("gguf","onnx","tflite","task"))}
-       .flatMap{if(it.isDirectory)it.walkTopDown().filter{f->f.isFile}.toList() else listOf(it)}
-       .filter{it.length()>0 && !it.name.endsWith(".part") && !it.name.endsWith(".tmp") && it.canonicalPath.startsWith(filesDir.canonicalPath+"/")}
-      check(files.isNotEmpty()){"Nu există modele de salvat"}
-      contentResolver.openOutputStream(uri,"w")?.use{out->
-       java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(out)).use{zip->
-        zip.setLevel(0)
-        val hashes=org.json.JSONObject()
-        for((index,file) in files.withIndex()){
-         runOnUiThread{if(!isDestroyed)modelStatus.text="Backup OMEGA: "+(index+1)+"/"+files.size+" • "+file.name}
-         val expected=file.length()
-         val entry=java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath)
-         entry.size=expected
-         zip.putNextEntry(entry)
-         val digest=java.security.MessageDigest.getInstance("SHA-256")
-         val copied=file.inputStream().use{raw->java.security.DigestInputStream(raw,digest).use{it.copyTo(zip,65536)}}
-         hashes.put(file.relativeTo(filesDir).invariantSeparatorsPath,digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)})
-         check(copied==expected && file.length()==expected){"Model modificat în timpul backupului: "+file.name}
-         zip.closeEntry()
-        }
-        val metadata=org.json.JSONObject().put("sha256",hashes)
-        for(name in listOf("catalog_inventory","model_labels","omega_private_downloads")){
-         val values=org.json.JSONObject()
-         for((key,value) in getSharedPreferences(name,MODE_PRIVATE).all)values.put(key,value)
-         metadata.put(name,values)
-        }
-        zip.putNextEntry(java.util.zip.ZipEntry("model-metadata.json"))
-        zip.write(metadata.toString().toByteArray(Charsets.UTF_8));zip.closeEntry()
-       }
-      }?:error("Nu pot deschide fișierul de backup")
-      "Backup OMEGA salvat: "+files.size+" fișiere."
+      exportOmegaArchive(uri)
      }.getOrElse{"Backup incomplet: "+it.message}
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
     }
