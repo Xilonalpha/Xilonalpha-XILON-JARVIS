@@ -120,13 +120,18 @@ class SpeechToTextEngine(context: Context) : Closeable {
         .getBoolean("allow_english_streaming", false)
 
     /** English streaming is explicitly selected in OMEGA and requires the complete model. */
-    private fun useStreaming():Boolean = !useFineTuned() && englishStreamingEnabled() && hasStreamingModelFiles()
+    private fun useRomanianStreaming():Boolean = romanianStreamingFiles()!=null &&
+        appContext.getSharedPreferences("speech_models", Context.MODE_PRIVATE).getBoolean("prefer_romanian_streaming",true)
+
+    private fun useStreaming():Boolean = useRomanianStreaming() || (!useFineTuned() && englishStreamingEnabled() && englishStreamingFiles()!=null)
 
     // Batch Whisper can capture during playback even though decoding is not incremental.
     fun supportsConcurrentPlayback():Boolean = useStreaming() || ((useFineTuned() || hasRomanianWhisper()) && android.media.audiofx.AcousticEchoCanceler.isAvailable())
 
-    private fun streamingFiles(): List<File>? {
-        val directory = File(modelDirectory, "streaming-asr")
+    private fun streamingFiles(): List<File>? = if(useRomanianStreaming()) romanianStreamingFiles() else englishStreamingFiles()
+    private fun romanianStreamingFiles():List<File>? = transducerFiles(File(modelDirectory,"streaming-asr-ro"))
+    private fun englishStreamingFiles():List<File>? = transducerFiles(File(modelDirectory,"streaming-asr"))
+    private fun transducerFiles(directory:File): List<File>? {
         val names = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
         return names.map { File(directory, it) }.takeIf { files -> files.all { it.isFile && it.length() > 0L } }
     }
@@ -139,8 +144,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         kotlinx.coroutines.runBlocking {
             operationMutex.withLock {
                 check(!closed) { "Speech engine closed" }
-                if (useFineTuned()) fineTunedRecognizer()
-                else if (useStreaming()) checkNotNull(ensureOnlineRecognizer())
+                if (useStreaming()) checkNotNull(ensureOnlineRecognizer())
+                else if (useFineTuned()) fineTunedRecognizer()
                 else if (hasRomanianWhisper()) ensureRecognizer()
                 else error("Instalează Whisper multilingv sau Whisper Small RO din OMEGA.")
             }
