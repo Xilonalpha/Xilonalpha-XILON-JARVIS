@@ -4,6 +4,7 @@ interface NeuralVoice {
  fun installed():Boolean
  fun speak(text:String)
  fun speakTracked(text:String,done:(String?)->Unit){speak(text);done(null)}
+ fun prepare(text:String){}
  fun stop()
 }
 object NeuralVoiceFactory {

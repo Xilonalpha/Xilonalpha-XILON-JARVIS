@@ -1366,6 +1366,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val streamSpeechEnabled=(speakReplies || continuousVoice) && !deliberateRequest(q) && (streamNeural!=null || (!englishNeuralVoice && !romanianNeuralVoice && voice.romanianVoiceAvailable()))
      val neuralQueue=java.util.ArrayDeque<String>()
      var neuralActive=false
+     var preparedNext:String?=null
      var neuralTicket=-1L
      var neuralFinished=false
      var firstSpeechChunk=true
@@ -1374,10 +1375,15 @@ class MainActivity : androidx.activity.ComponentActivity() {
      fun pumpNeural(){
       val engine=streamNeural ?: return
       if(isDestroyed || playbackAtStart!=playbackInterruption || neuralTicket!=voiceTicket || streamingSpeechFailed)return
-      if(neuralActive)return
+      if(neuralActive){
+       val upcoming=neuralQueue.peekFirst()
+       if(upcoming!=null && upcoming!=preparedNext){preparedNext=upcoming;runCatching{engine.prepare(upcoming)}}
+       return
+      }
       val next=neuralQueue.pollFirst()
+      preparedNext=null
       if(next==null){
-       if(neuralFinished){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()}
+       neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus()
        return
       }
       neuralActive=true;neuralSpeaking=true;omegaCore.speaking=true;refreshOmegaStatus()
@@ -1391,7 +1397,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         }
        }
       }
-      try{engine.speakTracked(next){completed(it)}}catch(e:Exception){completed(e.message?:"Eroare TTS")}catch(e:LinkageError){completed(e.message?:"Motor TTS indisponibil")}
+      try{engine.speakTracked(next){completed(it)};if(neuralActive){val upcoming=neuralQueue.peekFirst();if(upcoming!=null){preparedNext=upcoming;runCatching{engine.prepare(upcoming)}}}}catch(e:Exception){completed(e.message?:"Eroare TTS")}catch(e:LinkageError){completed(e.message?:"Motor TTS indisponibil")}
      }
      fun drainSpeechChunks(){
       if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return

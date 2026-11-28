@@ -9,5 +9,6 @@ class KokoroVoice(private val context:Context):NeuralVoice {
   check(installed()){"Kokoro indisponibil"}
   Kokoro.speak(context,text,0,1f){done(Kokoro.lastError)}
  }
+ override fun prepare(text:String){if(installed())Kokoro.prepare(context,text,0,1f)}
  override fun stop(){Kokoro.stop()}
 }
