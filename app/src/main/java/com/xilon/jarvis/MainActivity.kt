@@ -478,11 +478,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }
  private fun toggleContinuousVoice(){
   if(continuousVoice){stopVoiceLoop();listening.close();stopAllSpeech();updateContinuousVoiceButton();append("Conversație continuă oprită.");return}
+  if(BackgroundVoiceService.sessionActive){append("Oprește sesiunea vocală din fundal înainte de conversația continuă.");return}
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),83)
    return
   }
   if(!conversationForeground){append("Deschide conversația JARVIS pentru a activa ascultarea continuă.");return}
+  stopWake()
+  duplexUnavailable=false
   continuousVoice=true
   voiceLoopHandler.removeCallbacks(voiceLoop)
   voiceLoopHandler.postDelayed(voiceLoop,500L)
@@ -506,6 +509,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val voiceLoopHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val voiceLoop=object:Runnable{override fun run(){
   if(!continuousVoice || !conversationForeground || isDestroyed)return
+  if(BackgroundVoiceService.sessionActive){voiceLoopHandler.postDelayed(this,500L);return}
   val now=android.os.SystemClock.elapsedRealtime()
   if(!omegaCore.listening && wake==null && voiceRetry.ready(now)){
    if(!busy && !speechCapture.active() && !voiceBargeIn.active() && !omegaCore.speaking){
@@ -1500,8 +1504,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
            // The final answer was revised: do not append conflicting audio.
            if(streamingSpeechStarted)stopAllSpeech()
           }
-          if(!streamingSpeechStarted)speakReply(answer)
-         }else if(!streamingSpeechStarted)speakReply(answer)
+          if(!streamingSpeechStarted || streamingSpeechFailed)speakReply(answer)
+         }else if(!streamingSpeechStarted || streamingSpeechFailed)speakReply(answer)
         }else voiceStream.interrupt()
         if(interruptedByUser!=null && continuousVoice && conversationForeground){
          voiceStream.interrupt()
