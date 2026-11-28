@@ -1229,7 +1229,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // NaturalToolCommands enforces negation and multi-action guards. Its
     // dedicated YouTube clause is one intent, despite containing "și".
     val directTool=NaturalToolCommands.parse(commandQ)
-    if(directTool!=null && (!lexicalCompound || directTool.tool=="youtube_search")){
+    if(directTool!=null && (!lexicalCompound || directTool.tool in setOf("youtube_search","whatsapp_send","whatsapp_message"))){
      executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
     }
@@ -1238,6 +1238,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
     val offlinePlan=if(lexicalCompound)RomanianLexicon.compoundPlan(commandQ) else null
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
     if(RegistryIntent.matches(commandQ)){
+     if(nativeModel==null){
+      val suggestions=RomanianLexicon.suggestedPhrases(commandQ)
+      val reply=if(suggestions.isNotEmpty())"Nu am identificat sigur comanda. Ai vrut să spui: "+suggestions.take(3).joinToString(" / ")+"?" else "Nu am identificat complet acțiunea sau parametrii. Spune-mi ce vrei să fac și asupra cărui contact, aplicație sau obiect."
+      append(reply);if(continuousVoice)speakReply(reply,manual=true)
+      return@setOnClickListener
+     }
      startRegistryPlan(commandQ)
      return@setOnClickListener
     }
