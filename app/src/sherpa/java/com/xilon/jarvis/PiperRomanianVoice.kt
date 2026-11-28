@@ -62,6 +62,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     val samples=audio.samples
     val sampleRate=audio.sampleRate
     check(samples.isNotEmpty() && sampleRate>0){"Piper nu a generat sunet"}
+    check(samples.all{it.isFinite()} && samples.any{kotlin.math.abs(it)>0.0001f}){"Piper a generat semnal audio invalid sau silențios"}
     val buffer=AudioTrack.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT)
     check(buffer>0){"AudioTrack indisponibil"}
     val player=AudioTrack.Builder()
@@ -71,7 +72,9 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     if(id!=epoch.get()){player.release();return@execute}
     track=player
     try{
+     check(player.state==AudioTrack.STATE_INITIALIZED){"AudioTrack nu s-a inițializat"}
      player.play()
+     check(player.playState==AudioTrack.PLAYSTATE_PLAYING){"Android nu a pornit redarea Piper"}
      val pcm=ShortArray(2048)
      var offset=0
      while(offset<samples.size && id==epoch.get()){
@@ -85,6 +88,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
       val durationMs=(samples.size.toLong()*1000L/sampleRate).coerceAtMost(120000L)
       val deadline=android.os.SystemClock.elapsedRealtime()+durationMs+2000
       while(id==epoch.get() && player.playbackHeadPosition.toLong()<samples.size && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
+      if(id==epoch.get())check(player.playbackHeadPosition.toLong()>=samples.size){"Redarea Piper nu s-a terminat în intervalul permis"}
      }
     }finally{track=null;runCatching{player.stop()};player.release()}
    }catch(e:Exception){error=e.message?:"Eroare Piper"}catch(e:LinkageError){error=e.message?:"Motor Sherpa indisponibil"}
