@@ -372,11 +372,20 @@ object RomanianLexicon {
   val write=roots.any{it in setOf("scrie","a scrie")}
   return if(send&&!write)"trimite" else if(write&&!send)"scrie" else null
  }
+ fun commandVerb(word:String):String? {
+  val key=normalize(word)
+  conjugations[key]?.let{return it}
+  val known=(verbs+listOf("deschide","porneste","opreste","seteaza","pune","reda","asculta","suna","apeleaza","trimite","scrie","cauta","arata","citeste","navigheaza","aprinde","stinge","regleaza","activeaza","dezactiveaza","inchide","lanseaza","deruleaza")).toSet()
+  if(key in known)return key
+  val roots=(grammarMatches(key).map{normalize(it.lemma).removePrefix("a ")}+morphologicalRoots(key).map{normalize(it)}).toSet()
+  val matches=roots.map{conjugations[it]?:it}.filter{it in known}.distinct()
+  return matches.singleOrNull()
+ }
  fun canonicalCommand(text: String): String {
   val cleaned = clean(text)
   val first = cleaned.substringBefore(' ')
   val key = normalize(first)
-  val replacement = conjugations[key] ?: return cleaned
+  val replacement = commandVerb(first) ?: return cleaned
   return replacement + cleaned.substring(first.length)
  }
  fun parse(text: String): PlannedAction? {

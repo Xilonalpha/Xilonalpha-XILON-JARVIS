@@ -12,7 +12,7 @@ object RegistryIntent {
   Normalizer.normalize(text.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
    .replace(Regex("\\p{M}+"), "")
  fun matches(text: String): Boolean {
-  val q = normalized(text)
+  val q = normalized(RomanianLexicon.canonicalCommand(text))
   return !RomanianLexicon.negated(text) && !question.containsMatchIn(q) && action.containsMatchIn(q)
  }
  fun compound(text: String): Boolean {

@@ -8,7 +8,8 @@ object NaturalToolCommands {
   val pattern=Regex("""^trimite(?:-i)? (?:un )?mesaj (?:lui |către |catre )?([\p{L}\p{M}\d +()'-]+?) pe whatsapp[.!?]?$""",RegexOption.IGNORE_CASE)
   return pattern.matchEntire(input.trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
  }
- fun parse(input:String):PlannedAction? {
+ fun parse(original:String):PlannedAction? {
+  val input=RomanianLexicon.canonicalCommand(original)
   // Separate routing syntax from arbitrary dictated text. Never interpret
   // message contents as device commands or replace them with canned replies.
   val cleaned=RomanianLexicon.clean(input)
@@ -28,7 +29,6 @@ object NaturalToolCommands {
    if(!RomanianLexicon.negated(header)&&!RegistryIntent.compound(header)&&recipient.isNotBlank()&&body.isNotBlank())
     return PlannedAction(if(verb.equals("scrie",true))"whatsapp_message" else "whatsapp_send",JsonObject(mapOf("contact" to JsonPrimitive(recipient.trim()),"message" to JsonPrimitive(body))))
   }
-  if(RomanianLexicon.negated(input) || RomanianLexicon.split(input).any { RomanianLexicon.negated(it) })return null
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
   // Do not bypass the negation and compound-action safety guards.
