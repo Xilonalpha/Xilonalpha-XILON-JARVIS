@@ -524,10 +524,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
       if(!continuousVoice || !conversationForeground || isDestroyed || !omegaCore.speaking){
        endBargeIn(ticket)
       }else{
-       playbackInterruption++
-       stopAllSpeech()
-       // The detector releases its AudioRecord before this callback. Lease
-       // the same local recognizer used for an ordinary Romanian voice turn.
+       // Energy or neural VAD alone cannot distinguish our loudspeaker from
+       // the user. Keep playback alive until ASR verifies a non-echo turn.
+       // The detector has released its recorder before transferring lead-in.
        endBargeIn(ticket)
        startConcurrentSpeechCapture(prefix)
       }
