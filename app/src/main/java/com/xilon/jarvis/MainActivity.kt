@@ -2988,12 +2988,22 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }?:error("Arhivă inaccesibilă")
       val files=staging.walkTopDown().filter{it.isFile}.toList()
       check(files.isNotEmpty()){"Arhiva nu conține modele"}
+      val hashes=metadata?.optJSONObject("sha256")
+      fun sha256(file:java.io.File):String{
+       val digest=java.security.MessageDigest.getInstance("SHA-256")
+       file.inputStream().use{input->val buffer=ByteArray(65536);while(true){val n=input.read(buffer);if(n<0)break;digest.update(buffer,0,n)}}
+       return digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+      }
+      if(hashes!=null){
+       check(hashes.length()==files.size){"Manifest SHA-256 incomplet"}
+       for(file in files)check(hashes.optString(file.relativeTo(staging).invariantSeparatorsPath)==sha256(file)){"Integritate SHA-256 invalidă: "+file.name}
+      }
       var restored=0
       for(file in files){
        val target=java.io.File(filesDir,file.relativeTo(staging).path)
        check(target.canonicalPath.startsWith(filesDir.canonicalPath+"/"))
        if(target.exists()){
-        check(target.isFile && target.length()==file.length()){"Model existent diferit: "+target.name}
+        check(target.isFile && target.length()==file.length() && sha256(target)==sha256(file)){"Model existent diferit: "+target.name}
         continue
        }
        target.parentFile?.mkdirs()
@@ -3015,7 +3025,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
        }
        check(edit.commit())
       }
-      "Restaurare OMEGA: "+restored+" fișiere recuperate. Repornește JARVIS pentru reîncărcarea motoarelor."
+      "Restaurare OMEGA: "+restored+" fișiere recuperate. "+(if(hashes==null)"Backup vechi fără manifest SHA-256. " else "SHA-256 verificat. ")+"Repornește JARVIS pentru reîncărcarea motoarelor."
      }.getOrElse{"Restaurare eșuată sau incompletă: "+it.message}
      staging.deleteRecursively()
      runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
@@ -3038,16 +3048,19 @@ class MainActivity : androidx.activity.ComponentActivity() {
       contentResolver.openOutputStream(uri,"w")?.use{out->
        java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(out)).use{zip->
         zip.setLevel(0)
+        val hashes=org.json.JSONObject()
         for(file in files){
          val expected=file.length()
          val entry=java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath)
          entry.size=expected
          zip.putNextEntry(entry)
-         val copied=file.inputStream().use{it.copyTo(zip,65536)}
+         val digest=java.security.MessageDigest.getInstance("SHA-256")
+         val copied=file.inputStream().use{raw->java.security.DigestInputStream(raw,digest).use{it.copyTo(zip,65536)}}
+         hashes.put(file.relativeTo(filesDir).invariantSeparatorsPath,digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)})
          check(copied==expected && file.length()==expected){"Model modificat în timpul backupului: "+file.name}
          zip.closeEntry()
         }
-        val metadata=org.json.JSONObject()
+        val metadata=org.json.JSONObject().put("sha256",hashes)
         for(name in listOf("catalog_inventory","model_labels","omega_private_downloads")){
          val values=org.json.JSONObject()
          for((key,value) in getSharedPreferences(name,MODE_PRIVATE).all)values.put(key,value)
