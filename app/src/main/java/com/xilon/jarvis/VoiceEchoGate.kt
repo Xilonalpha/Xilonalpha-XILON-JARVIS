@@ -8,11 +8,17 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
  private val stopCommands=setOf("jarvis opreste","jarvis stop","jarvis taci","jarvis opreste te","jarvis nu mai vorbi","jarvis intrerupe raspunsul","jarvis gata","jarvis termina","jarvis liniste","jarvis pauza","jarvis opreste conversatia","jarvis intrerupe","jarvis nu mai raspunde")
  private fun normalize(s:String)=VoiceTextNormalizer.normalize(s)
  @Synchronized fun remember(text:String){
-  val normalized=normalize(text).take(maxEchoChars)
+  val normalized=normalize(text)
   if(normalized.isBlank())return
   val now=clock()
   prune(now)
-  recentChunks.addLast(Spoken(normalized,now))
+  val words=normalized.split(' ')
+  var part=""
+  for(word in words){
+   if(part.isNotEmpty() && part.length+word.length+1>maxEchoChars){recentChunks.addLast(Spoken(part,now));part=""}
+   part=if(part.isEmpty())word.take(maxEchoChars) else part+" "+word.take(maxEchoChars)
+  }
+  if(part.isNotEmpty())recentChunks.addLast(Spoken(part,now))
   while(recentChunks.size>maxChunks)recentChunks.removeFirst()
  }
  @Synchronized fun clear(){recentChunks.clear()}

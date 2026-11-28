@@ -40,6 +40,7 @@ object SpeechChunks {
      * many whole sentences as fit; if not even the first fits, it is cut at a comma or a space.
      */
     fun take(text: String, limit: Int): Pair<String, String> {
+        require(limit > 0) { "Speech chunk limit must be positive" }
         val rest = text.trim()
         if (rest.length <= limit) return rest to ""
         var end = 0
@@ -54,6 +55,7 @@ object SpeechChunks {
 
     /** All of [text] in pieces: the first at most [first] long so speech starts sooner, the rest at most [max]. */
     fun split(text: String, first: Int = 80, max: Int = 150): List<String> {
+        require(first > 0 && max > 0) { "Speech chunk limits must be positive" }
         val out = mutableListOf<String>()
         var rest = text.trim()
         while (rest.isNotEmpty()) {

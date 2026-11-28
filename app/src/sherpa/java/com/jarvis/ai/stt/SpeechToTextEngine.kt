@@ -161,7 +161,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
-            if (useStreaming()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial)
+            if (useStreaming()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial, prefix)
             if (useFineTuned()) {
                 val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
                 if (cancelled()) return@withContext ""
@@ -173,11 +173,11 @@ class SpeechToTextEngine(context: Context) : Closeable {
             check(hasRomanianWhisper()) {
                 "Instalează Whisper multilingv sau Whisper Small RO din OMEGA pentru recunoaștere în română."
             }
-            val activeRecognizer = ensureRecognizer()
-            if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
             val recording = captureUtterance(requestEpoch, prefix)
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get() || recording.isEmpty()) return@withContext ""
 
+            val activeRecognizer = ensureRecognizer()
+            if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
             val stream = activeRecognizer.createStream()
             try {
                 stream.acceptWaveform(recording, SAMPLE_RATE)
@@ -255,7 +255,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     /** True incremental decoding; no 20-second PCM accumulation or offline decode. */
-    private fun captureStreaming(online: OnlineRecognizer, epoch: Long, onPartial: (String) -> Unit): String {
+    private fun captureStreaming(online: OnlineRecognizer, epoch: Long, onPartial: (String) -> Unit, prefix:ShortArray): String {
         val minimum = AudioRecord.getMinBufferSize(
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
         )
@@ -292,10 +292,12 @@ class SpeechToTextEngine(context: Context) : Closeable {
             else null
         }.getOrNull()
         try {
-            runCatching { aec?.enabled = true }
-            runCatching { ns?.enabled = true }
+            val aecActive=runCatching { aec != null && aec.setEnabled(true)==android.media.audiofx.AudioEffect.SUCCESS && aec.enabled }.getOrDefault(false)
+            val nsActive=runCatching { ns != null && ns.setEnabled(true)==android.media.audiofx.AudioEffect.SUCCESS && ns.enabled }.getOrDefault(false)
+            android.util.Log.i("XilonASR","stream_effects aec="+aecActive+" ns="+nsActive)
             if (closed || captureCancelled || epoch != cancellationEpoch.get()) return ""
             recorder.startRecording()
+            if(prefix.isNotEmpty())stream.acceptWaveform(FloatArray(prefix.size){prefix[it]/32768f},SAMPLE_RATE)
             while (!closed && !captureCancelled && epoch == cancellationEpoch.get() &&
                 totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val n = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)

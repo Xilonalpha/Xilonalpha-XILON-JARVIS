@@ -1399,7 +1399,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       try{engine.speakTracked(next){completed(it)};if(neuralActive){val upcoming=neuralQueue.peekFirst();if(upcoming!=null){preparedNext=upcoming;runCatching{engine.prepare(upcoming)}}}}catch(e:Exception){completed(e.message?:"Eroare TTS")}catch(e:LinkageError){completed(e.message?:"Motor TTS indisponibil")}
      }
      fun drainSpeechChunks(){
-      if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return
+      if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || streamingSpeechFailed || isDestroyed || nativeModel?.isCancelled()==true)return
       while(true){
        val chunk=voiceStream.poll(voiceStreamId) ?: break
        if(chunk.isBlank())continue
@@ -1534,7 +1534,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
          }else if(streamSpeechEnabled && voiceStream.isCurrent(voiceStreamId)){
           // Final output can differ from streaming snapshots (e.g. reflection).
           // Never voice an unverified revision after speaking an earlier draft.
-          if(!streamingSpeechStarted || answer.startsWith(lastStreamSnapshot)){
+          if(answer.startsWith(lastStreamSnapshot)){
            // Include final tokens not yet delivered through onProgress.
            if(answer.startsWith(lastStreamSnapshot))
             voiceStream.offerSnapshot(voiceStreamId,answer)
@@ -1548,9 +1548,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
            // The final answer was revised: do not append conflicting audio.
            if(streamingSpeechStarted)stopAllSpeech()
           }
-          if(!streamingSpeechStarted || streamingSpeechFailed)speakReply(answer)
-         }else if(!streamingSpeechStarted || streamingSpeechFailed)speakReply(answer)
-        }else voiceStream.interrupt()
+          if(!streamingSpeechStarted)speakReply(answer)
+         }else if(!streamingSpeechStarted)speakReply(answer)
+        }else {voiceStream.interrupt();neuralQueue.clear();if(streamingSpeechStarted && neuralTicket==voiceTicket)stopAllSpeech()}
         if(interruptedByUser!=null && continuousVoice && conversationForeground){
          voiceStream.interrupt()
          stopAllSpeech()
