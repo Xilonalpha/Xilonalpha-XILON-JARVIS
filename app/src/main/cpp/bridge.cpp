@@ -146,8 +146,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
   publishStage("Inițializez contextul GGUF...");
   for(int attempt=requested;;attempt=std::max(required,attempt/2)){
    auto cp=llama_context_default_params();
-   cp.n_ctx=attempt;cp.n_batch=std::min<int>(attempt,64);
-   cp.n_ubatch=std::min<int>(attempt,32);
+   cp.n_ctx=attempt;
+   const int preferredBatch=threads>=4 && attempt>=1024 ? 128 : 64;
+   cp.n_batch=std::min<int>(attempt,preferredBatch);
+   cp.n_ubatch=std::min<int>(attempt,preferredBatch/2);
    cp.n_threads=threads;cp.n_threads_batch=threads;
    state->context=llama_init_from_model(m,cp);
    if(state->context){state->size=attempt;state->requestedSize=requested;state->threads=threads;batchSize=cp.n_batch;break;}
@@ -157,7 +159,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_xilon_jarvis_NativeModel_infer(JNI
  auto* ctx=state->context;
  if(!ctx){fail(e,"Context allocation failed even at minimum prompt budget; reduce history or use a smaller GGUF");return nullptr;}
  if(state->threads!=threads){llama_set_n_threads(ctx,threads,threads);state->threads=threads;}
- batchSize=std::min<int>(state->size,64);
+ batchSize=std::min<int>(state->size,llama_n_batch(ctx));
  // Reuse only an exact token prefix. Always evaluate at least the final prompt token for fresh logits.
  auto* memory=llama_get_memory(ctx);
  if(!memory){fail(e,"Model context has no reusable attention memory");return nullptr;}
