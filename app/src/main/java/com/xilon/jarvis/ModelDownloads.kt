@@ -34,6 +34,7 @@ class ModelDownloads(context:Context){
  private fun download(entry:ModelCatalog.Entry){
   var connection:HttpURLConnection?=null
   try{
+   if(restoreCompleted(entry))return
    val ref=when(entry){
     ModelCatalog.kokoro -> ModelMetadata.kokoro()
     ModelCatalog.mihai -> ModelMetadata.releaseAsset(ModelCatalog.mihai)
@@ -93,6 +94,48 @@ class ModelDownloads(context:Context){
    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_FAILED).putString(entry.file+".error",e.message?:"Eroare").apply()
   }finally{connection?.disconnect();active.remove(entry.file);if(cancelled.remove(entry.file))clear(entry) else if(file(entry).isFile)runCatching{backupCompleted(entry)}.onFailure{context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).edit().putString("last_error",it.message).apply()}}
  }
+ private fun restoreCompleted(entry:ModelCatalog.Entry):Boolean{
+  val tree=context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE).getString("tree",null)?.let{Uri.parse(it)}?:return false
+  val resolver=context.contentResolver
+  val rootId=android.provider.DocumentsContract.getTreeDocumentId(tree)
+  val children=android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree,rootId)
+  val candidates=mutableListOf<Pair<Uri,ModelMetadata.Reference>>()
+  resolver.query(children,arrayOf("document_id","_display_name","_size"),null,null,null)?.use{cursor->
+   while(cursor.moveToNext()){
+    val name=cursor.getString(1)?:continue
+    val suffix="-"+file(entry).name
+    if(!name.startsWith("omega-")||!name.endsWith(suffix))continue
+    val match=Regex("omega-(SHA-256|git-blob-sha1)-([a-fA-F0-9]{40,64})-([a-f0-9]{40}|asset-[0-9]+|pinned-hand|pinned-silero)-([0-9]+)").matchEntire(name.removeSuffix(suffix))?:continue
+    val (algorithm,hash,revision,size)=match.destructured
+    val bytes=size.toLongOrNull()?:continue
+    if(bytes<=0||bytes!=cursor.getLong(2)||hash.length!=(if(algorithm=="SHA-256")64 else 40))continue
+    if(entry==ModelCatalog.hand && (revision!="pinned-hand"||hash!="fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"))continue
+    if(entry==ModelCatalog.silero && (revision!="pinned-silero"||hash!="1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"))continue
+    if(entry in listOf(ModelCatalog.kokoro,ModelCatalog.mihai) && !revision.startsWith("asset-"))continue
+    if(entry !in listOf(ModelCatalog.kokoro,ModelCatalog.mihai,ModelCatalog.hand,ModelCatalog.silero) && !revision.matches(Regex("[a-f0-9]{40}")))continue
+    candidates.add(android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,cursor.getString(0)) to ModelMetadata.Reference(hash,bytes,revision,algorithm))
+   }
+  }
+  for((uri,ref) in candidates){
+   val temp=File(root,"restore-"+java.util.UUID.randomUUID())
+   try{
+    check(root.usableSpace>=ref.bytes+100000000L){"Spațiu insuficient"}
+    resolver.openInputStream(uri)?.use{input->temp.outputStream().use{out->
+     val buffer=ByteArray(65536);var copied=0L
+     while(true){check(!cancelled.contains(entry.file)){"Anulat"};val n=input.read(buffer);if(n<0)break;copied+=n;check(copied<=ref.bytes);out.write(buffer,0,n);active[entry.file]=Transfer(DownloadManager.STATUS_RUNNING,copied,ref.bytes,0)}
+    }}?:error("Backup inaccesibil")
+    ModelIntegrity.verify(temp.inputStream(),ref.sha256,ref.bytes,ref.algorithm)
+    check(!cancelled.contains(entry.file))
+    file(entry).parentFile?.mkdirs()
+    check(prefs.edit().putString(entry.file+".sha",ref.sha256).putLong(entry.file+".bytes",ref.bytes).putString(entry.file+".revision",ref.revision).putString(entry.file+".algorithm",ref.algorithm).commit())
+    check(temp.renameTo(file(entry)))
+    part(entry).delete()
+    prefs.edit().putInt(entry.file+".state",DownloadManager.STATUS_SUCCESSFUL).remove(entry.file+".error").apply()
+    return true
+   }finally{temp.delete()}
+  }
+  return false
+ }
  private fun backupCompleted(entry:ModelCatalog.Entry){
   val settings=context.getSharedPreferences("omega_backup",Context.MODE_PRIVATE)
   val tree=settings.getString("tree",null)?.let{Uri.parse(it)}?:return
@@ -101,7 +144,7 @@ class ModelDownloads(context:Context){
   val parent=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,rootId)
   val source=file(entry)
   val ref=reference(entry)
-  val name=ref.sha256+"-"+source.name
+  val name="omega-"+ref.algorithm+"-"+ref.sha256+"-"+ref.revision+"-"+ref.bytes+"-"+source.name
   val children=android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree,rootId)
   val exists=resolver.query(children,arrayOf("document_id","_display_name","_size"),null,null,null)?.use{cursor->
    var found=false
@@ -112,7 +155,7 @@ class ModelDownloads(context:Context){
    }
    found
   }?:false
-  if(exists)return
+  if(exists){settings.edit().remove("last_error").apply();return}
   val dest=android.provider.DocumentsContract.createDocument(resolver,parent,"application/octet-stream",name)?:error("Nu pot crea backup")
   try{
    resolver.openOutputStream(dest,"w")?.use{out->source.inputStream().use{it.copyTo(out,65536)}}?:error("Backup inaccesibil")
