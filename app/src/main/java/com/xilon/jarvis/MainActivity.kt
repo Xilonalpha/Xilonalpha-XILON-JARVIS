@@ -1284,6 +1284,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      if(continuousVoice)speakReply("Ce mesaj îi trimit lui $recipient?",manual=true)
      return@setOnClickListener
     }
+    val creativeText=RegistryIntent.creativeText(commandQ)
+    if(!creativeText){
     val lexicalCompound=RomanianLexicon.split(commandQ).size>1
     // Route ALL known single Android capabilities without model inference.
     // NaturalToolCommands enforces negation and multi-action guards. Its
@@ -1359,7 +1361,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      }
      return@setOnClickListener
     }
-    val local = respond(q)
+    }
+    val local = if(creativeText)null else respond(q)
     if(local != null) { recorder.observe(q,local); append("JARVIS: "+local); speakReply(local) }
     else {
      busy=true
@@ -1491,16 +1494,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
        val context=if(quick) minOf(baseContext,1024) else baseContext
        val threads=ResourceBudget.threads(Runtime.getRuntime().availableProcessors(),info.lowMemory,thermal,mib)
        val passages=if(grounded)LocalKnowledge(this@MainActivity).passages(question,if(context==512)1 else 2) else emptyList()
-       val recent=if(grounded || quick)emptyList() else history.takeLast(if(context==512) 2 else 6).filter{it.first=="user" || it.first=="assistant"}.dropWhile{it.first!="user"}.map{it.first to it.second.take(if(context==512) 180 else 400)}
+       val recent=if(grounded || quick || creativeText)emptyList() else history.takeLast(if(context==512) 2 else 6).filter{it.first=="user" || it.first=="assistant"}.dropWhile{it.first!="user"}.map{it.first to it.second.take(if(context==512) 180 else 400)}
        val budget=if(context==512)240 else 600
-       val lexicalContext=if(quick || grounded || context==512 || question.length>500) "" else runCatching {
+       val lexicalContext=if(quick || grounded || creativeText || context==512 || question.length>500) "" else runCatching {
         RomanianLexicon.grammarReport(question).take(6).joinToString("\n").take(480)
        }.getOrDefault("")
-       val recalled=if(grounded || context<2048) "" else relevantDialogue(question,2).joinToString("\n"){(user,answer)->"Mesaj anterior: "+user+"\nRăspuns anterior: "+answer}.take(600)
-       val interests=if(grounded || context<2048) "" else interestContext(question)
-       val lessons=if(grounded || context<2048) "" else lessonContext(question)
-       val initiative=if(grounded || context<2048) "" else initiativeContext()
-       val logic=if(grounded || context<2048) "" else relevantLogicContext(question)
+       val recalled=if(grounded || creativeText || context<2048) "" else relevantDialogue(question,2).joinToString("\n"){(user,answer)->"Mesaj anterior: "+user+"\nRăspuns anterior: "+answer}.take(600)
+       val interests=if(grounded || creativeText || context<2048) "" else interestContext(question)
+       val lessons=if(grounded || creativeText || context<2048) "" else lessonContext(question)
+       val initiative=if(grounded || creativeText || context<2048) "" else initiativeContext()
+       val logic=if(grounded || creativeText || context<2048) "" else relevantLogicContext(question)
        val visual=if(!quick && !grounded && context>=1024 && RecentVisualObservation.relevant(question)) visualObservation.get(android.os.SystemClock.elapsedRealtime()).orEmpty().take(500) else ""
        val ocrNow=android.os.SystemClock.elapsedRealtime()
        val capturedOcr=ocrText?.takeIf{!quick && !grounded && context>=1024 && ocrNow-ocrAt in 0..120000L && RecentVisualObservation.relevant(question) && com.jarvis.mobile.core.safety.InjectionGuard.inspect(it).level!=com.jarvis.mobile.core.safety.InjectionGuard.Level.SUSPICIOUS}.orEmpty().take(700)

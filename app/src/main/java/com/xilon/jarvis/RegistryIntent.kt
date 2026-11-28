@@ -11,7 +11,10 @@ object RegistryIntent {
  private fun normalized(text: String): String =
   Normalizer.normalize(text.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
    .replace(Regex("\\p{M}+"), "")
+ private val creative=Regex("^(?:(?:te rog|jarvis)[,\\s]+)*(?:genereaza|scrie|creeaza|compune|inventeaza|povesteste|redacteaza|spune(?:-mi| mi)?)[ ,]+(?:(?:o|un|imi|mi|cateva|niste)[ ,]+)*(?:poveste|povesti|poezie|poem|basm|eseu|articol|roman|gluma|scenariu)\\b")
+ fun creativeText(text:String):Boolean = creative.containsMatchIn(normalized(text)) && !Regex("\\b(?:whatsapp|sms|email|e-mail|trimite|publica|salveaza)\\b").containsMatchIn(normalized(text))
  fun matches(text: String): Boolean {
+  if(creativeText(text))return false
   val q = normalized(RomanianLexicon.canonicalCommand(text))
   return !RomanianLexicon.negated(text) && !question.containsMatchIn(q) && action.containsMatchIn(q)
  }
