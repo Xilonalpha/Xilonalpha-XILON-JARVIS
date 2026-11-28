@@ -8,6 +8,8 @@ on:
       - 'app/src/sherpaAndroidTest/**'
       - 'app/src/main/java/com/xilon/jarvis/*Whisper*.kt'
       - 'app/src/main/java/com/xilon/jarvis/*Voice*.kt'
+      - 'app/src/main/java/com/xilon/jarvis/MainActivity.kt'
+      - 'app/src/main/java/com/xilon/jarvis/OfflineListening.kt'
       - 'app/src/main/java/com/xilon/jarvis/*Archive.kt'
       - 'app/src/main/assets/liana-sherpa-metadata.pb'
       - 'app/build.gradle.kts'

@@ -697,14 +697,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
   chat.addView(corePanel)
   chat.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
   root.viewTreeObserver.addOnGlobalLayoutListener{
-   val visible=if(root.height<dp(360))android.view.View.GONE else android.view.View.VISIBLE
-   val stageHeight=if(root.height<dp(540))dp(64) else dp(140)
+   val visible=if(chat.height<dp(300))android.view.View.GONE else android.view.View.VISIBLE
+   val stageHeight=if(chat.height<dp(480))dp(64) else dp(140)
    if(core.layoutParams.height!=stageHeight)core.layoutParams=core.layoutParams.apply{height=stageHeight}
    if(corePanel.visibility!=visible)corePanel.visibility=visible
   }
   fun rounded(color:Int,radius:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=dp(radius).toFloat()}
   val input = EditText(this).apply {
-   hint="Scrie un mesaj...";textSize=17f;minWidth=0;minLines=1;maxLines=6
+   hint="Scrie un mesaj...";textSize=17f;minWidth=0;minLines=1;maxLines=3
    inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
    setSingleLine(false);setHorizontallyScrolling(false);gravity=android.view.Gravity.TOP or android.view.Gravity.START
    setTextColor(android.graphics.Color.WHITE);setHintTextColor(android.graphics.Color.LTGRAY)
@@ -712,8 +712,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }
   voiceInput=input
   window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-  val composer=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.BOTTOM;background=rounded(0xff142437.toInt(),28);setPadding(dp(4),dp(2),dp(4),dp(2))}
-  val toolbar=composer
+  val narrowComposer=resources.configuration.screenWidthDp<480
+  val composer=LinearLayout(this).apply{orientation=if(narrowComposer)LinearLayout.VERTICAL else LinearLayout.HORIZONTAL;gravity=android.view.Gravity.BOTTOM;background=rounded(0xff142437.toInt(),28);setPadding(dp(4),dp(2),dp(4),dp(2))}
+  val toolbar=if(narrowComposer)LinearLayout(this).also{composer.addView(it,LinearLayout.LayoutParams(-1,-2))} else composer
   fun composerIcon(name:String,description:String)=android.widget.ImageButton(this).apply{
    setImageDrawable(OmegaIcon(name,dp(24),cyan));scaleType=android.widget.ImageView.ScaleType.CENTER
    background=null;setPadding(0,0,0,0);contentDescription=description
@@ -721,7 +722,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
   toolbar.addView(composerIcon("attach","Importă document").apply{setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/plain";addCategory(Intent.CATEGORY_OPENABLE)},43)}},LinearLayout.LayoutParams(dp(48),dp(48)))
   toolbar.addView(input,LinearLayout.LayoutParams(0,-2,1f))
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  toolbar.addView(actions,LinearLayout.LayoutParams(-2,-2))
+  if(narrowComposer){actions.gravity=android.view.Gravity.END;composer.addView(actions,LinearLayout.LayoutParams(-1,dp(48)))}
+  else toolbar.addView(actions,LinearLayout.LayoutParams(-2,-2))
   chat.addView(composer,LinearLayout.LayoutParams(-1,-2))
   actions.addView(composerIcon("mic","Microfon offline").apply{setOnClickListener{startMicrophone()}},LinearLayout.LayoutParams(dp(48),dp(48)))
   continuousVoiceButton=Button(this).apply{
