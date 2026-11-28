@@ -2973,7 +2973,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
           check(entry.name.startsWith("models-backup/")){"Intrare necunoscută"}
           val relative=entry.name.removePrefix("models-backup/")
           val parts=relative.split('/')
-          check(parts.all{it.isNotBlank()&&it!="."&&it!=".."&&!it.contains('\\\\')}){"Cale invalidă"}
+          check(parts.all{it.isNotBlank()&&it!="."&&it!=".."&&!it.contains(92.toChar())}){"Cale invalidă"}
           check((parts.size>1&&parts.first() in roots)||(parts.size==1&&relative.substringAfterLast('.').lowercase() in setOf("gguf","onnx","tflite","task"))){"Fișier nepermis"}
           check(!relative.endsWith(".part")&&!relative.endsWith(".tmp"))
           val target=java.io.File(staging,relative)
