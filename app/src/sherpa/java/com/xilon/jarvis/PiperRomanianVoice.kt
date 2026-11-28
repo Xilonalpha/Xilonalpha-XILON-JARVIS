@@ -24,8 +24,8 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   .firstOrNull { File(it,"phondata").length()>0 && File(it,"ro_dict").length()>0 }
  private fun lianaReady() = LianaVoicePackage.sourcesPresent(root) && lianaData()!=null
  private fun useLiana() = when(app.getSharedPreferences("piper_voice",Context.MODE_PRIVATE).getString("speaker","auto")){
-  "liana" -> true
-  "mihai" -> false
+  "liana" -> lianaReady() || !mihaiReady()
+  "mihai" -> !mihaiReady() && lianaReady()
   else -> !mihaiReady()
  }
  private val executor=Executors.newSingleThreadScheduledExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}

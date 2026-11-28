@@ -376,6 +376,14 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun setSpeechOutput(engine:String,enabled:Boolean){
   if(enabled || speechOutput()==engine)getSharedPreferences("voice_stage",MODE_PRIVATE).edit().putString("output",if(enabled)engine else "android").apply()
  }
+ private fun androidSpeechAllowed()=voice.romanianVoiceAvailable() || englishNeuralVoice
+ private fun selectNeuralVoice():NeuralVoice? {
+  return when(speechOutput()){
+   "kokoro" -> (kokoroVoice ?: NeuralVoiceFactory.create(applicationContext)?.also{kokoroVoice=it})?.takeIf{it.installed()}
+   "piper" -> (piperVoice ?: NeuralVoiceFactory.romanian(applicationContext)?.also{piperVoice=it})?.takeIf{it.installed()}
+   else -> if(voice.romanianVoiceAvailable())null else (piperVoice ?: NeuralVoiceFactory.romanian(applicationContext)?.also{piperVoice=it})?.takeIf{it.installed()}
+  }
+ }
  private var piperVoice:NeuralVoice?=null
  private val whisperInstallHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val whisperInstallPoll=object:Runnable{override fun run(){
@@ -1357,12 +1365,8 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val playbackAtStart=playbackInterruption
      val voiceStream=RealtimeVoiceTurn()
      val voiceStreamId=voiceStream.start()
-     val streamNeural=if(romanianNeuralVoice || (!englishNeuralVoice && !voice.romanianVoiceAvailable())){
-      (piperVoice ?: NeuralVoiceFactory.romanian(applicationContext)?.also{piperVoice=it})?.takeIf{it.installed()}
-     }else if(englishNeuralVoice){
-      (kokoroVoice ?: NeuralVoiceFactory.create(applicationContext)?.also{kokoroVoice=it})?.takeIf{it.installed()}
-     }else null
-     val streamSpeechEnabled=(speakReplies || continuousVoice) && !deliberateRequest(q) && (streamNeural!=null || (!englishNeuralVoice && !romanianNeuralVoice && voice.romanianVoiceAvailable()))
+     val streamNeural=selectNeuralVoice()
+     val streamSpeechEnabled=(speakReplies || continuousVoice) && !deliberateRequest(q) && (streamNeural!=null || androidSpeechAllowed())
      val neuralQueue=java.util.ArrayDeque<String>()
      var neuralActive=false
      var preparedNext:String?=null
@@ -2496,17 +2500,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if((!manual && !speakReplies && !continuousVoice && !wakeReplyPending) || text.isBlank())return
   wakeReplyPending=false
   listening.close();echoGate.remember(text)
-  val piper=piperVoice ?: if(!englishNeuralVoice && (romanianNeuralVoice || !voice.romanianVoiceAvailable())) NeuralVoiceFactory.romanian(applicationContext)?.takeIf{it.installed()}?.also{piperVoice=it} else null
-  if((romanianNeuralVoice || (!englishNeuralVoice && !voice.romanianVoiceAvailable())) && piper!=null && piper.installed()){
-   playNeural(text,piper);return
-  }
-  val neural=kokoroVoice ?: if(englishNeuralVoice)NeuralVoiceFactory.create(this)?.takeIf{it.installed()}?.also{kokoroVoice=it} else null
-  if(englishNeuralVoice && neural!=null && neural.installed()){
-   playNeural(text,neural);return
-  }
+  val engine=selectNeuralVoice()
+  if(engine!=null){playNeural(text,engine);return}
   stopAllSpeech()
-  if(voice.romanianVoiceAvailable() || englishNeuralVoice)voice.speak(text)?.let{append(it)}
-  else append("Voce RO indisponibilă: verifică Piper Mihai/Liana în OMEGA și selectează ieșirea Piper.")
+  if(androidSpeechAllowed())voice.speak(text)?.let{append(it)}
+  else append("Voce locală indisponibilă: verifică Mihai/Liana în OMEGA.")
  }
  // Retrieve older dialogue as evidence, not executable instructions.
  private fun deliberateRequest(text:String):Boolean {
