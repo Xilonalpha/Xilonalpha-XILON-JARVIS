@@ -21,6 +21,18 @@ class NaturalToolCommandsTest {
   assertEquals(JsonPrimitive("local"),NaturalToolCommands.parse("Dă drumul la muzica salvată")?.args?.get("action"))
   assertEquals(JsonPrimitive("Luna"),NaturalToolCommands.parse("Pune Luna de pe telefon")?.args?.get("query"))
  }
+ @Test fun arbitraryRecipientsMessagesAndMusicTitles(){
+  for ((recipient,body) in listOf("Vlad Ionescu" to "Ajung la 18!", "Daria Pop" to "Trenul pleacă mâine.")){
+   val action=NaturalToolCommands.parse("Spune-i lui $recipient pe WhatsApp că $body")
+   assertEquals("whatsapp_send",action?.tool)
+   assertEquals(JsonPrimitive(recipient),action?.args?.get("contact"))
+   assertEquals(JsonPrimitive(body),action?.args?.get("message"))
+  }
+  val song=NaturalToolCommands.parse("Pune pe YouTube piesa Nothing Else Matters")
+  assertEquals("youtube_search",song?.tool)
+  assertEquals(JsonPrimitive("Nothing Else Matters"),song?.args?.get("query"))
+  assertNull(NaturalToolCommands.parse("Nu spune-i lui Vlad pe WhatsApp că plec"))
+ }
  @Test fun spokenClockCommandsResolveHourAndMinutes(){
   val next=NaturalToolCommands.parse("Trezește-mă la șapte și jumătate dimineața")
   assertEquals("set_alarm",next?.tool)

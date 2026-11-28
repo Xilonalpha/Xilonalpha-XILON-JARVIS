@@ -119,8 +119,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
     private fun englishStreamingEnabled() = appContext.getSharedPreferences("speech_models", Context.MODE_PRIVATE)
         .getBoolean("allow_english_streaming", false)
 
-    /** English streaming requires explicit opt-in and absence of Romanian Whisper. */
-    fun supportsConcurrentPlayback():Boolean = englishStreamingEnabled() && !hasRomanianWhisper() && !useFineTuned() && hasStreamingModelFiles()
+    /** English streaming is explicitly selected in OMEGA and requires the complete model. */
+    fun supportsConcurrentPlayback():Boolean = englishStreamingEnabled() && hasStreamingModelFiles()
 
     private fun streamingFiles(): List<File>? {
         val directory = File(modelDirectory, "streaming-asr")
@@ -136,9 +136,9 @@ class SpeechToTextEngine(context: Context) : Closeable {
         kotlinx.coroutines.runBlocking {
             operationMutex.withLock {
                 check(!closed) { "Speech engine closed" }
-                if (useFineTuned()) fineTunedRecognizer()
+                if (supportsConcurrentPlayback()) checkNotNull(ensureOnlineRecognizer())
+                else if (useFineTuned()) fineTunedRecognizer()
                 else if (hasRomanianWhisper()) ensureRecognizer()
-                else if (englishStreamingEnabled() && ensureOnlineRecognizer() != null) Unit
                 else error("Instalează Whisper multilingv sau Whisper Small RO din OMEGA.")
             }
         }
@@ -146,7 +146,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
     }
 
     /** Records until silence is detected, then runs local Sherpa-ONNX decoding. */
-    suspend fun listenForCommand(onPartial: (String) -> Unit = {}): String {
+    suspend fun listenForCommand(onPartial: (String) -> Unit = {}, prefix: ShortArray = shortArrayOf()): String {
         val requestEpoch = cancellationEpoch.get()
         return operationMutex.withLock {
         withContext(Dispatchers.IO) {
@@ -158,22 +158,21 @@ class SpeechToTextEngine(context: Context) : Closeable {
             ) { "Microphone permission is required. Open JarvisAI and allow microphone access." }
 
             captureCancelled = false
+            if (supportsConcurrentPlayback()) return@withContext captureStreaming(checkNotNull(ensureOnlineRecognizer()), requestEpoch, onPartial)
             if (useFineTuned()) {
                 val cancelled = { captureCancelled || closed || requestEpoch != cancellationEpoch.get() }
                 if (cancelled()) return@withContext ""
-                val recording = captureUtterance(requestEpoch)
+                val recording = captureUtterance(requestEpoch, prefix)
                 if (cancelled() || recording.isEmpty()) return@withContext ""
                 val engine = fineTunedRecognizer()
                 return@withContext if (cancelled()) "" else engine.transcribe(recording, cancelled)
             }
-            val online = if (hasRomanianWhisper() || !englishStreamingEnabled()) null else ensureOnlineRecognizer()
-            check(hasRomanianWhisper() || online != null) {
+            check(hasRomanianWhisper()) {
                 "Instalează Whisper multilingv sau Whisper Small RO din OMEGA pentru recunoaștere în română."
             }
-            if (online != null) return@withContext captureStreaming(online, requestEpoch, onPartial)
             val activeRecognizer = ensureRecognizer()
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get()) return@withContext ""
-            val recording = captureUtterance(requestEpoch)
+            val recording = captureUtterance(requestEpoch, prefix)
             if (captureCancelled || closed || requestEpoch != cancellationEpoch.get() || recording.isEmpty()) return@withContext ""
 
             val stream = activeRecognizer.createStream()
@@ -403,7 +402,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         ).also { recognizer = it; offlineRevision = revision }
     }
 
-    private fun captureUtterance(epoch: Long): FloatArray {
+    private fun captureUtterance(epoch: Long, prefix: ShortArray): FloatArray {
         val minimumBufferBytes = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -426,7 +425,8 @@ class SpeechToTextEngine(context: Context) : Closeable {
         // Primitive PCM buffer avoids boxing every sample (up to 320,000 Floats).
         // Allocate the bounded maximum once; no repeated GC during capture.
         val captured = FloatArray(SAMPLE_RATE * MAX_RECORDING_SECONDS)
-        var capturedCount = 0
+        var capturedCount = prefix.size.coerceAtMost(captured.size)
+        for (i in 0 until capturedCount) captured[i] = prefix[i] / 32768f
         fun appendSamples(samples: FloatArray, count: Int = samples.size) {
             val copyCount = minOf(count, captured.size - capturedCount)
             if (copyCount > 0) {
@@ -437,7 +437,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         val preRoll = ArrayDeque<FloatArray>()
         val pcm = ShortArray(FRAME_SAMPLES)
         val normalized = FloatArray(FRAME_SAMPLES)
-        var started = false
+        var started = prefix.isNotEmpty()
         var silentSamples = 0
         var voicedSamples = 0
         var totalSamples = 0
@@ -498,7 +498,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                     if (voiced) { silentSamples = 0; voicedSamples += count } else silentSamples += count
                     // A long utterance can contain brief natural pauses. Avoid
                     // ending on a weak trailing frame until speech has been heard.
-                    if (silentSamples >= SILENCE_SAMPLES && voicedSamples >= MIN_VOICED_SAMPLES) break
+                    if (silentSamples >= SILENCE_SAMPLES && (prefix.isNotEmpty() || voicedSamples >= MIN_VOICED_SAMPLES)) break
                 }
             }
         } finally {
@@ -510,7 +510,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
         }
 
         // Reject transient clicks and playback leakage shorter than 180 ms.
-        if (closed || captureCancelled || epoch != cancellationEpoch.get() || !started || voicedSamples < MIN_VOICED_SAMPLES || capturedCount == 0) return FloatArray(0)
+        if (closed || captureCancelled || epoch != cancellationEpoch.get() || !started || (prefix.isEmpty() && voicedSamples < MIN_VOICED_SAMPLES) || capturedCount == 0) return FloatArray(0)
         return captured.copyOf(capturedCount)
     }
 

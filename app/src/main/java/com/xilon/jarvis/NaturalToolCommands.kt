@@ -16,7 +16,8 @@ object NaturalToolCommands {
   val yt=input.trim().trimEnd('!','?','.').replace(Regex("\\s+")," ")
   val ytPrefix=Regex("^(?:deschide|pornește|porneste|lansează|lanseaza) (?:aplicația |aplicatia )?youtube (?:și|si) (?:pune|redă|reda|pornește|porneste|caută|cauta) (?:muzică |muzica |melodia |piesa |un cântec |un cantec |niște muzică |niste muzica )?(.+)$",RegexOption.IGNORE_CASE)
   val ytSuffix=Regex("^(?:pune|redă|reda|pornește|porneste) (?:muzică |muzica |melodia |piesa )?(.+) (?:pe|în|in) youtube$",RegexOption.IGNORE_CASE)
-  val ytQuery=(ytPrefix.matchEntire(yt) ?: ytSuffix.matchEntire(yt))?.groupValues?.get(1)?.trim()
+  val ytFirst=Regex("""^(?:pune|redă|reda|pornește|porneste) (?:pe|în|in) youtube (?:melodia |piesa )?(.+)$""",RegexOption.IGNORE_CASE)
+  val ytQuery=(ytPrefix.matchEntire(yt) ?: ytSuffix.matchEntire(yt) ?: ytFirst.matchEntire(yt))?.groupValues?.get(1)?.trim()
   if(!ytQuery.isNullOrBlank() && !Regex("\\b(?:și|si|apoi)\\s+(?:deschide|trimite|apelează|apeleaza|șterge|sterge|cumpără|cumpara)\\b",RegexOption.IGNORE_CASE).containsMatchIn(ytQuery))
    return PlannedAction("youtube_search",JsonObject(mapOf("query" to JsonPrimitive(ytQuery),"play" to JsonPrimitive(!yt.contains(Regex("\\b(?:caută|cauta)\\b",RegexOption.IGNORE_CASE))) )))
   if(RegistryIntent.compound(input))return null
@@ -50,10 +51,10 @@ object NaturalToolCommands {
   rawMatch("(?:sună|suna|apelează|apeleaza|telefonează|telefoneaza) (?:pe |la )?(.+)")?.let{
    return direct("call_contact","contact" to JsonPrimitive(it.groupValues[1]))
   }
-  val dictatedWhatsApp=Regex("""^(trimite|scrie)(?:-i)? (?:un )?(?:mesaj )?(?:lui |către |catre )?(.+?) pe whatsapp(?:\s*:\s*|\s+(?:cu (?:textul|mesajul)|mesajul|spune[- ]?i)\s*:?\s+)(.+)$""",RegexOption.IGNORE_CASE).matchEntire(input.trim())
+  val dictatedWhatsApp=Regex("""^(trimite|scrie|spune)(?:[- ]i)? (?:un )?(?:mesaj )?(?:lui |către |catre )?(.+?) pe whatsapp(?:\s*:\s*|\s+(?:cu (?:textul|mesajul)|mesajul|spune[- ]?i|că|ca)\s*:?\s+)(.+)$""",RegexOption.IGNORE_CASE).matchEntire(input.trim())
   if(dictatedWhatsApp!=null){
    val (verb,recipient,body)=dictatedWhatsApp.destructured
-   return direct(if(verb.equals("trimite",true)) "whatsapp_send" else "whatsapp_message",
+   return direct(if(verb.equals("scrie",true)) "whatsapp_message" else "whatsapp_send",
     "contact" to JsonPrimitive(recipient.trim()), "message" to JsonPrimitive(body.trim()))
   }
   Regex("(?:scrie|trimite) (?:un )?(?:mesaj (?:pe |prin )?)?(whatsapp|sms) (?:lui |către |catre )?([^:]+):\\s*(.+)",RegexOption.IGNORE_CASE).matchEntire(input.trim())?.let{

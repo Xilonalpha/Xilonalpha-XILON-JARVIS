@@ -7,6 +7,7 @@ class SherpaSpeech(context:Context):NeuralSpeech {
  override fun supportsConcurrentPlayback()=engine.supportsConcurrentPlayback()
  override suspend fun listen()=engine.listenForCommand()
  override suspend fun listen(onPartial:(String)->Unit)=engine.listenForCommand(onPartial)
+ override suspend fun listenAfterDetection(prefix:ShortArray)=engine.listenForCommand(prefix=prefix)
  override fun stop()=engine.stopCapture()
  override fun close()=engine.close()
 }

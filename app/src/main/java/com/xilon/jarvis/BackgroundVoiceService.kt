@@ -45,6 +45,7 @@ class BackgroundVoiceService:Service(){
  @Volatile private var engine:NeuralSpeech?=null
  @Volatile private var model:NativeModel?=null
  @Volatile private var piper:NeuralVoice?=null
+ @Volatile private var kokoro:NeuralVoice?=null
  @Volatile private var initiative=false
  private var lastInteraction=0L
  private var lastInitiative=0L
@@ -131,6 +132,7 @@ class BackgroundVoiceService:Service(){
     running.set(false)
     runCatching{engine?.close()};engine=null
     runCatching{model?.close()};model=null
+    runCatching{kokoro?.stop()};kokoro=null
     runCatching{piper?.stop()};piper=null
     sessionActive=false;sessionSlot.set(false)
     stopSelf()
@@ -139,6 +141,13 @@ class BackgroundVoiceService:Service(){
   return START_NOT_STICKY
  }
  private fun speakAnswer(text:String){
+  val selected=getSharedPreferences("voice_stage",MODE_PRIVATE).getString("output","piper")
+  val preferred=when(selected){
+   "piper"->piper
+   "kokoro"->kokoro ?: NeuralVoiceFactory.create(this)?.takeIf{it.installed()}?.also{kokoro=it}
+   else->null
+  }
+  if(preferred!=null && speakUntilStopped(preferred,text))return
   val done=CountDownLatch(1)
   val failed=AtomicBoolean(false)
   val active=AtomicBoolean(true)
@@ -158,20 +167,22 @@ class BackgroundVoiceService:Service(){
   }
   if(failed.get() && running.get()){
    val fallback=piper
-   if(fallback!=null)speakUntilStopped(fallback,text)
+   if(fallback!=null && fallback!==preferred)speakUntilStopped(fallback,text)
    else getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,notification("Vocea română offline lipsește."))
   }
  }
- private fun speakUntilStopped(voice:NeuralVoice,text:String){
-  if(!running.get())return
+ private fun speakUntilStopped(voice:NeuralVoice,text:String):Boolean{
+  if(!running.get())return true
+  val success=AtomicBoolean(false)
   val done=CountDownLatch(1)
   val deadline=SystemClock.elapsedRealtime()+40000L
   try{
-   voice.speakTracked(text){done.countDown()}
+   voice.speakTracked(text){error->success.set(error==null);done.countDown()}
    while(running.get() && SystemClock.elapsedRealtime()<deadline){
     if(done.await(100,TimeUnit.MILLISECONDS))break
    }
-  }finally{voice.stop()}
+  }catch(_:Exception){return false}finally{voice.stop()}
+  return !running.get() || success.get()
  }
  private fun inferenceThreads():Int{
   val info=android.app.ActivityManager.MemoryInfo()
@@ -190,7 +201,7 @@ class BackgroundVoiceService:Service(){
   running.set(false)
   runCatching{engine?.stop()}
   runCatching{model?.stop()}
-  runCatching{piper?.stop()}
+  runCatching{piper?.stop()};runCatching{kokoro?.stop()}
   // The worker releases native engines in its finally block, after decoding exits.
   speaker?.close();speaker=null
   executor.shutdown()

@@ -25,7 +25,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
  @Volatile private var recorder:AudioRecord?=null
  @Volatile private var worker:Thread?=null
  private val lifecycleLock=Any()
- fun start(onVoice:()->Unit,onError:(String)->Unit={},onSilence:()->Unit={}):Boolean {
+ fun start(onVoice:(ShortArray)->Unit,onError:(String)->Unit={},onSilence:()->Unit={}):Boolean {
   if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
   val session=synchronized(lifecycleLock){
    // A previous recorder must finish releasing before the next capture starts.
@@ -62,6 +62,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   }.getOrNull()
   worker=Thread({
    val samples=ShortArray(320)
+   val lead=SpeechLeadIn(6400)
    val decision=VoiceActivityDecision()
    // Optional offline neural VAD. Energy gate remains available if the
    // model is absent or incompatible; no network access is performed.
@@ -98,6 +99,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
       // An interrupted or failed AudioRecord read must not spin indefinitely.
       break
      }
+     lead.append(samples,count)
      val activity=if(neural!=null){
       // Do not silently reinterpret a failed neural inference as speech.
       // An inference failure ends this capture rather than triggering on unverified audio.
@@ -134,7 +136,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      // Do not mark the recorder free until AudioRecord.release() completed.
      if(generation.get()==session)running.set(false)
     }
-    if(detected)main.post{if(generation.get()==session && !running.get() && recorder==null)onVoice()}
+    if(detected)main.post{if(generation.get()==session && !running.get() && recorder==null)onVoice(lead.snapshot())}
     else if(!failed)main.post{if(generation.get()==session && !running.get() && recorder==null)onSilence()}
    }
   },"xilon-local-vad").also{it.isDaemon=true;it.start()}

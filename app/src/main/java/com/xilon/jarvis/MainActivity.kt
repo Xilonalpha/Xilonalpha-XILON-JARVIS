@@ -27,8 +27,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
  @Volatile private var duplexListening=false
  @Volatile private var duplexEngine:NeuralSpeech?=null
  @Volatile private var duplexUnavailable=false
- private fun startConcurrentSpeechCapture(){
-  if(duplexListening || duplexUnavailable || speechClosing || speechCapture.active() || voiceBargeIn.active() || wake!=null || !conversationForeground || !continuousVoice || !omegaCore.speaking)return
+ private fun startConcurrentSpeechCapture(prefix:ShortArray?=null){
+  val afterVad=prefix!=null
+  if(BackgroundVoiceService.sessionActive || duplexListening || (!afterVad && duplexUnavailable) || speechClosing || speechCapture.active() || voiceBargeIn.active() || wake!=null || !conversationForeground || !continuousVoice || (!afterVad && !omegaCore.speaking))return
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return
   val ticket=speechSessions.begin()
   if(!speechCapture.begin(ticket)){speechSessions.cancel();return}
@@ -38,10 +39,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val recognized=try {
     if(speechClosing || !speechSessions.isCurrent(ticket))return@execute
     engine=cachedNeural ?: NeuralSpeechFactory.create(applicationContext).also{cachedNeural=it}
-    if(engine?.supportsConcurrentPlayback()!=true){duplexUnavailable=true;""}
+    if(engine==null)error("Motorul local de recunoaștere nu este disponibil.")
+    if(!afterVad && !engine.supportsConcurrentPlayback()){duplexUnavailable=true;""}
     else {
      duplexEngine=engine
-     kotlinx.coroutines.runBlocking{engine!!.listen()}
+     kotlinx.coroutines.runBlocking{if(prefix==null)engine!!.listen() else engine!!.listenAfterDetection(prefix)}
     }
    }catch(e:Exception){
     duplexUnavailable=true
@@ -338,8 +340,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
   neuralSpeaking=true;omegaCore.speaking=true;refreshOmegaStatus()
   try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){neuralSpeaking=false;omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);voice.speak(text)?.let{append(it)}}
  }
- private var englishNeuralVoice=false
- private var romanianNeuralVoice=true
+ private var englishNeuralVoice:Boolean
+  get()=speechOutput()=="kokoro"
+  set(enabled){setSpeechOutput("kokoro",enabled)}
+ private var romanianNeuralVoice:Boolean
+  get()=speechOutput()=="piper"
+  set(enabled){setSpeechOutput("piper",enabled)}
+ private fun speechOutput()=getSharedPreferences("voice_stage",MODE_PRIVATE).getString("output","piper")
+ private fun setSpeechOutput(engine:String,enabled:Boolean){
+  if(enabled || speechOutput()==engine)getSharedPreferences("voice_stage",MODE_PRIVATE).edit().putString("output",if(enabled)engine else "android").apply()
+ }
  private var piperVoice:NeuralVoice?=null
  private val whisperInstallHandler=android.os.Handler(android.os.Looper.getMainLooper())
  private val whisperInstallPoll=object:Runnable{override fun run(){
@@ -479,40 +489,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }else if(VoiceCapturePolicy.mayMonitorPlayback(conversationForeground,continuousVoice,voiceInterrupt,omegaCore.speaking,speechCapture.active(),voiceBargeIn.active()) && !omegaCore.listening && voiceInterruptGate.ready(now)){
     val ticket=beginBargeIn()
     if(ticket!=null){
-     val started=localVad.start({
+     val started=localVad.start({prefix->
       if(!voiceBargeIn.isCurrent(ticket))return@start
       if(!continuousVoice || !conversationForeground || isDestroyed || !omegaCore.speaking){
        endBargeIn(ticket)
       }else{
        stopAllSpeech()
-       // VAD owns AudioRecord only until this callback. ASR starts after release.
-       listening.listen({recognized->
-        if(!voiceBargeIn.isCurrent(ticket))return@listen
-        endBargeIn(ticket)
-        if(conversationForeground && continuousVoice && recognized.isNotBlank()){
-         when {
-          echoGate.isStop(recognized)->{
-           pendingVoiceInterruption=null
-           stopAllSpeech()
-           if(busy)nativeModel?.stop()
-           append("Răspuns vocal întrerupt.")
-          }
-          !echoGate.isEcho(recognized)->{
-           stopAllSpeech()
-           if(busy){
-            pendingVoiceInterruption=recognized
-            if(allowVoiceInferenceInterrupt())nativeModel?.stop()
-           }else acceptVoice(recognized)
-          }
-         }
-        }
-       },{error->
-        if(voiceBargeIn.isCurrent(ticket)){
-         endBargeIn(ticket)
-         voiceRetry.failed(android.os.SystemClock.elapsedRealtime())
-         modelStatus.text=error
-        }
-       })
+       // The detector releases its AudioRecord before this callback. Lease
+       // the same local recognizer used for an ordinary Romanian voice turn.
+       endBargeIn(ticket)
+       startConcurrentSpeechCapture(prefix)
       }
      },{error->
       if(voiceBargeIn.isCurrent(ticket)){
@@ -532,9 +518,11 @@ class MainActivity : androidx.activity.ComponentActivity() {
  }}
  private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
  private var pendingVoiceInterruption:String?=null
+ private var dictatedMessage:((String)->Unit)?=null
  private fun acceptVoice(text:String){
   if(text.isBlank() || echoGate.isEcho(text) || !voiceTurnGuard.accept(text,android.os.SystemClock.elapsedRealtime())){wakeCommandPending=false;return}
   partialVoiceGate.reset()
+  dictatedMessage?.let { consume -> consume(text);return }
   voiceInput.setText(text);voiceInput.setSelection(voiceInput.text.length)
   val fromWake=wakeCommandPending
   wakeCommandPending=false
@@ -632,7 +620,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    if(v==null || !v.installed())append("Piper RO: instalează pachetul complet Mihai RO înainte de test.")
    else{piperVoice=v;playNeural("Bună! Sunt Jarvis și pot vorbi în limba română, fără conexiune la internet.",v)}
   }})
-  settings.addView(Button(this).apply { text="Voce neuronală EN: OFF";kokoroToggle=this;setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
+  settings.addView(Button(this).apply { text=if(englishNeuralVoice)"Voce neuronală EN: ON" else "Voce neuronală EN: OFF";kokoroToggle=this;setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
   settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
@@ -668,7 +656,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       3->{val personas=VoicePersona.entries
        android.app.AlertDialog.Builder(this).setTitle("Voce conversațională")
         .setItems(personas.map{it.displayName+" • "+it.tagline}.toTypedArray()){_,i->
-         stopAllSpeech();romanianNeuralVoice=false;englishNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF"
+         stopAllSpeech();romanianNeuralVoice=false;englishNeuralVoice=false;kokoroToggle?.text="Voce neuronală EN: OFF";piperToggle?.text="Voce neuronală RO Piper: OFF"
          val chosen=personas[i];stagePrefs.edit().putString("persona",chosen.id).apply()
          voice.setPersona(chosen);voice.speak("Bună, sunt Jarvis. Cu ce te pot ajuta?")?.let{append(it)}
         }.show()
@@ -1204,8 +1192,16 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(recipient!=null){
      val message=EditText(this@MainActivity).apply{hint="Mesaj pentru "+recipient}
      val compose=android.app.AlertDialog.Builder(this@MainActivity).setTitle("Ce mesaj îi trimit lui "+recipient+"?")
-      .setView(message).setPositiveButton("Continuă",null).setNegativeButton("Anulează",null).create()
+      .setView(message).setNeutralButton("Dictează",null).setPositiveButton("Continuă",null).setNegativeButton("Anulează"){dialog,_->dialog.cancel()}.create()
      compose.setOnShowListener{
+      compose.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener{startMicrophone()}
+      dictatedMessage={spoken->
+       if(RomanianLexicon.normalize(spoken) in setOf("anuleaza","renunta","nu trimite"))compose.dismiss()
+       else{
+        message.setText(spoken)
+        compose.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+       }
+      }
       compose.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
        val body=message.text.toString().trim()
        if(body.isEmpty())message.error="Introdu mesajul" else {
@@ -1217,7 +1213,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
        }
       }
      }
+     compose.setOnCancelListener{dictatedMessage=null;listening.close();stopNeural()}
+     compose.setOnDismissListener{dictatedMessage=null}
      compose.show()
+     if(continuousVoice)speakReply("Ce mesaj îi trimit lui $recipient?",manual=true)
      return@setOnClickListener
     }
     val lexicalCompound=RomanianLexicon.split(commandQ).size>1
@@ -1954,12 +1953,12 @@ class MainActivity : androidx.activity.ComponentActivity() {
      dialog.setNegativeButton("Închide",null).show()
     }.setNegativeButton("Închide",null).show()
   }})
-  settings.addView(Button(this).apply{text="Catalog Sherpa Streaming • Full Duplex";setOnClickListener{
+  settings.addView(Button(this).apply{text="Catalog Zipformer • streaming engleză";setOnClickListener{
    if(busy)return@setOnClickListener
    val entries=ModelCatalog.streamingAsr
    val downloads=ModelDownloads(this@MainActivity)
    val root=java.io.File(filesDir,"models/streaming-asr")
-   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Sherpa Streaming EN • 4 componente").setMessage("Model în engleză; recunoașterea românei nu este garantată. Descarcă și instalează toate cele 4 fișiere.").setItems(entries.map{entry->
+   android.app.AlertDialog.Builder(this@MainActivity).setTitle("Sherpa Streaming EN • 4 componente").setItems(entries.map{entry->
     entry.name+" • "+(if(java.io.File(root,ModelCatalog.streamingTarget(entry)).isFile)"Instalat" else downloads.status(entry))
    }.toTypedArray()){_,index->
     val entry=entries[index]
@@ -2127,7 +2126,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   }})
   val manualModelLabels=setOf("Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
   val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
-  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Sherpa Streaming • Full Duplex","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
+  val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Zipformer • streaming engleză","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
   settings.addView(Button(this).apply{text="OMEGA Model Center";setOnClickListener{
    if(busy)return@setOnClickListener
@@ -2140,8 +2139,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
    val center=LinearLayout(this@MainActivity).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(12),dp(16),dp(12));setBackgroundColor(bg)}
    val resources=TextView(this@MainActivity).apply{text="RAM disponibilă: "+available+" / "+total+" MiB\nStocare liberă: "+filesDir.usableSpace/1048576+" MiB\n"+recommendation;textSize=14f;setTextColor(cyan);background=rounded(0xff142437.toInt(),16);setPadding(dp(16),dp(16),dp(16),dp(16))}
    center.addView(resources)
+   center.addView(Switch(this@MainActivity).apply{
+    text="Folosește Zipformer pentru conversație în engleză"
+    val prefs=getSharedPreferences("speech_models",MODE_PRIVATE)
+    isChecked=prefs.getBoolean("allow_english_streaming",false)
+    setOnCheckedChangeListener{_,enabled->
+     prefs.edit().putBoolean("allow_english_streaming",enabled).apply()
+     duplexUnavailable=false
+    }
+   })
    val manager=ModelDownloads(this@MainActivity)
-   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Silero VAD" to listOf(ModelCatalog.silero),"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Sherpa Streaming • Full Duplex" to ModelCatalog.streamingAsr,"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
+   val categories=mapOf("Piper Mihai RO • descarcă și instalează" to listOf(ModelCatalog.mihai),"Catalog modele românești • STT și TTS" to ModelCatalog.romanianModels,"Catalog Hugging Face" to ModelCatalog.entries,"Catalog voce Sherpa" to ModelCatalog.whisper,"Catalog Silero VAD" to listOf(ModelCatalog.silero),"Catalog Hey Jarvis" to ModelCatalog.wake,"Catalog Kokoro" to listOf(ModelCatalog.kokoro),"Catalog Zipformer • streaming engleză" to ModelCatalog.streamingAsr,"Catalog Vision" to ModelCatalog.vision,"Catalog gesturi" to listOf(ModelCatalog.hand),"Catalog OCR" to ModelCatalog.ocr)
    val states=mutableListOf<Triple<TextView,ProgressBar,ModelCatalog.Entry>>()
    val dialog=android.app.AlertDialog.Builder(this@MainActivity).setTitle("OMEGA Model Center").setView(ScrollView(this@MainActivity).apply{addView(center)}).setNegativeButton("Închide",null).create()
    for(label in labels){
@@ -2301,14 +2309,13 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(restored!=null){for(i in maxOf(0,restored.length()-150) until restored.length()){val item=restored.optString(i);if(item.isNotBlank()){visibleHistory.add(item);messageBubble(item)}}}
   if(visibleHistory.isEmpty())append("JARVIS: Bună ziua. Cu ce te pot ajuta?")
  }
- private var useLocalSpeechModel=true
  private fun startMicrophone(fromWake:Boolean=false){
   if(BackgroundVoiceService.sessionActive){append("Serviciul vocal în fundal este activ sau se oprește.");return}
   if(!conversationForeground || speechClosing || omegaCore.listening || busy || speechCapture.active() || voiceBargeIn.active())return
   stopWake()
   wakeCommandPending=fromWake
   if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return}
-  if(useLocalSpeechModel)startNeural(false) else startAndroidMicrophone()
+  startNeural(fallback=true)
  }
  private fun startAndroidMicrophone(){
   if(BackgroundVoiceService.sessionActive)return
@@ -2317,11 +2324,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO),42);return
   }
   stopAllSpeech()
-  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;if(error.contains("nu este disponibil") && conversationForeground){useLocalSpeechModel=true;startNeural(false)}else wakeCommandPending=false} })
+  listening.listen({ text -> if(!isDestroyed && conversationForeground){voiceRetry.reset();acceptVoice(text)} },{ error -> if(!isDestroyed){voiceRetry.failed(android.os.SystemClock.elapsedRealtime());modelStatus.text=error;wakeCommandPending=false} })
  }
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<String>,grantResults:IntArray){
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
   if(requestCode==83){if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && !continuousVoice)toggleContinuousVoice() else if(!continuousVoice)append("Permisiunea microfonului a fost refuzată.")}
+  if(requestCode==85){
+   val command=pendingContactTool
+   pendingContactTool=null
+   if(grantResults.firstOrNull()==android.content.pm.PackageManager.PERMISSION_GRANTED && command!=null)executeRequestedTool(command.first,command.second)
+   else append("Accesul la contacte a fost refuzat. Poți dicta numărul cu prefix internațional.")
+  }
   if(requestCode==82){
    val music=pendingMusic
    pendingMusic=null
@@ -2352,7 +2365,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if((romanianNeuralVoice || (!englishNeuralVoice && !voice.romanianVoiceAvailable())) && piper!=null && piper.installed()){
    playNeural(text,piper);return
   }
-  val neural=kokoroVoice
+  val neural=kokoroVoice ?: if(englishNeuralVoice)NeuralVoiceFactory.create(this)?.takeIf{it.installed()}?.also{kokoroVoice=it} else null
   if(englishNeuralVoice && neural!=null && neural.installed()){
    playNeural(text,neural);return
   }
@@ -2801,9 +2814,17 @@ class MainActivity : androidx.activity.ComponentActivity() {
 
   }
  }
+ private var pendingContactTool:Pair<String,kotlinx.serialization.json.JsonObject>?=null
  private var pendingMusic: kotlinx.serialization.json.JsonObject? = null
  private fun executeRequestedTool(name:String,args:kotlinx.serialization.json.JsonObject,approved:Boolean=false,remaining:List<com.jarvis.mobile.core.tools.PlannedAction> = emptyList()){
   if(busy)return
+  val contact=(args["contact"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+  if(name in setOf("whatsapp_send","whatsapp_message") && contact!=null && contact.any{it.isLetter()} &&
+      checkSelfPermission(android.Manifest.permission.READ_CONTACTS)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+   pendingContactTool=name to args
+   requestPermissions(arrayOf(android.Manifest.permission.READ_CONTACTS),85)
+   return
+  }
   if(name=="media_play_pause" && args["action"]==kotlinx.serialization.json.JsonPrimitive("local")){
    val permission=if(android.os.Build.VERSION.SDK_INT>=33) android.Manifest.permission.READ_MEDIA_AUDIO else android.Manifest.permission.READ_EXTERNAL_STORAGE
    if(checkSelfPermission(permission)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
@@ -2818,7 +2839,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    runOnUiThread{if(!isDestroyed){
     busy=false;refreshOmegaStatus()
     result.fold({value->
-     if(value.status==com.jarvis.mobile.core.tools.ToolStatus.REQUIRES_CONFIRMATION && !approved){
+     if(value.status==com.jarvis.mobile.core.tools.ToolStatus.REQUIRES_CONFIRMATION && !approved && value.recoveryHint!="whatsapp-manual-send"){
       android.app.AlertDialog.Builder(this).setTitle("Operațiune critică")
        .setMessage(name+"\n"+args.toString())
        .setPositiveButton("Confirmă"){_,_->if(!busy&&!isDestroyed)executeRequestedTool(name,args,true)}
