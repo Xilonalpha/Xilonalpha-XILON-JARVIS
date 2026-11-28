@@ -31,6 +31,11 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  private val executor=Executors.newSingleThreadScheduledExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val playback=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-player").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
+ private fun speechSpeed(text:String):Float {
+  val base=app.getSharedPreferences("voice_prosody",Context.MODE_PRIVATE).getFloat("speed",1f).let{if(it.isFinite())it.coerceIn(0.8f,1.2f) else 1f}
+  val end=text.trimEnd().trimEnd('"', '”', '»', ')')
+  return (base * when {end.endsWith("?")->0.96f;end.endsWith("!")->1.03f;end.endsWith("…") || end.endsWith("...")->0.92f;else->1f}).coerceIn(0.8f,1.2f)
+ }
  private val preparationEpoch=AtomicLong(0L)
  private data class Prepared(val text:String,val key:String?,val rate:Int,val samples:FloatArray)
  private var prepared:Prepared?=null // accessed only on synthesis executor
@@ -102,6 +107,8 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     track=player
     try{
      check(player.state==AudioTrack.STATE_INITIALIZED){"AudioTrack nu s-a inițializat"}
+     val speed=speechSpeed(text)
+     if(speed!=1f)runCatching{player.playbackParams=android.media.PlaybackParams().setSpeed(speed).setPitch(1f)}
      var frames=0L
      var firstWriteAt=0L
      var audible=false
@@ -137,7 +144,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      check(synthesisError.get()==null){synthesisError.get()?:"Eroare sinteză"}
      check(callbackError==null){callbackError?:"Eroare audio"}
      check(frames>0 && audible){"Piper a generat semnal audio silențios"}
-     val deadline=android.os.SystemClock.elapsedRealtime()+(frames*1000L/sampleRate).coerceAtMost(120000L)+2000
+     val deadline=android.os.SystemClock.elapsedRealtime()+(frames*1000L/sampleRate/0.8).toLong().coerceAtMost(150000L)+2000
      while(id==epoch.get() && (player.playbackHeadPosition.toLong() and 0xffffffffL)<frames && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
      if(id==epoch.get()){
       check((player.playbackHeadPosition.toLong() and 0xffffffffL)>=frames){"Redarea Piper nu s-a terminat în intervalul permis"}
