@@ -11,6 +11,7 @@ internal object VoiceProsody {
    end.endsWith("…") || end.endsWith("...")->0.92f
    else->1f
   }
-  return (safe*factor).coerceIn(0.8f,1.2f)
+  val lengthFactor=when {text.length>180->0.97f;else->1f}
+  return (safe*factor*lengthFactor).coerceIn(0.8f,1.2f)
  }
 }

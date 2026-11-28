@@ -35,6 +35,7 @@ object AudioOut {
     fun interrupt(): Int {
         val gen = generation.incrementAndGet()
         envelopes.clear()
+        com.xilon.jarvis.LocalEchoReference.clear()
         track?.let { runCatching { it.pause(); it.flush() } } // also interrupts a blocking write
         return gen
     }
@@ -77,6 +78,7 @@ object AudioOut {
             while (offset < samples.size && isCurrent(ticket)) {
                 val n = out.write(samples, offset, samples.size - offset, AudioTrack.WRITE_BLOCKING)
                 if (n <= 0) return false
+                com.xilon.jarvis.LocalEchoReference.offer(samples,offset,n,SAMPLE_RATE)
                 offset += n
                 lastSamplesPlayed += n
             }

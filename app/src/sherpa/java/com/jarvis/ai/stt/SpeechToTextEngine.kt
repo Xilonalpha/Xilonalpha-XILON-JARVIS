@@ -126,7 +126,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
     private fun useStreaming():Boolean = useRomanianStreaming() || (!useFineTuned() && englishStreamingEnabled() && englishStreamingFiles()!=null)
 
     // Batch Whisper can capture during playback even though decoding is not incremental.
-    fun supportsConcurrentPlayback():Boolean = useStreaming() || ((useFineTuned() || hasRomanianWhisper()) && android.media.audiofx.AcousticEchoCanceler.isAvailable())
+    fun supportsConcurrentPlayback():Boolean = useStreaming() || useFineTuned() || hasRomanianWhisper()
 
     private fun streamingFiles(): List<File>? = if(useRomanianStreaming()) romanianStreamingFiles() else englishStreamingFiles()
     private fun romanianStreamingFiles():List<File>? = transducerFiles(File(modelDirectory,"streaming-asr-ro"))
@@ -320,6 +320,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 if (isDigitalSilence(pcm, n)) {
                     if (++digitalSilenceReads >= 30) error("Microfon blocat sau dezactivat de Android.")
                 } else digitalSilenceReads = 0
+                if(!aecActive)com.xilon.jarvis.LocalEchoReference.suppress(pcm,n)
                 totalSamples += n
                 for (i in 0 until n) normalizedFrame[i] = pcm[i] / 32768.0f
                 // Normal 100-ms reads reuse the same array rather than allocating every frame.
@@ -485,6 +486,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
                 emptyReads = 0
                 // Digital silence detection adapted from judejulius/jarvis VoiceInput.kt.
                 if (isDigitalSilence(pcm, count)) { if (++zeroReads >= 30) error("Microfon blocat sau dezactivat de Android.") } else zeroReads = 0
+                if(!aecActive)com.xilon.jarvis.LocalEchoReference.suppress(pcm,count)
                 totalSamples += count
                 for (index in 0 until count) normalized[index] = pcm[index] / 32768.0f
                 // Feed undistorted normalized PCM to Whisper.

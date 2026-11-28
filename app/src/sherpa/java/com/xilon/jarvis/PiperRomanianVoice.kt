@@ -72,6 +72,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   if(text.isBlank()){done(null);return}
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}
   val id=epoch.incrementAndGet()
+  LocalEchoReference.clear()
   val requestedAt=android.os.SystemClock.elapsedRealtime()
   val previous=track;runCatching{previous?.pause()};runCatching{previous?.flush()}
   executor.execute{
@@ -129,6 +130,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
         if(written==0){check(android.os.SystemClock.elapsedRealtime()-lastProgressAt<5000L){"AudioTrack stalled"};Thread.sleep(5);continue}
         lastProgressAt=android.os.SystemClock.elapsedRealtime()
         if(firstWriteAt==0L){firstWriteAt=android.os.SystemClock.elapsedRealtime();android.util.Log.i("XilonPiper","first_pcm_write_ms="+(firstWriteAt-requestedAt)+" prepared="+(ready!=null))}
+        LocalEchoReference.offer(samples,offset,written,sampleRate)
         offset+=written;frames+=written
        }
        id==epoch.get()
