@@ -11,7 +11,8 @@ object RomanianPiperArchive {
  fun install(context:Context,uri:Uri){
   val root=File(context.filesDir,"models/romanian").apply{check(isDirectory||mkdirs())}
   val target=File(root,"mihai")
-  require(!target.exists()){"Mihai RO este deja instalat"}
+  fun ready(dir:File)=listOf("ro_RO-mihai-medium.onnx","tokens.txt","espeak-ng-data/phondata","espeak-ng-data/ro_dict").all{File(dir,it).isFile && File(dir,it).length()>0}
+  if(ready(target))return
   val temp=File(root,"mihai-"+java.util.UUID.randomUUID()).apply{check(mkdir())}
   try{
    var count=0;var total=0L
@@ -40,8 +41,14 @@ object RomanianPiperArchive {
     }
    }
    require(listOf("ro_RO-mihai-medium.onnx","tokens.txt").all{File(temp,it).isFile&&File(temp,it).length()>0})
-   require(File(temp,"espeak-ng-data").walkTopDown().any{it.isFile&&it.length()>0})
-   check(temp.renameTo(target)){"Instalarea nu a putut fi finalizată"}
+   require(ready(temp)){"Pachet Mihai incomplet: lipsesc datele eSpeak românești"}
+   val backup=File(root,"mihai-backup-"+java.util.UUID.randomUUID())
+   if(target.exists())check(target.renameTo(backup)){"Nu pot pregăti repararea Mihai"}
+   if(!temp.renameTo(target)){
+    if(backup.exists())check(backup.renameTo(target)){"Restaurare necesară: "+backup.name}
+    error("Instalarea nu a putut fi finalizată")
+   }
+   backup.deleteRecursively()
   }finally{temp.deleteRecursively()}
  }
 }

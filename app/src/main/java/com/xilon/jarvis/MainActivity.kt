@@ -634,7 +634,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Button(this).apply { text="Importă Kokoro ZIP";setOnClickListener{if(!busy)startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE)},49)} })
   settings.addView(Button(this).apply { text=if(romanianNeuralVoice) "Voce neuronală RO Piper: ON" else "Voce neuronală RO Piper: OFF";piperToggle=this;setOnClickListener{
    if(romanianNeuralVoice){romanianNeuralVoice=false;stopAllSpeech();text="Voce neuronală RO Piper: OFF"}
-   else{val v=NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())append("Piper RO: model, tokens sau fonemizare lipsă.")
+   else{val v=piperVoice ?: NeuralVoiceFactory.romanian(this@MainActivity);if(v==null || !v.installed())this@MainActivity.append("Piper RO: model, tokens sau fonemizare lipsă.")
    else{piperVoice=v;romanianNeuralVoice=true;englishNeuralVoice=false;kokoroToggle?.text="Voce neuronală EN: OFF";stopAllSpeech();text="Voce neuronală RO Piper: ON"}}
   }})
   settings.addView(Button(this).apply { text="Alege vocea română Piper";setOnClickListener{
@@ -649,18 +649,18 @@ class MainActivity : androidx.activity.ComponentActivity() {
      dialog.dismiss()
      if(!activateInstalledRomanianVoice()){
       romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF"
-      append("Instalează pachetul Mihai. Pentru Liana instalează și cele două fișiere Liana din catalogul românesc.")
+      this@MainActivity.append("Instalează pachetul Mihai. Pentru Liana instalează și cele două fișiere Liana din catalogul românesc.")
      }
     }.show()
   }})
   settings.addView(Button(this).apply { text="Testează vocea română Piper";setOnClickListener{
    if(busy)return@setOnClickListener
-   val v=NeuralVoiceFactory.romanian(this@MainActivity)
-   if(v==null || !v.installed())append("Piper RO: instalează pachetul complet Mihai RO înainte de test.")
+   val v=piperVoice ?: NeuralVoiceFactory.romanian(this@MainActivity)
+   if(v==null || !v.installed())this@MainActivity.append("Piper RO: instalează pachetul complet Mihai RO înainte de test.")
    else{piperVoice=v;playNeural("Bună! Sunt Jarvis și pot vorbi în limba română, fără conexiune la internet.",v)}
   }})
-  settings.addView(Button(this).apply { text=if(englishNeuralVoice)"Voce neuronală EN: ON" else "Voce neuronală EN: OFF";kokoroToggle=this;setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
-  settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
+  settings.addView(Button(this).apply { text=if(englishNeuralVoice)"Voce neuronală EN: ON" else "Voce neuronală EN: OFF";kokoroToggle=this;setOnClickListener{if(englishNeuralVoice){englishNeuralVoice=false;stopAllSpeech();text="Voce neuronală EN: OFF"}else{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())this@MainActivity.append("Kokoro indisponibil.") else {stopAllSpeech();kokoroVoice=v;englishNeuralVoice=true;romanianNeuralVoice=false;piperToggle?.text="Voce neuronală RO Piper: OFF";text="Voce neuronală EN: ON"}}} })
+  settings.addView(Button(this).apply { text="Testează Kokoro (engleză)";setOnClickListener{val v=NeuralVoiceFactory.create(this@MainActivity);if(v==null || !v.installed())this@MainActivity.append("Kokoro: profil Sherpa sau modele lipsă.") else {voice.stop();kokoroVoice?.stop();kokoroVoice=v;playNeural("Hello. This is Xilon Jarvis.",v)}} })
   settings.addView(Button(this).apply { text="Selectează GGUF"; setOnClickListener {
    if(!busy) startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, 41)
   } })
