@@ -12,6 +12,7 @@ internal object VoiceProsody {
    else->1f
   }
   val lengthFactor=when {text.length>180->0.97f;else->1f}
-  return (safe*factor*lengthFactor).coerceIn(0.8f,1.2f)
+  val clauseFactor=if(text.count{it==',' || it==';' || it==':'}>=3)0.98f else 1f
+  return (safe*factor*lengthFactor*clauseFactor).coerceIn(0.8f,1.2f)
  }
 }

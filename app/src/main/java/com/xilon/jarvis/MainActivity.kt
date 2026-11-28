@@ -1371,7 +1371,6 @@ class MainActivity : androidx.activity.ComponentActivity() {
      var neuralActive=false
      var preparedNext:String?=null
      var neuralTicket=-1L
-     var neuralFinished=false
      var firstSpeechChunk=true
      var streamingSpeechStarted=false
      var streamingSpeechFailed=false
@@ -1391,7 +1390,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
       }
       neuralActive=true;neuralSpeaking=true;omegaCore.speaking=true;refreshOmegaStatus()
       echoGate.remember(next)
+      val completionOnce=java.util.concurrent.atomic.AtomicBoolean(false)
       fun completed(error:String?){
+       if(!completionOnce.compareAndSet(false,true))return
        runOnUiThread{
         if(!isDestroyed && neuralTicket==voiceTicket && playbackAtStart==playbackInterruption){
          neuralActive=false
@@ -1403,7 +1404,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       try{engine.speakTracked(next){completed(it)};if(neuralActive){val upcoming=neuralQueue.peekFirst();if(upcoming!=null){preparedNext=upcoming;runCatching{engine.prepare(upcoming)}}}}catch(e:Exception){completed(e.message?:"Eroare TTS")}catch(e:LinkageError){completed(e.message?:"Motor TTS indisponibil")}
      }
      fun drainSpeechChunks(){
-      if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || streamingSpeechFailed || isDestroyed || nativeModel?.isCancelled()==true)return
+      if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || streamingSpeechFailed || isDestroyed || nativeModel?.isCancelled()==true || (!firstSpeechChunk && streamNeural!=null && neuralTicket!=voiceTicket))return
       while(true){
        val chunk=voiceStream.poll(voiceStreamId) ?: break
        if(chunk.isBlank())continue
@@ -1545,7 +1546,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
            voiceStream.finish(voiceStreamId)
            drainSpeechChunks()
            if(streamingSpeechStarted && !streamingSpeechFailed){
-            if(streamNeural!=null){neuralFinished=true;pumpNeural()}else voice.finishStream()
+            if(streamNeural!=null){pumpNeural()}else voice.finishStream()
            }
           }else {
            voiceStream.interrupt()
@@ -1554,7 +1555,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
           }
           if(!streamingSpeechStarted)speakReply(answer)
          }else if(!streamingSpeechStarted)speakReply(answer)
-        }else {voiceStream.interrupt();neuralQueue.clear();if(streamingSpeechStarted && neuralTicket==voiceTicket)stopAllSpeech()}
+        }else {voiceStream.interrupt();neuralQueue.clear();if(streamingSpeechStarted && playbackAtStart==playbackInterruption && (streamNeural==null || neuralTicket==voiceTicket))stopAllSpeech()}
         if(interruptedByUser!=null && continuousVoice && conversationForeground){
          voiceStream.interrupt()
          stopAllSpeech()
