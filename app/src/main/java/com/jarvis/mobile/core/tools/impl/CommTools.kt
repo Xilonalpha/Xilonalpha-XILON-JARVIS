@@ -229,17 +229,17 @@ class WhatsAppMessageTool(private val send: Boolean = false) : Tool(
                 val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=$phone&text=$encoded")).apply {
                     setPackage("com.whatsapp")
                 }
-                val ok = listOf("com.whatsapp", "com.whatsapp.w4b").any { pkg ->
+                val openedPackage = listOf("com.whatsapp", "com.whatsapp.w4b").firstOrNull { pkg ->
                     runCatching { context.startActivity(i.setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
                 }
-                if (ok) {
+                if (openedPackage != null) {
                     if (send) {
                         // Wait for the addressed conversation to become visible.
                         // Never click an arbitrary send button or an unverified draft.
                         repeat(20) {
                             kotlinx.coroutines.delay(250)
                             val submitted = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                com.xilon.jarvis.LocalScreen.service()?.sendVerifiedWhatsAppDraft(phone, body) == true
+                                com.xilon.jarvis.LocalScreen.service()?.sendVerifiedWhatsAppDraft(openedPackage, phone, body) == true
                             }
                             if (submitted) return ToolResult.ok("Am apăsat Trimite în conversația verificată. Livrarea nu este confirmată.", Verification.UNVERIFIED)
                         }

@@ -8,12 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HologramStageTest {
-    @Test fun chatOpensFourWayProjectionAndReturnsToChat() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val intent = Intent(instrumentation.targetContext, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val activity = instrumentation.startActivitySync(intent)
-        fun waitForNode(label: String): AccessibilityNodeInfo {
+    private fun waitForNode(label: String): AccessibilityNodeInfo {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
             var visibleLabels = emptyList<String>()
             val until = SystemClock.elapsedRealtime() + 10000
             while (SystemClock.elapsedRealtime() < until) {
@@ -25,7 +21,7 @@ class HologramStageTest {
                     if (node.isVisibleToUser) {
                         if (text.isNotBlank()) labels.add(text)
                         if (description.isNotBlank()) labels.add(description)
-                        if (text == label || description == label ||
+                        if (text.equals(label, ignoreCase = true) || node.hintText?.toString()==label || description == label ||
                             (label.startsWith("Proiecție") && description.startsWith(label))) return node
                     }
                     for (child in 0 until node.childCount) {
@@ -39,6 +35,34 @@ class HologramStageTest {
             }
             error("Missing visible control: $label. Visible: $visibleLabels")
         }
+
+    @Test fun recipientOnlyOpensDictationAndCanBeCancelled() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val intent = Intent(instrumentation.targetContext, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val activity = instrumentation.startActivitySync(intent)
+        try {
+            val input = waitForNode("Scrie un mesaj...")
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    "Trimite un mesaj lui Daria Pop pe WhatsApp")
+            }
+            assertTrue(input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+            assertTrue(waitForNode("Trimite").performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode("Ce mesaj îi trimit lui Daria Pop?")
+            assertTrue(waitForNode("Dictează").isClickable)
+            assertTrue(waitForNode("Anulează").performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode("Hologramă")
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    @Test fun chatOpensFourWayProjectionAndReturnsToChat() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val intent = Intent(instrumentation.targetContext, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val activity = instrumentation.startActivitySync(intent)
         try {
             assertTrue(waitForNode("Hologramă").performAction(AccessibilityNodeInfo.ACTION_CLICK))
             assertTrue(waitForNode("Piramidă 4X").performAction(AccessibilityNodeInfo.ACTION_CLICK))

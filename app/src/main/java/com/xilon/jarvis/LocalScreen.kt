@@ -38,11 +38,11 @@ class LocalScreen:AccessibilityService(){
  override fun onAccessibilityEvent(event:AccessibilityEvent?){event?.let{com.jarvis.mobile.core.skills.SkillRecorder.onAccessibilityEvent(it,packageName)}}
  override fun onInterrupt(){com.jarvis.mobile.core.skills.SkillRecorder.stop()}
  override fun onDestroy(){if(active===this){active=null;com.jarvis.mobile.core.skills.SkillRecorder.stop()};super.onDestroy()}
- internal fun sendVerifiedWhatsAppDraft(phone:String,body:String):Boolean {
+ internal fun sendVerifiedWhatsAppDraft(expectedPackage:String,phone:String,body:String):Boolean {
   val root=rootInActiveWindow?:return false
   try {
    val pkg=root.packageName?.toString()?:return false
-   if(pkg !in setOf("com.whatsapp","com.whatsapp.w4b"))return false
+   if(pkg!=expectedPackage || pkg !in setOf("com.whatsapp","com.whatsapp.w4b"))return false
    if(getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)return false
    fun nodes(id:String)=root.findAccessibilityNodeInfosByViewId("$pkg:id/$id").orEmpty()
    val headers=nodes("conversation_contact_name")
@@ -53,9 +53,7 @@ class LocalScreen:AccessibilityService(){
     val draft=drafts.singleOrNull()?:return false
     val button=buttons.singleOrNull()?:return false
     if(!header.refresh()||!draft.refresh()||!button.refresh())return false
-    val number=header.text?.toString()?.trim()?:return false
-    if(!number.matches(Regex("[+0-9 ()-]+")))return false
-    if(android.telephony.PhoneNumberUtils.normalizeNumber(number)!="+$phone")return false
+    if(!WhatsAppHeader.matchesNumber(phone,header.text,header.contentDescription))return false
     if(!header.isVisibleToUser||!draft.isVisibleToUser||!draft.isEditable||draft.isPassword||draft.text?.toString()!=body)return false
     if(!button.isVisibleToUser||!button.isEnabled||!button.isClickable||button.packageName?.toString()!=pkg)return false
     return button.performAction(AccessibilityNodeInfo.ACTION_CLICK)

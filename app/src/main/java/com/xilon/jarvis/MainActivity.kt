@@ -62,6 +62,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    runOnUiThread {
     if(isDestroyed || speechClosing || !speechSessions.isCurrent(ticket) || !conversationForeground || !continuousVoice || recognized.isBlank())return@runOnUiThread
     if(echoGate.isEcho(recognized))return@runOnUiThread
+    playbackInterruption++
     stopAllSpeech()
     if(echoGate.isStop(recognized)){
      pendingVoiceInterruption=null
@@ -494,6 +495,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
       if(!continuousVoice || !conversationForeground || isDestroyed || !omegaCore.speaking){
        endBargeIn(ticket)
       }else{
+       playbackInterruption++
        stopAllSpeech()
        // The detector releases its AudioRecord before this callback. Lease
        // the same local recognizer used for an ordinary Romanian voice turn.
@@ -517,6 +519,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
  }}
  private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
+ private var playbackInterruption=0L
  private var pendingVoiceInterruption:String?=null
  private var dictatedMessage:((String)->Unit)?=null
  private fun acceptVoice(text:String){
@@ -1275,6 +1278,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      var lastInferenceProgress=inferenceStarted
      var inferenceStage="Aștept execuția motorului..."
      var inferenceFinished=false
+     val playbackAtStart=playbackInterruption
      val voiceStream=RealtimeVoiceTurn()
      val voiceStreamId=voiceStream.start()
      val streamSpeechEnabled=(speakReplies || continuousVoice) && !englishNeuralVoice && !romanianNeuralVoice && voice.romanianVoiceAvailable()
@@ -1282,7 +1286,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
      var streamingSpeechStarted=false
      var streamingSpeechFailed=false
      fun drainSpeechChunks(){
-      if(!streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return
+      if(playbackAtStart!=playbackInterruption || !streamSpeechEnabled || isDestroyed || nativeModel?.isCancelled()==true)return
       while(true){
        val chunk=voiceStream.poll(voiceStreamId) ?: break
        if(chunk.isBlank())continue
@@ -1403,7 +1407,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
         val lastStreamSnapshot=streamingBubble.text.toString().removePrefix("JARVIS: ")
         streamingBubble.text="JARVIS: "+answer + if(nativeModel?.isCancelled()==true) " [Oprit]" else ""
         archiveMessage(streamingBubble.text.toString())
-        if(nativeModel?.isCancelled()!=true && interruptedByUser==null){
+        if(conversationForeground && playbackAtStart==playbackInterruption && nativeModel?.isCancelled()!=true && interruptedByUser==null){
          if(streamSpeechEnabled && streamingSpeechFailed && !streamingSpeechStarted){
           // Streaming TTS was unavailable: try the ordinary voice path once.
           speakReply(answer)
@@ -3175,6 +3179,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   triggerHandler.post(triggerTick)
  }
  override fun onPause(){
+  playbackInterruption++
   wakeEnabled=false;wakeHandler.removeCallbacks(wakeRearm);stopWake()
   stopVoiceLoop();listening.close();stopNeural();stopAllSpeech()
   conversationForeground=false
