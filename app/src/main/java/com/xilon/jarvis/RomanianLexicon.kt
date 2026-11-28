@@ -379,7 +379,24 @@ object RomanianLexicon {
   if(key in known)return key
   val roots=(grammarMatches(key).map{normalize(it.lemma).removePrefix("a ")}+morphologicalRoots(key).map{normalize(it)}).toSet()
   val matches=roots.map{conjugations[it]?:it}.filter{it in known}.distinct()
-  return matches.singleOrNull()
+  if(matches.size==1)return matches.single()
+  return null
+ }
+ // Synonym evidence is used only for clarification, not for silently
+ // executing a potentially different operation (e.g. stop vs close).
+ fun semanticCommandSuggestions(text:String):List<String> {
+  if(text.length>500 || negated(text))return emptyList()
+  val cleaned=clean(text)
+  val first=cleaned.substringBefore(' ')
+  if(first.isBlank())return emptyList()
+  val tail=cleaned.substring(first.length)
+  val alternatives=(synonyms(first)+corpusSynonyms(first)).asSequence()
+   .map{normalize(it).removePrefix("a ")}
+   .filter{it.isNotBlank() && !it.contains(' ')}
+   .mapNotNull{commandVerb(it)}
+   .distinct().take(12).map{it+tail}
+   .filter{it!=cleaned && NaturalToolCommands.parse(it)!=null}.take(3).toList()
+  return alternatives
  }
  fun canonicalCommand(text: String): String {
   val cleaned = clean(text)

@@ -1239,7 +1239,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(offlinePlan!=null){agentCancelled=false;runRegistryPlan(offlinePlan);return@setOnClickListener}
     if(RegistryIntent.matches(commandQ)){
      if(nativeModel==null){
-      val suggestions=RomanianLexicon.suggestedPhrases(commandQ)
+      val suggestions=(RomanianLexicon.suggestedPhrases(commandQ)+RomanianLexicon.semanticCommandSuggestions(commandQ)).distinct()
       val reply=if(suggestions.isNotEmpty())"Nu am identificat sigur comanda. Ai vrut să spui: "+suggestions.take(3).joinToString(" / ")+"?" else "Nu am identificat complet acțiunea sau parametrii. Spune-mi ce vrei să fac și asupra cărui contact, aplicație sau obiect."
       append(reply);if(continuousVoice)speakReply(reply,manual=true)
       return@setOnClickListener
