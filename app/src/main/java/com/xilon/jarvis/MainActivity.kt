@@ -339,7 +339,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private fun playNeural(text:String,engine:NeuralVoice){
   stopAllSpeech();val ticket=voiceTicket
   neuralSpeaking=true;omegaCore.speaking=true;refreshOmegaStatus()
-  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){neuralSpeaking=false;omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);voice.speak(text)?.let{append(it)}}
+  try{engine.speakTracked(text){failure->runOnUiThread{if(!isDestroyed && ticket==voiceTicket){neuralSpeaking=false;omegaCore.speaking=false;voiceEndedAt=android.os.SystemClock.elapsedRealtime();refreshOmegaStatus();if(failure!=null){append("Voce neuronală: "+failure);if(voice.romanianVoiceAvailable())voice.speak(text)?.let{append(it)}}}}}}catch(e:Exception){neuralSpeaking=false;omegaCore.speaking=false;refreshOmegaStatus();append("Voce neuronală: "+e.message);if(voice.romanianVoiceAvailable())voice.speak(text)?.let{append(it)}}
  }
  private var englishNeuralVoice:Boolean
   get()=speechOutput()=="kokoro"
@@ -1885,7 +1885,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
   settings.addView(Switch(this).apply {
    text="Voce: preferă Whisper Small RO când este instalat"
    val prefs=getSharedPreferences("speech_models",MODE_PRIVATE)
-   isChecked=prefs.getBoolean("prefer_whisper_small_ro",false)
+   isChecked=prefs.getBoolean("prefer_whisper_small_ro",true)
    setOnCheckedChangeListener { _, enabled -> prefs.edit().putBoolean("prefer_whisper_small_ro",enabled).apply() }
   })
   settings.addView(Button(this).apply{text="Diagnostic voce română offline";setOnClickListener{
