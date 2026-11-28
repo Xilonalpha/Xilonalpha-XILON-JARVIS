@@ -37,6 +37,17 @@ object NaturalToolCommands {
    if(!RomanianLexicon.negated(header)&&!RegistryIntent.compound(header)&&recipient.isNotBlank()&&body.isNotBlank())
     return PlannedAction(if(channel.equals("sms",true))"send_sms" else if(verb.equals("scrie",true))"whatsapp_message" else "whatsapp_send",JsonObject(mapOf("contact" to JsonPrimitive(recipient.trim()),"message" to JsonPrimitive(body.trim()))))
   }
+  // Text after an explicit colon is data, not another Android command.
+  val textPayload=Regex("""^(scrie|tastează|tasteaza|distribuie|partajează|partajeaza)\s+(?:textul\s*)?:\s*([\s\S]+)$""",RegexOption.IGNORE_CASE).matchEntire(input)
+  if(textPayload!=null){
+   val (verb,body)=textPayload.destructured
+   if(body.isNotBlank())return PlannedAction(if(RomanianLexicon.normalize(verb) in setOf("scrie","tasteaza"))"type_text" else "share_content",JsonObject(mapOf("text" to JsonPrimitive(body))))
+  }
+  val emailPayload=Regex("""^(trimite|scrie)\s+(?:un\s+)?(?:email|e-mail)\s+(?:către\s+|catre\s+|la\s+)?([^\s:]+@[^\s:]+):\s*([\s\S]+)$""",RegexOption.IGNORE_CASE).matchEntire(input)
+  if(emailPayload!=null){
+   val (_,recipient,body)=emailPayload.destructured
+   if(body.isNotBlank())return PlannedAction("send_email",JsonObject(mapOf("to" to JsonPrimitive(recipient),"body" to JsonPrimitive(body))))
+  }
   // The dedicated single-intent YouTube rule must run before the generic
   // lexicon (which can mistake "deschide YouTube și..." for open_app).
   // Do not bypass the negation and compound-action safety guards.

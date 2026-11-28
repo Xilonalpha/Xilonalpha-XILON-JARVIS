@@ -1279,7 +1279,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     // dedicated YouTube clause is one intent, despite containing "și".
     val directTool=NaturalToolCommands.parse(commandQ)
     val learnedAlternative=if(directTool==null && !lexicalCompound)learnedLanguageCommand(commandQ) else null
-    if(directTool!=null && (!lexicalCompound || directTool.tool in setOf("youtube_search","whatsapp_send","whatsapp_message","send_sms"))){
+    if(directTool!=null && (!lexicalCompound || directTool.tool in setOf("youtube_search","whatsapp_send","whatsapp_message","send_sms","type_text","share_content","send_email"))){
      executeRequestedTool(directTool.tool,directTool.args)
      return@setOnClickListener
     }

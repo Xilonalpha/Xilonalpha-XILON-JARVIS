@@ -148,4 +148,11 @@ class NaturalToolCommandsTest {
   val message=NaturalToolCommands.parse("Trimite mesaj lui Vlad pe WhatsApp spune-i că nu vin și pornește muzica")
   assertEquals(JsonPrimitive("nu vin și pornește muzica"),message?.args?.get("message"))
  }
+ @Test fun literalTextAndEmailAreNotCompoundCommands(){
+  val body="Nu pleca și deschide ușa!"
+  assertEquals(JsonPrimitive(body),NaturalToolCommands.parse("Scrie textul: $body")?.args?.get("text"))
+  assertEquals(JsonPrimitive(body),NaturalToolCommands.parse("Distribuie textul: $body")?.args?.get("text"))
+  assertEquals(JsonPrimitive(body),NaturalToolCommands.parse("Trimite email la test@example.org: $body")?.args?.get("body"))
+  assertNull(NaturalToolCommands.parse("Nu scrie textul: $body"))
+ }
 }
