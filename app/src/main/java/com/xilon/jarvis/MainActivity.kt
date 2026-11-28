@@ -294,7 +294,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
  private val visibleHistory=mutableListOf<String>()
  private val history=mutableListOf<Pair<String,String>>()
  private lateinit var voice: OfflineVoice
- private var speakReplies=false
+ private var speakReplies=true
  private var kokoroVoice:NeuralVoice?=null
  private var voiceTicket=0L
  private fun newNativeModel():NativeModel {
@@ -2375,7 +2375,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
   if(englishNeuralVoice && neural!=null && neural.installed()){
    playNeural(text,neural);return
   }
-  stopAllSpeech();voice.speak(text)?.let{append(it)}
+  stopAllSpeech()
+  if(voice.romanianVoiceAvailable() || englishNeuralVoice)voice.speak(text)?.let{append(it)}
+  else append("Voce RO indisponibilă: verifică Piper Mihai/Liana în OMEGA și selectează ieșirea Piper.")
  }
  // Retrieve older dialogue as evidence, not executable instructions.
  private fun deliberateRequest(text:String):Boolean {
