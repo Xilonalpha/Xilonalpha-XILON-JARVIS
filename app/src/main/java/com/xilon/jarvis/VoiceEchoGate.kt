@@ -24,6 +24,18 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
   prune(clock())
   return recentChunks.map{it.value}
  }
+ // Conservative token alignment: tolerate one ASR substitution in a long
+ // contiguous phrase, never suppress short commands or explicit stop requests.
+ private fun nearEcho(command:String,spoken:String):Boolean {
+  val words=command.split(' ').filter{it.isNotBlank()}
+  if(words.size<7 || command in stopCommands)return false
+  val source=spoken.split(' ').filter{it.isNotBlank()}
+  if(source.size<words.size)return false
+  return (0..source.size-words.size).any{start->
+   words.indices.count{i->words[i]!=source[start+i]}<=1 &&
+    words.first()==source[start] && words.last()==source[start+words.lastIndex]
+  }
+ }
  fun isEcho(text:String):Boolean {
   val command=normalize(text)
   if(command.isBlank())return false
@@ -31,7 +43,7 @@ internal class VoiceEchoGate(private val echoWindowMs:Long=15000L,private val cl
   val combined=chunks.joinToString(" ")
   // A long ASR fragment may span TTS chunks; short generic words are not echoes.
   return chunks.any{it==command || (command.length>=16 && VoiceTextNormalizer.containsPhrase(it,command))} ||
-   (command.length>=16 && VoiceTextNormalizer.containsPhrase(combined,command))
+   (command.length>=16 && VoiceTextNormalizer.containsPhrase(combined,command)) || nearEcho(command,combined)
  }
  fun isStop(text:String):Boolean {
   val command=normalize(text)
