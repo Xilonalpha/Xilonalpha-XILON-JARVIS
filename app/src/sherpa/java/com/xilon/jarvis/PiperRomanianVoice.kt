@@ -71,6 +71,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   if(text.isBlank()){done(null);return}
   if(!installed()){done("Piper RO: lipsesc tokens.txt sau espeak-ng-data; fișierele ONNX singure nu sunt suficiente.");return}
   val id=epoch.incrementAndGet()
+  val requestedAt=android.os.SystemClock.elapsedRealtime()
   val previous=track;runCatching{previous?.pause()};runCatching{previous?.flush()}
   executor.execute{
    var error:String?=null
@@ -102,6 +103,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     try{
      check(player.state==AudioTrack.STATE_INITIALIZED){"AudioTrack nu s-a inițializat"}
      var frames=0L
+     var firstWriteAt=0L
      var audible=false
      var callbackError:String?=null
      val pcm=ShortArray(2048)
@@ -116,9 +118,11 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
        while(offset<samples.size && id==epoch.get()){
         val count=minOf(pcm.size,samples.size-offset)
         for(i in 0 until count)pcm[i]=(samples[offset+i].coerceIn(-1f,1f)*32767).toInt().toShort()
-        val written=player.write(pcm,0,count,AudioTrack.WRITE_BLOCKING)
+        val written=player.write(pcm,0,count,AudioTrack.WRITE_NON_BLOCKING)
         if(id!=epoch.get())return false
-        check(written>0){"AudioTrack write failed"}
+        check(written>=0){"AudioTrack write failed: "+written}
+        if(written==0){Thread.sleep(5);continue}
+        if(firstWriteAt==0L){firstWriteAt=android.os.SystemClock.elapsedRealtime();android.util.Log.i("XilonPiper","first_pcm_write_ms="+(firstWriteAt-requestedAt)+" prepared="+(ready!=null))}
         offset+=written;frames+=written
        }
        id==epoch.get()
@@ -135,7 +139,10 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      check(frames>0 && audible){"Piper a generat semnal audio silențios"}
      val deadline=android.os.SystemClock.elapsedRealtime()+(frames*1000L/sampleRate).coerceAtMost(120000L)+2000
      while(id==epoch.get() && (player.playbackHeadPosition.toLong() and 0xffffffffL)<frames && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
-     if(id==epoch.get())check((player.playbackHeadPosition.toLong() and 0xffffffffL)>=frames){"Redarea Piper nu s-a terminat în intervalul permis"}
+     if(id==epoch.get()){
+      check((player.playbackHeadPosition.toLong() and 0xffffffffL)>=frames){"Redarea Piper nu s-a terminat în intervalul permis"}
+      android.util.Log.i("XilonPiper","completed_ms="+(android.os.SystemClock.elapsedRealtime()-requestedAt)+" audio_ms="+(frames*1000L/sampleRate)+" underruns="+player.underrunCount)
+     }
     }finally{track=null;runCatching{player.stop()};player.release()}
      }catch(e:Exception){playbackError=e.message?:"Eroare redare Piper"}catch(e:LinkageError){playbackError=e.message?:"Motor audio indisponibil"}
      finally{playerFailed.set(true);if(id==epoch.get())done(playbackError)}
