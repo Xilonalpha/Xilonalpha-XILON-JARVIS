@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import java.text.DateFormat
 import java.util.Date
 class MainActivity : androidx.activity.ComponentActivity() {
+ private var pendingLanguageChoices:List<String> = emptyList()
+ private var pendingLanguageUntil=0L
  @Volatile private var neural:NeuralSpeech?=null
  @Volatile private var neuralCancelled=false
  @Volatile private var cachedNeural:NeuralSpeech?=null
@@ -832,6 +834,30 @@ class MainActivity : androidx.activity.ComponentActivity() {
      val normalizedRomanian=RomanianLexicon.normalize(q)
     lastConversationActivity=android.os.SystemClock.elapsedRealtime()
     append("Tu: "+q); input.text.clear()
+    val choices=pendingLanguageChoices.takeIf{android.os.SystemClock.elapsedRealtime()<=pendingLanguageUntil}.orEmpty()
+    pendingLanguageChoices=emptyList()
+    if(choices.isNotEmpty()){
+     val answer=RomanianLexicon.normalize(q)
+     if(answer in setOf("nu","anuleaza","renunta","niciuna")){
+      append("Am anulat comanda.");return@setOnClickListener
+     }
+     val selected=when(answer){
+      "da","corect","exact"->choices.singleOrNull()
+      "1","prima","unu"->choices.getOrNull(0)
+      "2","a doua","doi"->choices.getOrNull(1)
+      "3","a treia","trei"->choices.getOrNull(2)
+      else->choices.singleOrNull{RomanianLexicon.normalize(it)==answer}
+     }
+     if(selected!=null){
+      val action=NaturalToolCommands.parse(selected)
+      if(action!=null){executeRequestedTool(action.tool,action.args);return@setOnClickListener}
+     }
+     if(answer in setOf("da","corect","exact","1","2","3","prima","a doua","a treia")){
+      pendingLanguageChoices=choices;pendingLanguageUntil=android.os.SystemClock.elapsedRealtime()+30000L
+      append("Alege numărul comenzii: "+choices.mapIndexed{i,v->"${i+1}. $v"}.joinToString(" / "))
+      return@setOnClickListener
+     }
+    }
     val languageTask=explicitLanguageTask(q)
     if(languageTask!=null){
      val model=nativeModel
@@ -1241,7 +1267,9 @@ class MainActivity : androidx.activity.ComponentActivity() {
     if(RegistryIntent.matches(commandQ) || semanticAlternatives.isNotEmpty()){
      if(nativeModel==null){
       val suggestions=(RomanianLexicon.suggestedPhrases(commandQ)+semanticAlternatives).distinct()
-      val reply=if(suggestions.isNotEmpty())"Nu am identificat sigur comanda. Ai vrut să spui: "+suggestions.take(3).joinToString(" / ")+"?" else "Nu am identificat complet acțiunea sau parametrii. Spune-mi ce vrei să fac și asupra cărui contact, aplicație sau obiect."
+      pendingLanguageChoices=suggestions.filter{NaturalToolCommands.parse(it)!=null}.take(3)
+      pendingLanguageUntil=android.os.SystemClock.elapsedRealtime()+30000L
+      val reply=if(pendingLanguageChoices.isNotEmpty())"Nu am identificat sigur comanda. Ai vrut să spui: "+pendingLanguageChoices.mapIndexed{i,v->"${i+1}. $v"}.joinToString(" / ")+"?" else "Nu am identificat complet acțiunea sau parametrii. Spune-mi ce vrei să fac și asupra cărui contact, aplicație sau obiect."
       append(reply);if(continuousVoice)speakReply(reply,manual=true)
       return@setOnClickListener
      }
