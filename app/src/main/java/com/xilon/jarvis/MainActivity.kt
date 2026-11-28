@@ -2130,7 +2130,10 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
    dialog.show()
   }})
-  val manualModelLabels=setOf("Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
+  settings.addView(Button(this).apply{text="Salvează toate modelele în telefon";setOnClickListener{
+   if(!busy)startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply{type="application/zip";addCategory(Intent.CATEGORY_OPENABLE);putExtra(Intent.EXTRA_TITLE,"XILON-OMEGA-models.zip")}, 294)
+  }})
+  val manualModelLabels=setOf("Salvează toate modelele în telefon","Selectează GGUF","Importă Kokoro ZIP","Importă modele vocale ONNX","Importă model gesturi","Vision: importă proiector GGUF","Vision: importă model obiecte","Vision: importă model fețe","Vision: importă model poziție corporală","OCR: importă limba română","OCR: importă limba engleză","Instalează Whisper română offline")
   val manualModelButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in manualModelLabels}
   val catalogLabels=listOf("Piper Mihai RO • descarcă și instalează","Catalog modele românești • STT și TTS","Catalog Hugging Face","Catalog voce Sherpa","Catalog Zipformer • streaming engleză","Catalog Silero VAD","Catalog Hey Jarvis","Catalog Kokoro","Catalog Vision","Catalog gesturi","Catalog OCR")
   val catalogButtons=(0 until settings.childCount).mapNotNull{settings.getChildAt(it) as? Button}.filter{it.text.toString() in catalogLabels}.associateBy{it.text.toString()}
@@ -2938,6 +2941,44 @@ class MainActivity : androidx.activity.ComponentActivity() {
   return java.io.File(filesDir,name).takeIf{it.isFile}
  }
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+  if(requestCode==294){
+   super.onActivityResult(requestCode,resultCode,data)
+   val uri=data?.data
+   if(resultCode==RESULT_OK && uri!=null && !busy){
+    busy=true
+    worker.execute{
+     val result=runCatching{
+      val roots=setOf("models","downloads","kokoro","tesseract")
+      val files=filesDir.listFiles().orEmpty().filter{it.name in roots || (it.isFile && it.extension.lowercase() in setOf("gguf","onnx","tflite","task"))}
+       .flatMap{if(it.isDirectory)it.walkTopDown().filter{f->f.isFile}.toList() else listOf(it)}
+       .filter{it.length()>0 && !it.name.endsWith(".part") && !it.name.endsWith(".tmp") && it.canonicalPath.startsWith(filesDir.canonicalPath+"/")}
+      check(files.isNotEmpty()){"Nu există modele de salvat"}
+      contentResolver.openOutputStream(uri,"w")?.use{out->
+       java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(out)).use{zip->
+        zip.setLevel(0)
+        for(file in files){
+         zip.putNextEntry(java.util.zip.ZipEntry("models-backup/"+file.relativeTo(filesDir).invariantSeparatorsPath))
+         file.inputStream().use{it.copyTo(zip,65536)}
+         zip.closeEntry()
+        }
+        val metadata=org.json.JSONObject()
+        for(name in listOf("catalog_inventory","model_labels","omega_private_downloads")){
+         val values=org.json.JSONObject()
+         for((key,value) in getSharedPreferences(name,MODE_PRIVATE).all)values.put(key,value)
+         metadata.put(name,values)
+        }
+        zip.putNextEntry(java.util.zip.ZipEntry("model-metadata.json"))
+        zip.write(metadata.toString().toByteArray(Charsets.UTF_8));zip.closeEntry()
+       }
+      }?:error("Nu pot deschide fișierul de backup")
+      "Backup OMEGA salvat: "+files.size+" fișiere."
+     }.getOrElse{"Backup incomplet: "+it.message}
+     runOnUiThread{if(!isDestroyed){busy=false;append(result)}}
+    }
+   }
+   return
+  }
+
   if(requestCode==190){super.onActivityResult(requestCode,resultCode,data);val uri=data?.data;if(resultCode==RESULT_OK && uri!=null && !busy){stopAirTouch();stopLiveVision();busy=true;worker.execute{val message=runCatching{LocalPose.install(this,uri);"Model poziție corporală instalat și validat."}.getOrElse{"Instalare eșuată: "+it.message};runOnUiThread{if(!isDestroyed){busy=false;modelStatus.text=message}}}};return}
 
   super.onActivityResult(requestCode,resultCode,data)
