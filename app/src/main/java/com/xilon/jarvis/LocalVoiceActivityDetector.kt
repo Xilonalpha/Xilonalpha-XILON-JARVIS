@@ -37,7 +37,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
   if(min<=0){synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false}
   val bufferSize=maxOf(min,3200)
   val record=try {
-   AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,sampleRate,
+   AudioRecord(if(AcousticEchoCanceler.isAvailable())MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION,sampleRate,
     AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,bufferSize)
   }catch(_:Exception){synchronized(lifecycleLock){if(generation.get()==session)running.set(false)};return false}
   if(record.state!=AudioRecord.STATE_INITIALIZED){
@@ -80,6 +80,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      SileroVad16k(model)
     }else null
    }.onFailure{neuralFailure=it.message?:"Model Silero incompatibil"}.getOrNull()
+   android.util.Log.i("XilonVAD","effects aec="+runCatching{sessionEcho?.enabled==true}.getOrDefault(false)+" ns="+runCatching{sessionNoise?.enabled==true}.getOrDefault(false))
    var startedAt=0L
    var detected=false
    var failed=false
@@ -96,7 +97,7 @@ internal class LocalVoiceActivityDetector(private val context:Context):AutoClose
      if(android.os.SystemClock.elapsedRealtime()-startedAt>=6000L)break
      val count=record.read(samples,0,samples.size)
      if(count<=0){
-      // An interrupted or failed AudioRecord read must not spin indefinitely.
+      if(count<0 && running.get() && generation.get()==session)error("VAD microphone read: "+count)
       break
      }
      lead.append(samples,count)

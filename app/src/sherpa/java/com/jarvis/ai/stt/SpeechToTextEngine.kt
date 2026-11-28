@@ -297,6 +297,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             android.util.Log.i("XilonASR","stream_effects aec="+aecActive+" ns="+nsActive)
             if (closed || captureCancelled || epoch != cancellationEpoch.get()) return ""
             recorder.startRecording()
+            check(recorder.recordingState==AudioRecord.RECORDSTATE_RECORDING){"Microfonul nu a pornit"}
             if(prefix.isNotEmpty())stream.acceptWaveform(FloatArray(prefix.size){prefix[it]/32768f},SAMPLE_RATE)
             while (!closed && !captureCancelled && epoch == cancellationEpoch.get() &&
                 totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
@@ -461,6 +462,7 @@ class SpeechToTextEngine(context: Context) : Closeable {
             }
             if (closed || captureCancelled || epoch != cancellationEpoch.get()) return FloatArray(0)
             recorder.startRecording()
+            check(recorder.recordingState==AudioRecord.RECORDSTATE_RECORDING){"Microfonul nu a pornit"}
             while (!closed && !captureCancelled && epoch == cancellationEpoch.get() && totalSamples < SAMPLE_RATE * MAX_RECORDING_SECONDS) {
                 val count = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {

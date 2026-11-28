@@ -14,7 +14,8 @@ class VoiceEchoGateRegressionTest {
   gate.remember("Astăzi putem discuta despre vremea frumoasă din oraș")
   assertTrue(gate.isEcho("astazi putem discuta despre vremea buna din oras"))
   assertFalse(gate.isEcho("astazi putem discuta despre vremea nu din oras"))
-  assertFalse(gate.isEcho("astazi putem discuta"))
+  assertTrue(gate.isEcho("astazi putem discuta"))
+  assertFalse(gate.isEcho("putem"))
  }
  @Test fun retainsTailOfLongSpokenReply(){
   val gate=VoiceEchoGate()

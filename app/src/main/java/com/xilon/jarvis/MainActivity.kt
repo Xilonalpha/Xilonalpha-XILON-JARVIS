@@ -86,7 +86,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
    }
    runOnUiThread {
     if(isDestroyed || speechClosing || !speechSessions.isCurrent(ticket) || !conversationForeground || !continuousVoice || recognized.isBlank())return@runOnUiThread
-    if(echoGate.isEcho(recognized))return@runOnUiThread
+    if(echoGate.isEcho(recognized) && !echoGate.isStop(recognized))return@runOnUiThread
     playbackInterruption++
     stopAllSpeech()
     if(echoGate.isStop(recognized)){
@@ -544,7 +544,7 @@ class MainActivity : androidx.activity.ComponentActivity() {
     }
    }
   }
-  if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)300L else 350L)
+  if(continuousVoice)voiceLoopHandler.postDelayed(this,if(omegaCore.speaking)150L else 250L)
  }}
  private fun stopVoiceLoop(){stopNeural();duplexListening=false;duplexUnavailable=false;localVad.stop();voiceBargeInTimeoutTask?.let{voiceBargeInTimeout.removeCallbacks(it)};voiceBargeInTimeoutTask=null;voiceBargeIn.finish();pendingVoiceInterruption=null;continuousVoice=false;voiceLoopHandler.removeCallbacks(voiceLoop);voiceRetry.reset();voiceTurnGuard.reset();voiceInterruptGate.reset();partialVoiceGate.reset();echoGate.clear();updateContinuousVoiceButton()}
  private var playbackInterruption=0L
