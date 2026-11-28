@@ -30,12 +30,28 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
  }
  private val executor=Executors.newSingleThreadScheduledExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
+ private val preparationEpoch=AtomicLong(0L)
+ private data class Prepared(val text:String,val key:String?,val rate:Int,val samples:FloatArray)
+ private var prepared:Prepared?=null // accessed only on synthesis executor
+ override fun prepare(text:String){
+  if(text.isBlank() || text.length>400 || !installed())return
+  val request=preparationEpoch.incrementAndGet()
+  executor.execute{
+   if(request!=preparationEpoch.get())return@execute
+   try{
+    idleRelease?.cancel(false)
+    val tts=runtime()
+    val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { request==preparationEpoch.get() })
+    if(request==preparationEpoch.get() && audio.samples.size in 1..960000 && audio.samples.all{it.isFinite()})prepared=Prepared(text,cachedKey,audio.sampleRate,audio.samples)
+   }catch(e:Exception){prepared=null}catch(e:LinkageError){prepared=null}finally{scheduleRelease()}
+  }
+ }
  private var idleRelease:java.util.concurrent.ScheduledFuture<*>?=null
  private fun scheduleRelease(){idleRelease?.cancel(false);idleRelease=executor.schedule({releaseCached()},60,java.util.concurrent.TimeUnit.SECONDS)}
  // Worker-owned cache: never release native inference while generation is active.
  private var cachedTts:OfflineTts?=null
  private var cachedKey:String?=null
- private fun releaseCached(){runCatching{cachedTts?.release()};cachedTts=null;cachedKey=null}
+ private fun releaseCached(){prepared=null;runCatching{cachedTts?.release()};cachedTts=null;cachedKey=null}
  private fun runtime():OfflineTts {
   val liana=useLiana()
   val dir=if(liana)LianaVoicePackage.prepare(root){app.assets.open("liana-sherpa-metadata.pb")} else mihai
@@ -64,6 +80,8 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     // Sherpa exposes PCM chunks during inference. Use its runtime sample rate
     // and play each chunk immediately instead of waiting for the whole reply.
     val sampleRate=tts.sampleRate()
+    val ready=prepared?.takeIf{it.text==text && it.key==cachedKey && it.rate==sampleRate}
+    prepared=null
     check(sampleRate>0){"Piper sample rate invalid"}
     val buffer=AudioTrack.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT)
     check(buffer>0){"AudioTrack indisponibil"}
@@ -98,10 +116,11 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
        id==epoch.get()
       }catch(e:Exception){callbackError=e.message?:"Eroare audio Piper";false}
      }
-     val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { emit(it) })
+     val audio=if(ready==null)tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { emit(it) }) else null
+     if(ready!=null)emit(ready.samples)
      if(id!=epoch.get())return@execute
      check(callbackError==null){callbackError?:"Eroare audio"}
-     if(frames==0L)check(emit(audio.samples)){callbackError?:"Piper nu a generat sunet"}
+     if(frames==0L)check(emit(audio?.samples ?: ready?.samples ?: FloatArray(0))){callbackError?:"Piper nu a generat sunet"}
      check(frames>0 && audible){"Piper a generat semnal audio silențios"}
      val deadline=android.os.SystemClock.elapsedRealtime()+(frames*1000L/sampleRate).coerceAtMost(120000L)+2000
      while(id==epoch.get() && (player.playbackHeadPosition.toLong() and 0xffffffffL)<frames && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
@@ -111,5 +130,5 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
    finally{if(error!=null)releaseCached() else scheduleRelease();if(id==epoch.get())done(error)}
   }
  }
- override fun stop(){val stopped=epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};executor.execute{if(epoch.get()==stopped)scheduleRelease()}}
+ override fun stop(){preparationEpoch.incrementAndGet();val stopped=epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};executor.execute{if(epoch.get()==stopped){prepared=null;scheduleRelease()}}}
 }
