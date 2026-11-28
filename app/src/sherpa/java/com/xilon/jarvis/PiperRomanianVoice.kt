@@ -29,6 +29,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
   else -> !mihaiReady()
  }
  private val executor=Executors.newSingleThreadScheduledExecutor{r->Thread(r,"piper-ro-tts").apply{isDaemon=true}}
+ private val playback=Executors.newSingleThreadExecutor{r->Thread(r,"piper-ro-player").apply{isDaemon=true}}
  private val epoch=AtomicLong(0L)
  private val preparationEpoch=AtomicLong(0L)
  private data class Prepared(val text:String,val key:String?,val rate:Int,val samples:FloatArray)
@@ -82,6 +83,13 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
     val sampleRate=tts.sampleRate()
     val ready=prepared?.takeIf{it.text==text && it.key==cachedKey && it.rate==sampleRate}
     prepared=null
+    val queue=java.util.concurrent.ArrayBlockingQueue<FloatArray>(8)
+    val synthesisDone=java.util.concurrent.atomic.AtomicBoolean(false)
+    val synthesisError=java.util.concurrent.atomic.AtomicReference<String?>(null)
+    val playerFailed=java.util.concurrent.atomic.AtomicBoolean(false)
+    playback.execute play@{
+     var playbackError:String?=null
+     try{
     check(sampleRate>0){"Piper sample rate invalid"}
     val buffer=AudioTrack.getMinBufferSize(sampleRate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT)
     check(buffer>0){"AudioTrack indisponibil"}
@@ -89,7 +97,7 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
      .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
      .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
      .setBufferSizeInBytes(maxOf(buffer,4096)).setTransferMode(AudioTrack.MODE_STREAM).build()
-    if(id!=epoch.get()){player.release();return@execute}
+    if(id!=epoch.get()){player.release();return@play}
     track=player
     try{
      check(player.state==AudioTrack.STATE_INITIALIZED){"AudioTrack nu s-a inițializat"}
@@ -116,18 +124,48 @@ class PiperRomanianVoice(context:Context):NeuralVoice {
        id==epoch.get()
       }catch(e:Exception){callbackError=e.message?:"Eroare audio Piper";false}
      }
-     val audio=if(ready==null)tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { emit(it) }) else null
-     if(ready!=null)emit(ready.samples)
-     if(id!=epoch.get())return@execute
+     while(id==epoch.get()){
+      val chunk=queue.poll(50,java.util.concurrent.TimeUnit.MILLISECONDS)
+      if(chunk==null){if(synthesisDone.get())break;continue}
+      if(!emit(chunk))break
+     }
+     if(id!=epoch.get())return@play
+     check(synthesisError.get()==null){synthesisError.get()?:"Eroare sinteză"}
      check(callbackError==null){callbackError?:"Eroare audio"}
-     if(frames==0L)check(emit(audio?.samples ?: ready?.samples ?: FloatArray(0))){callbackError?:"Piper nu a generat sunet"}
      check(frames>0 && audible){"Piper a generat semnal audio silențios"}
      val deadline=android.os.SystemClock.elapsedRealtime()+(frames*1000L/sampleRate).coerceAtMost(120000L)+2000
      while(id==epoch.get() && (player.playbackHeadPosition.toLong() and 0xffffffffL)<frames && android.os.SystemClock.elapsedRealtime()<deadline)Thread.sleep(25)
      if(id==epoch.get())check((player.playbackHeadPosition.toLong() and 0xffffffffL)>=frames){"Redarea Piper nu s-a terminat în intervalul permis"}
     }finally{track=null;runCatching{player.stop()};player.release()}
+     }catch(e:Exception){playbackError=e.message?:"Eroare redare Piper"}catch(e:LinkageError){playbackError=e.message?:"Motor audio indisponibil"}
+     finally{playerFailed.set(true);if(id==epoch.get())done(playbackError)}
+    }
+    fun enqueue(samples:FloatArray):Boolean{
+     if(samples.isEmpty())return true
+     var offset=0
+     while(offset<samples.size){
+      val end=minOf(offset+4096,samples.size)
+      val part=samples.copyOfRange(offset,end)
+      while(id==epoch.get() && !playerFailed.get()){
+       if(queue.offer(part,50,java.util.concurrent.TimeUnit.MILLISECONDS))break
+      }
+      if(id!=epoch.get() || playerFailed.get())return false
+      offset=end
+     }
+     return true
+    }
+    try{
+     if(ready!=null)enqueue(ready.samples)
+     else{
+      var emitted=false
+      val audio=tts.generateWithConfigAndCallback(text=text,config=com.k2fsa.sherpa.onnx.GenerationConfig(),callback=com.jarvis.assistant.voice.SherpaAudioCallback { samples->if(samples.isNotEmpty())emitted=true;enqueue(samples) })
+      if(!emitted && id==epoch.get())enqueue(audio.samples)
+     }
+    }catch(e:Exception){synthesisError.set(e.message?:"Eroare sinteză Piper")}catch(e:LinkageError){synthesisError.set(e.message?:"Motor Sherpa indisponibil")}
+    finally{synthesisDone.set(true)}
+
    }catch(e:Exception){error=e.message?:"Eroare Piper"}catch(e:LinkageError){error=e.message?:"Motor Sherpa indisponibil"}
-   finally{if(error!=null)releaseCached() else scheduleRelease();if(id==epoch.get())done(error)}
+   finally{if(error!=null){releaseCached();if(id==epoch.get())done(error)}else scheduleRelease()}
   }
  }
  override fun stop(){preparationEpoch.incrementAndGet();val stopped=epoch.incrementAndGet();val current=track;runCatching{current?.pause()};runCatching{current?.flush()};executor.execute{if(epoch.get()==stopped){prepared=null;scheduleRelease()}}}
